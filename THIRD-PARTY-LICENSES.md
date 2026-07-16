@@ -1,0 +1,21 @@
+# Third-Party Licenses
+
+Runtime Composer dependencies and bundled third-party material. Every entry
+here must be a permissive licence (MIT, Apache-2.0, BSD, ISC, CC BY) per the
+project's IP rules — no GPL/AGPL/LGPL/EUPL/SSPL code may enter this codebase.
+
+| Package / material | Licence | Used for |
+|---|---|---|
+| [donatj/phpuseragentparser](https://github.com/donatj/PhpUserAgent) | MIT | User-agent parsing (browser, OS, device type) for the devices rollup |
+| [jaybizzle/crawler-detect](https://github.com/JayBizzle/Crawler-Detect) | MIT | Bot/crawler user-agent filtering |
+
+Planned (Pro, later phases — record before first use):
+
+| Package / material | Licence | Used for |
+|---|---|---|
+| maxmind-db/reader (pure-PHP MMDB reader) | Apache-2.0 | Reading local GeoIP databases |
+| DB-IP Lite country/city database | CC BY 4.0 (attribution required, shown in CP + docs) | Local geo resolution; IP discarded in memory |
+
+Full licence texts ship in `vendor/` via Composer. Any verbatim-copied code
+(as opposed to a Composer dependency) must additionally preserve its original
+copyright header in-file and be listed here.

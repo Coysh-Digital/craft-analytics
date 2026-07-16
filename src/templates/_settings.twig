@@ -1,0 +1,53 @@
+{% import '_includes/forms.twig' as forms %}
+
+{{ forms.selectField({
+    label: 'Tracking mode'|t('craft-analytics'),
+    instructions: 'Hybrid (recommended) captures server-side and uses the beacon to fill gaps from full-page caching, with nonce-based dedupe.'|t('craft-analytics'),
+    id: 'trackingMode',
+    name: 'trackingMode',
+    options: {
+        hybrid: 'Hybrid (recommended)'|t('craft-analytics'),
+        server: 'Server-side only'|t('craft-analytics'),
+        client: 'Client beacon only'|t('craft-analytics'),
+    },
+    value: settings.trackingMode,
+    errors: settings.getErrors('trackingMode'),
+}) }}
+
+{{ forms.selectField({
+    label: 'Write driver'|t('craft-analytics'),
+    instructions: 'How captured hits reach the database. “Direct” is only suitable for low-traffic sites.'|t('craft-analytics'),
+    id: 'writeDriver',
+    name: 'writeDriver',
+    options: {
+        spool: 'Spool (recommended)'|t('craft-analytics'),
+        queue: 'Dedicated queue'|t('craft-analytics'),
+        direct: 'Direct (low traffic only)'|t('craft-analytics'),
+    },
+    value: settings.writeDriver,
+    errors: settings.getErrors('writeDriver'),
+}) }}
+
+{{ forms.textField({
+    label: 'Session window'|t('craft-analytics'),
+    instructions: 'Seconds of inactivity before a session ends.'|t('craft-analytics'),
+    id: 'sessionWindow',
+    name: 'sessionWindow',
+    type: 'number',
+    size: 6,
+    value: settings.sessionWindow,
+    errors: settings.getErrors('sessionWindow'),
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Honour Global Privacy Control'|t('craft-analytics'),
+    instructions: 'Visitors sending Sec-GPC: 1 are never tracked beyond the anonymous tier.'|t('craft-analytics'),
+    id: 'honourGpc',
+    name: 'honourGpc',
+    on: settings.honourGpc,
+    errors: settings.getErrors('honourGpc'),
+}) }}
+
+<p class="light">
+    {{ 'All settings can be overridden per environment in config/craft-analytics.php.'|t('craft-analytics') }}
+</p>

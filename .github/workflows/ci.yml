@@ -1,0 +1,78 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ecs:
+    name: Coding standards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - uses: ramsey/composer-install@v3
+      - run: composer check-cs
+
+  phpstan:
+    name: Static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - uses: ramsey/composer-install@v3
+      - run: composer phpstan
+
+  tests:
+    name: Tests (PHP ${{ matrix.php }}, ${{ matrix.db }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3', '8.4']
+        db: [mysql, pgsql]
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: craftanalytics_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=5
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: craftanalytics_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready"
+          --health-interval=10s --health-timeout=5s --health-retries=5
+    env:
+      CRAFT_ANALYTICS_TEST_DRIVER: ${{ matrix.db }}
+      CRAFT_ANALYTICS_TEST_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=craftanalytics_test
+      CRAFT_ANALYTICS_TEST_PGSQL_DSN: pgsql:host=127.0.0.1;port=5432;dbname=craftanalytics_test
+      CRAFT_ANALYTICS_TEST_DB_USER: root
+      CRAFT_ANALYTICS_TEST_DB_PASSWORD: root
+      CRAFT_ANALYTICS_TEST_PGSQL_USER: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_mysql, pdo_pgsql, intl
+          coverage: none
+      - uses: ramsey/composer-install@v3
+      - run: composer test

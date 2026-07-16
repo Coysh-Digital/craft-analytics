@@ -1,0 +1,12 @@
+/vendor
+/composer.lock
+/node_modules
+/.phpunit.result.cache
+/.phpunit.cache
+/.pest
+# dev/ is a throwaway ddev Craft harness — only the docs and setup script are tracked
+/dev/*
+!/dev/README.md
+!/dev/setup.sh
+.DS_Store
+*.local.php
