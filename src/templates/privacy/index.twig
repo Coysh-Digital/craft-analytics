@@ -1,0 +1,124 @@
+{% extends 'craft-analytics/_layout.twig' %}
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% block report %}
+    {# The headline: does this configuration need a cookie banner? It is the
+       question every site owner actually has, and it deserves a straight
+       answer rather than a settings list to interpret. #}
+    <div class="ca-card">
+        <div class="ca-card-head">
+            <h2 class="ca-card-title">{{ 'Posture'|t('craft-analytics') }}</h2>
+        </div>
+        <div class="ca-card-body">
+            <div class="ca-posture {{ posture.banner ? 'is-consent' : 'is-clean' }}">
+                <div class="ca-posture-icon" aria-hidden="true">{{ posture.banner ? '!' : '✓' }}</div>
+                <div>
+                    <div class="ca-posture-title">
+                        {% if posture.banner %}
+                            {{ 'This site sets a cookie and needs a consent mechanism.'|t('craft-analytics') }}
+                        {% else %}
+                            {{ 'No cookie banner needed for analytics.'|t('craft-analytics') }}
+                        {% endif %}
+                    </div>
+                    <p class="ca-posture-body">
+                        {% if posture.banner %}
+                            {{ 'Consented tracking is on, so visitors who agree get a first-party cookie and a durable identifier. That belongs in your privacy notice, and needs a lawful basis — consent.'|t('craft-analytics') }}
+                        {% else %}
+                            {{ 'Analytics stores no cookie, no device storage and no IP address. The visitor salt rotates and the old one is destroyed, so the retained statistics are anonymous.'|t('craft-analytics') }}
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if posture.warnings|length %}
+        <div class="ca-card">
+            <div class="ca-card-head">
+                <h2 class="ca-card-title">{{ 'Worth knowing'|t('craft-analytics') }}</h2>
+            </div>
+            <div class="ca-card-body">
+                {% for warning in posture.warnings %}
+                    <div class="ca-warning">
+                        <span class="ca-warning-badge">{{ 'Check'|t('craft-analytics') }}</span>
+                        <p>{{ warning }}</p>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="ca-card">
+        <div class="ca-card-head">
+            <h2 class="ca-card-title">{{ 'What this site collects'|t('craft-analytics') }}</h2>
+        </div>
+        <div class="ca-card-body ca-table-scroll">
+            <table class="ca-table">
+                <tbody>
+                {% for label, value in posture.facts %}
+                    <tr>
+                        <td style="width: 38%">{{ label }}</td>
+                        <td class="ca-muted">{{ value }}</td>
+                    </tr>
+                {% endfor %}
+                <tr>
+                    <td>{{ 'Lawful basis implied'|t('craft-analytics') }}</td>
+                    <td class="ca-muted">{{ posture.lawfulBasis }}</td>
+                </tr>
+                <tr>
+                    <td>{{ 'Identifiers held'|t('craft-analytics') }}</td>
+                    <td class="ca-muted">{{ posture.identifiers }}</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if posture.banner %}
+        <div class="ca-card">
+            <div class="ca-card-head">
+                <h2 class="ca-card-title">{{ 'Consented data'|t('craft-analytics') }}</h2>
+            </div>
+            <div class="ca-card-body ca-table-scroll">
+                <table class="ca-table">
+                    <tbody>
+                    <tr>
+                        <td style="width: 38%">{{ 'Consent grants recorded'|t('craft-analytics') }}</td>
+                        <td class="ca-muted">{{ counts.consentGrants|number_format }}</td>
+                    </tr>
+                    <tr>
+                        <td>{{ 'Consent refusals recorded'|t('craft-analytics') }}</td>
+                        <td class="ca-muted">{{ counts.consentDenials|number_format }}</td>
+                    </tr>
+                    <tr>
+                        <td>{{ 'Visitors with stored journeys'|t('craft-analytics') }}</td>
+                        <td class="ca-muted">{{ counts.consentedVisitors|number_format }}</td>
+                    </tr>
+                    <tr>
+                        <td>{{ 'Journey rows'|t('craft-analytics') }}</td>
+                        <td class="ca-muted">{{ counts.journeyRows|number_format }}</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="ca-card">
+        <div class="ca-card-head">
+            <h2 class="ca-card-title">{{ 'Subject requests'|t('craft-analytics') }}</h2>
+        </div>
+        <div class="ca-card-body">
+            <p class="ca-muted" style="margin-bottom: 12px">
+                {{ 'Aggregate statistics are anonymous data and are out of scope for access and erasure requests — there is no individual inside a counter or a probabilistic sketch to find or remove. A request touches only the consented journeys layer and the consent log.'|t('craft-analytics') }}
+            </p>
+            <pre class="ca-code">php craft craft-analytics/privacy/export --visitor-id=&lt;id&gt;
+php craft craft-analytics/privacy/erase --visitor-id=&lt;id&gt;
+php craft craft-analytics/privacy/document --to=./privacy</pre>
+        </div>
+    </div>
+
+    <p class="ca-footnote">
+        {{ 'This panel describes what your configuration permits, not what happens to have occurred. It is not legal advice.'|t('craft-analytics') }}
+    </p>
+{% endblock %}

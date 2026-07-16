@@ -37,6 +37,17 @@ final class Hit
          * already counted — the hybrid-mode dedupe (see BeaconController).
          */
         public readonly bool $countView = true,
+        /**
+         * The consented visitor's stable ID (Pro), or null — which is the
+         * case for everyone who has not affirmatively consented, i.e. almost
+         * everyone, by design.
+         */
+        public readonly ?string $visitorId = null,
+        /**
+         * The Craft user ID, only when a consented visitor is signed in *and*
+         * `associateUserId` is separately enabled.
+         */
+        public readonly ?int $userId = null,
     ) {
     }
 
@@ -58,6 +69,8 @@ final class Hit
             'd' => $this->dwellMs,
             // Only serialised when false, which is the exception.
             'nv' => $this->countView ? null : 1,
+            'vid' => $this->visitorId,
+            'uid' => $this->userId,
         ], static fn($value) => $value !== null && $value !== '' && $value !== 0);
     }
 
@@ -78,6 +91,8 @@ final class Hit
             acceptLanguage: (string)($data['al'] ?? ''),
             dwellMs: (int)($data['d'] ?? 0),
             countView: !isset($data['nv']),
+            visitorId: isset($data['vid']) ? (string)$data['vid'] : null,
+            userId: isset($data['uid']) ? (int)$data['uid'] : null,
         );
     }
 

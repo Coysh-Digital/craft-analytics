@@ -66,6 +66,42 @@ return [
         // Privacy signals
         'honourGpc' => true,
         'honourDnt' => false,
+
+        // --- Consent (Pro) ------------------------------------------------
+        // All off by default: the plugin is cookieless unless you decide
+        // otherwise, and each of these changes your compliance posture.
+
+        // Allow consented (Tier-2) tracking at all
+        'enableConsent' => false,
+
+        // The first-party consented-visitor cookie
+        'consentCookieName' => '_ca_vid',
+        'consentCookieDuration' => 13 * 30 * 24 * 60 * 60, // 13 months; hard cap 24
+        'consentPath' => '_ca/consent',
+
+        // A cookie your own CMP writes, read server-side. Null disables it.
+        'cmpCookieName' => null,
+        'cmpCookieGrantedValues' => ['granted', 'true', '1', 'yes', 'allow'],
+
+        // IAB TCF v2.2 (purposes 1 + 8)
+        'enableTcf' => false,
+
+        // Link consented visitors to their Craft account. Separate from
+        // consent itself: being measured and being named are different things.
+        'associateUserId' => false,
+
+        // The consented raw journeys layer — the only per-visitor rows the
+        // plugin ever stores. Enabling this makes you a controller of personal
+        // data subject to access and erasure requests.
+        'enableJourneys' => false,
+        'journeyRetentionDays' => 90, // hard cap 26 months
+
+        // Consent evidence retention. 0 = keep indefinitely (legal hold).
+        'consentLogRetentionDays' => 0,
+
+        // Bump when your privacy policy changes materially, so old consents
+        // evidence the old policy.
+        'policyVersion' => '1',
     ],
 
     'dev' => [

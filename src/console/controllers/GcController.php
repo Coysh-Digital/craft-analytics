@@ -28,6 +28,8 @@ class GcController extends Controller
         $this->stdout(sprintf("  compacted days:       %d\n", $result['compactedDays']));
         $this->stdout(sprintf("  expired rollup rows:  %d\n", $result['expiredRollups']));
         $this->stdout(sprintf("  expired unique rows:  %d\n", $result['expiredMembers']));
+        $this->stdout(sprintf("  expired journeys:     %d\n", $result['expiredJourneys']));
+        $this->stdout(sprintf("  expired consent rows: %d\n", $result['expiredConsentRecords']));
         $this->stdout(sprintf("  pruned drain markers: %d\n", $result['prunedDrainLog']));
         $this->stdout(sprintf("  orphaned dimensions:  %d\n", $result['orphanedDimensions']));
 

@@ -183,6 +183,14 @@ class CaptureService extends Component
             $siteId,
         );
 
+        // Tier-2, and only for a visitor who affirmatively agreed. For
+        // everyone else — the overwhelming majority, by design — this is null
+        // and the hit is as anonymous as it was in Lite.
+        $consent = Plugin::getInstance()->getConsent();
+        $visitorId = $consent->resolve($request, $siteId)->isGranted()
+            ? $consent->visitorId($request)
+            : null;
+
         return new Hit(
             siteId: $siteId,
             path: $this->normalizePath($request->getPathInfo(), $request->getQueryString()),
@@ -193,7 +201,27 @@ class CaptureService extends Component
             referrer: self::externalReferrer((string)$request->getReferrer()),
             userAgent: $userAgent,
             acceptLanguage: (string)$request->getHeaders()->get('accept-language', ''),
+            visitorId: $visitorId,
+            userId: $visitorId !== null ? self::signedInUserId() : null,
         );
+    }
+
+    /**
+     * The signed-in user, for the consented layer.
+     *
+     * Only ever attached to a consented hit, and only stored when
+     * `associateUserId` is separately enabled (see JourneyRecorder) — being
+     * measured and being named are two different agreements.
+     */
+    private static function signedInUserId(): ?int
+    {
+        if (!Plugin::getInstance()->getSettings()->associateUserId) {
+            return null;
+        }
+
+        $userId = Craft::$app->getUser()->getId();
+
+        return $userId === null ? null : (int)$userId;
     }
 
     /**

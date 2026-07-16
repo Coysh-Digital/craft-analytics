@@ -127,12 +127,65 @@ final class SchemaBuilder
     }
 
     /**
+     * The consented (Tier-2) tables — the only place per-visitor rows may
+     * ever exist, and only for visitors who affirmatively agreed.
+     */
+    public static function createConsentTables(Migration $m): void
+    {
+        // Evidence that a lawful basis exists, and what it covered. Keyed on
+        // a pseudonymous id, never on anything that identifies the person:
+        // this proves *that* someone consented, not *who* they are.
+        $m->createTable(Table::CONSENT_LOG, [
+            'id' => $m->primaryKey(),
+            'siteId' => $m->integer()->notNull(),
+            // The consented visitor id, when one exists.
+            'visitorId' => $m->char(32),
+            // The Tier-1 rotating hash, for decisions made before/without a
+            // visitor id (a denial, typically). Unlinkable once the salt
+            // rotates, which is the point.
+            'visitorHash' => $m->char(16),
+            'state' => $m->string(16)->notNull(),
+            'method' => $m->string(16)->notNull(),
+            'scope' => $m->string(64)->notNull(),
+            'policyVersion' => $m->string(32)->notNull(),
+            'recordedAt' => $m->dateTime()->notNull(),
+        ]);
+        $m->createIndex(null, Table::CONSENT_LOG, ['visitorId']);
+        $m->createIndex(null, Table::CONSENT_LOG, ['siteId', 'recordedAt']);
+
+        // The consented raw layer (§6.4): one row per pageview, for consented
+        // visitors only, and only when enableJourneys is on. This is the sole
+        // exception to "no raw per-hit rows" (C6), and the only table in the
+        // plugin whose growth tracks traffic — which is why it is opt-in, has
+        // its own retention, and must be individually erasable.
+        $m->createTable(Table::JOURNEYS, [
+            'id' => $m->primaryKey(),
+            'visitorId' => $m->char(32)->notNull(),
+            'siteId' => $m->integer()->notNull(),
+            'sessionId' => $m->char(32)->notNull(),
+            'sequence' => $m->integer()->notNull()->defaultValue(0),
+            'pathDimId' => $m->integer()->notNull(),
+            'eventDimId' => $m->integer(),
+            // Only when associateUserId is separately enabled.
+            'userId' => $m->integer(),
+            'occurredAt' => $m->dateTime()->notNull(),
+        ]);
+        // Serves the DSAR export and erase paths, which are the whole reason
+        // this table is allowed to exist.
+        $m->createIndex(null, Table::JOURNEYS, ['visitorId', 'occurredAt']);
+        $m->createIndex(null, Table::JOURNEYS, ['userId']);
+        $m->createIndex(null, Table::JOURNEYS, ['siteId', 'occurredAt']);
+    }
+
+    /**
      * @return string[] every plugin table, newest-dependency first so they
      *                  can be dropped in order
      */
     public static function allTables(): array
     {
         return [
+            Table::JOURNEYS,
+            Table::CONSENT_LOG,
             Table::UNIQUE_MEMBERS,
             Table::DEVICES_ROLLUP,
             Table::SOURCES_ROLLUP,

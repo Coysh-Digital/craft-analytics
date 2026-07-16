@@ -34,9 +34,46 @@ class GcService extends Component
             'compactedDays' => (new Compactor(['db' => $this->db, 'settings' => $this->settings]))->run($now),
             'expiredRollups' => $this->deleteExpiredRollups($now),
             'expiredMembers' => $this->deleteExpiredUniqueMembers($now),
+            'expiredJourneys' => $this->deleteExpiredJourneys($now),
+            'expiredConsentRecords' => $this->deleteExpiredConsentRecords($now),
             'prunedDrainLog' => $this->pruneDrainLog($now),
             'orphanedDimensions' => $this->deleteOrphanedDimensions(),
         ];
+    }
+
+    /**
+     * Enforces the journeys retention window.
+     *
+     * This is the one table holding personal data, so its retention is the
+     * one that most needs to be automatic rather than remembered.
+     */
+    private function deleteExpiredJourneys(int $now): int
+    {
+        $days = min($this->settings()->journeyRetentionDays, Settings::JOURNEY_MAX_RETENTION_DAYS);
+        $cutoff = gmdate('Y-m-d H:i:s', $now - $days * 86400);
+
+        return $this->db()->createCommand()
+            ->delete(Table::JOURNEYS, ['<', 'occurredAt', $cutoff])
+            ->execute();
+    }
+
+    /**
+     * Consent evidence, if the site has set a retention for it.
+     *
+     * Zero means keep indefinitely, which is the usual legal-hold position:
+     * the record that processing was lawful should outlive the processing.
+     */
+    private function deleteExpiredConsentRecords(int $now): int
+    {
+        $days = $this->settings()->consentLogRetentionDays;
+
+        if ($days <= 0) {
+            return 0;
+        }
+
+        return $this->db()->createCommand()
+            ->delete(Table::CONSENT_LOG, ['<', 'recordedAt', gmdate('Y-m-d H:i:s', $now - $days * 86400)])
+            ->execute();
     }
 
     /**

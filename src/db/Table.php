@@ -20,4 +20,8 @@ final class Table
     public const DEVICES_ROLLUP = '{{%craftanalytics_devicesrollup}}';
 
     public const UNIQUE_MEMBERS = '{{%craftanalytics_uniquemembers}}';
+
+    /** Pro, consented visitors only. */
+    public const CONSENT_LOG = '{{%craftanalytics_consentlog}}';
+    public const JOURNEYS = '{{%craftanalytics_journeys}}';
 }

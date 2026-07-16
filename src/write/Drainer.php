@@ -6,6 +6,7 @@ use coyshdigital\craftanalytics\db\Table;
 use coyshdigital\craftanalytics\ingest\Hit;
 use coyshdigital\craftanalytics\Plugin;
 use coyshdigital\craftanalytics\rollup\Aggregator;
+use coyshdigital\craftanalytics\rollup\JourneyRecorder;
 use coyshdigital\craftanalytics\rollup\RollupSinkInterface;
 use coyshdigital\craftanalytics\session\Session;
 use coyshdigital\craftanalytics\session\SessionDelta;
@@ -41,6 +42,7 @@ class Drainer extends Component
     public ?RollupSinkInterface $sink = null;
     public ?SessionStore $sessions = null;
     public ?SpoolWriter $spool = null;
+    public ?JourneyRecorder $journeys = null;
 
     /**
      * Drains everything currently spooled.
@@ -118,7 +120,7 @@ class Drainer extends Component
 
         $closed = $this->stageIdleSessions($now, $batchId);
 
-        $this->commit($batchId, $aggregator->buckets(), $closed);
+        $this->commit($batchId, $aggregator->buckets(), $closed, $hits);
 
         // Past the commit the batch is counted; dropping the closed records
         // and the file is cleanup, and is safe to redo.
@@ -187,14 +189,19 @@ class Drainer extends Component
     /**
      * @param array<string,\coyshdigital\craftanalytics\rollup\PageBucket> $buckets
      * @param Session[] $closed
+     * @param Hit[] $hits the batch's hits, for the consented journeys layer
      */
-    private function commit(string $batchId, array $buckets, array $closed): void
+    private function commit(string $batchId, array $buckets, array $closed, array $hits = []): void
     {
         $db = $this->db();
         $transaction = $db->beginTransaction();
 
         try {
             $this->sink()->flush($buckets, $closed);
+
+            // Inside the same transaction as the batch marker: a replayed
+            // batch is skipped wholesale, so these rows cannot double up.
+            $this->journeys()->record($hits);
 
             $db->createCommand()->insert(Table::DRAIN_LOG, [
                 'batchId' => $batchId,
@@ -277,6 +284,11 @@ class Drainer extends Component
     private function sink(): RollupSinkInterface
     {
         return $this->sink ??= Plugin::getInstance()->getRollupSink();
+    }
+
+    private function journeys(): JourneyRecorder
+    {
+        return $this->journeys ??= new JourneyRecorder();
     }
 
     private function sessions(): SessionStore

@@ -5,6 +5,7 @@ use coyshdigital\craftanalytics\db\Table;
 use coyshdigital\craftanalytics\ingest\Hit;
 use coyshdigital\craftanalytics\migrations\Install;
 use coyshdigital\craftanalytics\models\Settings;
+use coyshdigital\craftanalytics\rollup\JourneyRecorder;
 use coyshdigital\craftanalytics\rollup\NullRollupSink;
 use coyshdigital\craftanalytics\rollup\RollupSinkInterface;
 use coyshdigital\craftanalytics\session\SessionStore;
@@ -73,6 +74,8 @@ function makeDrainer(object $ctx, ?RollupSinkInterface $sink = null): Drainer
             'cache' => $ctx->cache,
             'siteIds' => [1],
         ]),
+        // Consent is off by default, so the consented layer writes nothing.
+        'journeys' => new JourneyRecorder(['settings' => $ctx->settings, 'isPro' => false]),
     ]);
 }
 

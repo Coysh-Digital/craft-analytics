@@ -67,7 +67,7 @@ class ScriptInjector extends Component
             return null;
         }
 
-        $url = $this->scriptUrl();
+        $url = $this->publishedUrl('tracker.js');
 
         if ($url === null) {
             return null;
@@ -85,17 +85,46 @@ class ScriptInjector extends Component
             $attributes['data-nonce'] = $this->pendingNonce = $this->nonces()->issue();
         }
 
-        return Html::tag('script', '', $attributes);
+        $tag = Html::tag('script', '', $attributes);
+
+        // Only shipped when consented tracking is actually switched on, so a
+        // Lite site — or a Pro site that stays cookieless — downloads nothing
+        // for a feature it doesn't use.
+        $consentTag = $this->consentTag();
+
+        return $consentTag === null ? $tag : $tag . $consentTag;
     }
 
     /**
-     * Publishes tracker.js and returns its URL. Craft fingerprints the
-     * published directory, so the file can be cached hard by the browser and
-     * still change when we ship a new one.
+     * The consent API script, when there is any consent to manage.
      */
-    private function scriptUrl(): ?string
+    private function consentTag(): ?string
     {
-        $path = Craft::getAlias('@coyshdigital/craftanalytics/resources/js/tracker.js');
+        if (!Plugin::getInstance()->getConsent()->isAvailable()) {
+            return null;
+        }
+
+        $url = $this->publishedUrl('consent.js');
+
+        if ($url === null) {
+            return null;
+        }
+
+        return Html::tag('script', '', [
+            'src' => $url,
+            'defer' => true,
+            'data-consent-endpoint' => UrlHelper::siteUrl($this->settings()->consentPath),
+        ]);
+    }
+
+    /**
+     * Publishes one of our scripts and returns its URL. Craft fingerprints
+     * the published directory, so the file can be cached hard by the browser
+     * and still change when we ship a new one.
+     */
+    private function publishedUrl(string $filename): ?string
+    {
+        $path = Craft::getAlias('@coyshdigital/craftanalytics/resources/js/' . $filename);
 
         if (!is_string($path) || !is_file($path)) {
             return null;

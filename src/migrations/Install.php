@@ -18,6 +18,7 @@ class Install extends Migration
     {
         SchemaBuilder::createSpineTables($this);
         SchemaBuilder::createRollupTables($this);
+        SchemaBuilder::createConsentTables($this);
 
         return true;
     }

@@ -34,3 +34,15 @@
 - Granular permissions: view / view all sites / export / manage settings, enforced at the controller layer and scoped per site.
 - `craft.craftAnalytics` Twig variable.
 - `craft-analytics/seed/run` console command for generating realistic development data (dev mode only).
+- Consent state machine (Pro, off by default): our cookie → the site's CMP cookie → the `defineConsent` event, with Global Privacy Control absolute and unoverridable.
+- First-party `_ca_vid` cookie: 128-bit random, HttpOnly, Secure, SameSite=Lax, signed, 13 months default and hard-capped at 24.
+- `consent.js` with `craftAnalytics.consent()` and `gpcDetected`, loaded only when consent is enabled so `tracker.js` stays 1.2 KB.
+- CMP adapters for Klaro, Cookiebot, CookieYes, Osano and Civic, plus IAB TCF v2.2 (purposes 1 + 8).
+- Consent evidence log recording timestamp, state, method, scope and policy version — pseudonymous by construction.
+- Consented raw journeys layer (opt-in, off by default) with its own retention, and optional Craft user association behind a separate setting.
+- Privacy posture panel in the CP, reporting what the configuration permits in compliance language with warning badges.
+- `craft-analytics/privacy/export|erase` DSAR commands, and `craft-analytics/privacy/document` generating ROPA, privacy-notice appendix and DPIA summary from the live configuration.
+- GC enforces journey and consent-log retention.
+
+### Fixed
+- A visitor who withdrew consent between a hit being spooled and the drain running could have their already-spooled hits written back afterwards, silently resurrecting data they had asked to be erased. The drain now re-checks the consent log at write time.

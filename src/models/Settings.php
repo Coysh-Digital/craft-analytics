@@ -3,6 +3,7 @@
 namespace coyshdigital\craftanalytics\models;
 
 use coyshdigital\craftanalytics\uniques\Hll;
+use Craft;
 use craft\base\Model;
 
 /**
@@ -21,6 +22,16 @@ class Settings extends Model
     public const WRITE_DRIVER_SPOOL = 'spool';
     public const WRITE_DRIVER_QUEUE = 'queue';
     public const WRITE_DRIVER_DIRECT = 'direct';
+
+    /**
+     * The longest a consented visitor cookie may live. Not configurable past
+     * this: a "consent" someone gave two years ago and has not seen since is
+     * not a consent anybody should rely on.
+     */
+    public const CONSENT_COOKIE_MAX_DURATION = 63072000; // 24 months
+
+    /** Journeys are raw per-visitor rows; they never outlive the rollups. */
+    public const JOURNEY_MAX_RETENTION_DAYS = 790; // 26 months
 
     public const UNIQUES_DRIVER_AUTO = 'auto';
     public const UNIQUES_DRIVER_REDIS = 'redis';
@@ -77,6 +88,9 @@ class Settings extends Model
     /** Site path the beacon posts to. First-party by design (C7). */
     public string $beaconPath = '_ca/collect';
 
+    /** Site path consent decisions are posted to. */
+    public string $consentPath = '_ca/consent';
+
     /**
      * How long a hybrid-mode dedupe nonce stays claimable, in seconds.
      *
@@ -117,6 +131,77 @@ class Settings extends Model
     /** Honour the legacy `DNT: 1` header. */
     public bool $honourDnt = false;
 
+    // ---------------------------------------------------------------- Pro
+    // Consent (§5.2). Every default here is the one that needs no banner:
+    // turning any of it on is a deliberate act with compliance consequences,
+    // so none of it is on by default (C4).
+
+    /**
+     * Whether consented (Tier-2) tracking is available at all.
+     *
+     * Off means the plugin is cookieless, full stop — no consent is read, no
+     * cookie is ever set, and the banner-free posture holds.
+     */
+    public bool $enableConsent = false;
+
+    /** Name of the first-party consented-visitor cookie. */
+    public string $consentCookieName = '_ca_vid';
+
+    /**
+     * How long the consented visitor cookie lives, in seconds. Default 13
+     * months; hard-capped at 24 (see CONSENT_COOKIE_MAX_DURATION).
+     */
+    public int $consentCookieDuration = 34186000;
+
+    /**
+     * A cookie the site's own CMP writes, read server-side to infer consent
+     * without any JavaScript from us. Null disables this source.
+     */
+    public ?string $cmpCookieName = null;
+
+    /**
+     * Values of `cmpCookieName` that count as an affirmative grant. Anything
+     * else — including an absent cookie — is not consent.
+     *
+     * @var string[]
+     */
+    public array $cmpCookieGrantedValues = ['granted', 'true', '1', 'yes', 'allow'];
+
+    /** Read IAB TCF v2.2 (`__tcfapi`) consent for purposes 1 and 8. */
+    public bool $enableTcf = false;
+
+    /**
+     * Associate a consented visitor with their Craft user ID.
+     *
+     * Deliberately separate from consent itself: agreeing to be measured is
+     * not the same as agreeing to have that measurement tied to your account.
+     */
+    public bool $associateUserId = false;
+
+    /**
+     * The consented raw journeys layer — the only place per-visitor rows are
+     * ever stored. Off by default; turning it on changes the site's
+     * compliance posture (§6.4).
+     */
+    public bool $enableJourneys = false;
+
+    /** Journey retention, in days. Hard-capped at 26 months. */
+    public int $journeyRetentionDays = 90;
+
+    /**
+     * Consent-evidence retention, in days. 0 keeps it indefinitely, which is
+     * the usual legal-hold position: the record of a lawful basis should
+     * outlive the processing it authorised.
+     */
+    public int $consentLogRetentionDays = 0;
+
+    /**
+     * The privacy policy version recorded against each consent. Bump it when
+     * the policy changes materially — old consents then evidence the old
+     * policy, which is the point.
+     */
+    public string $policyVersion = '1';
+
     /**
      * @return array<int,array<int|string,mixed>>
      */
@@ -149,10 +234,56 @@ class Settings extends Model
             [['spoolMaxBytes'], 'integer', 'min' => 1048576],
             [['nonceTtl'], 'integer', 'min' => 60, 'max' => 86400],
             [['beaconRateLimit'], 'integer', 'min' => 1],
-            [['beaconPath'], 'string'],
-            [['beaconPath'], 'match', 'pattern' => '/^[A-Za-z0-9\-_\/\.]+$/'],
+            [['beaconPath', 'consentPath'], 'string'],
+            [['beaconPath', 'consentPath'], 'match', 'pattern' => '/^[A-Za-z0-9\-_\/\.]+$/'],
             [['honourGpc', 'honourDnt', 'injectScript'], 'boolean'],
             [['excludePaths', 'excludeQueryParams'], 'each', 'rule' => ['string']],
+
+            // Consent (Pro)
+            [
+                ['enableConsent', 'enableTcf', 'associateUserId', 'enableJourneys'],
+                'boolean',
+            ],
+            [['consentCookieName'], 'string', 'max' => 64],
+            [['consentCookieName'], 'match', 'pattern' => '/^[A-Za-z0-9_\-]+$/'],
+            [['consentCookieName'], 'required', 'when' => fn(self $model) => $model->enableConsent],
+            [
+                ['consentCookieDuration'],
+                'integer',
+                'min' => 3600,
+                'max' => self::CONSENT_COOKIE_MAX_DURATION,
+                'tooBig' => Craft::t(
+                    'craft-analytics',
+                    'A consented visitor cookie may not outlive 24 months.',
+                ),
+            ],
+            [['cmpCookieName'], 'string', 'max' => 64],
+            [['cmpCookieGrantedValues'], 'each', 'rule' => ['string']],
+            [
+                ['journeyRetentionDays'],
+                'integer',
+                'min' => 1,
+                'max' => self::JOURNEY_MAX_RETENTION_DAYS,
+                'tooBig' => Craft::t(
+                    'craft-analytics',
+                    'Raw journeys may not be kept longer than 26 months.',
+                ),
+            ],
+            [['consentLogRetentionDays'], 'integer', 'min' => 0],
+            [['policyVersion'], 'string', 'max' => 32],
+            [['policyVersion'], 'required'],
         ];
+    }
+
+    /**
+     * Whether any setting here would put a cookie or a device identifier on a
+     * visitor's machine — i.e. whether the banner-free claim still holds.
+     *
+     * The privacy posture panel leans on this, and it is deliberately
+     * conservative: it answers "could we", not "have we".
+     */
+    public function usesDeviceStorage(): bool
+    {
+        return $this->enableConsent;
     }
 }
