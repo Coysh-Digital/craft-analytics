@@ -5,7 +5,11 @@ setting supports Craft's multi-environment config format and env vars.
 
 | Setting | Default | Notes |
 |---|---|---|
-| `trackingMode` | `hybrid` | `server` = PHP-side capture only (undercounts behind full-page caches; no dwell/scroll metrics). `client` = beacon only. `hybrid` = both, deduped via a hot-layer nonce. |
+| `trackingMode` | `hybrid` | `server` = PHP-side capture only (under-counts behind full-page caches; no time-on-page). `client` = beacon only. `hybrid` = both, deduped by a one-time nonce. See [tracking modes](tracking-modes.md). |
+| `injectScript` | `true` | Inject the tracker automatically before `</body>` on site pages. |
+| `beaconPath` | `_ca/collect` | First-party site path the beacon posts to. |
+| `nonceTtl` | `1800` | Seconds a hybrid dedupe nonce stays claimable. Must outlast how long a visitor might sit on a page before leaving, or that view can be counted twice. |
+| `beaconRateLimit` | `120` | Maximum beacons accepted per visitor per minute. |
 | `writeDriver` | `spool` | `spool` appends to Redis/NDJSON and relies on the drain command. `queue` uses a dedicated queue component (worker required). `direct` writes synchronously after the response is flushed — low-traffic sites only. |
 | `uniqueCounterDriver` | `auto` | `auto` picks `redis` when a Redis cache is configured, else `hll`. `exact` suits small sites. See [storage](storage.md). |
 | `hllPrecision` | `12` | HyperLogLog precision (11–14) for the `hll` driver. 12 = 4 KB dense/±1.6%; 14 = 16 KB/±0.8%. Sparse sketches cost far less. |

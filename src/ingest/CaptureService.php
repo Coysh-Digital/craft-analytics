@@ -59,6 +59,16 @@ class CaptureService extends Component
 
         Plugin::getInstance()->getWriter()->write($event->hit);
 
+        // The nonce is only worth recording now that the pageview has
+        // actually been counted: if it hadn't been, the beacon *should* count
+        // it. Deliberately after the flush — this is a cache write, and the
+        // visitor is not waiting for it (C1).
+        $nonce = Plugin::getInstance()->getScriptInjector()->getPendingNonce();
+
+        if ($nonce !== null) {
+            Plugin::getInstance()->getNonces()->record($nonce);
+        }
+
         return $event->hit;
     }
 

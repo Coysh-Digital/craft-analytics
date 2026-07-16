@@ -36,7 +36,7 @@ final class Aggregator
             elementId: $hit->elementId,
         );
 
-        $bucket->add($hit->visitorHash);
+        $bucket->add($hit->visitorHash, $hit->countView, $hit->dwellMs);
     }
 
     /**

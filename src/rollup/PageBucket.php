@@ -13,6 +13,9 @@ final class PageBucket
 {
     public int $views = 0;
 
+    /** Time on page, summed across this bucket's beacons. */
+    public int $dwellMs = 0;
+
     /**
      * Distinct visitor hashes seen in this bucket. Handed to the unique
      * counter in phase 3 (sketch or membership); never persisted per-visitor.
@@ -35,9 +38,18 @@ final class PageBucket
         return $siteId . '|' . $date . '|' . $hour . '|' . $path;
     }
 
-    public function add(string $visitorHash): void
+    /**
+     * A beacon reporting dwell for an already-counted view contributes its
+     * time without adding a view — but the visitor still belongs in the
+     * sketch either way.
+     */
+    public function add(string $visitorHash, bool $countView = true, int $dwellMs = 0): void
     {
-        $this->views++;
+        if ($countView) {
+            $this->views++;
+        }
+
+        $this->dwellMs += $dwellMs;
         $this->visitorHashes[$visitorHash] = true;
     }
 

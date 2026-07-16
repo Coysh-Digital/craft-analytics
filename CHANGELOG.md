@@ -20,3 +20,9 @@
 - Browser, OS and device-type parsing for the devices rollup.
 - Per-(site, date, type) cardinality capping with an `__other__` overflow dimension.
 - Hourly→daily compaction (lossless, merges sketches) and retention/GC, via `craft-analytics/gc/run` and Craft's GC.
+- Client beacon: a 1.2 KB-gzipped, dependency-free, deferred tracker that stores nothing on the device and sends one request per pageview.
+- Hybrid deduplication via a one-time nonce claim, so pages served by a full-page cache or the bfcache are counted without double-counting fresh ones — no cache integration required.
+- Time on page, recorded from the beacon into `totalDwellMs`.
+- Beacon endpoint at a configurable first-party path: anonymous, CSRF-exempt, rate-limited per visitor, bot- and GPC-filtered, always 204.
+- Automatic tracker injection (`injectScript`), full-page-cache detection and a CP warning when `trackingMode` is `server`.
+- CI job and test enforcing the 2 KB gzipped tracker budget (C3).

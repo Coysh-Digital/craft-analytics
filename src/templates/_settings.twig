@@ -1,8 +1,19 @@
 {% import '_includes/forms.twig' as forms %}
 
+{% if plugin.isFullPageCachingLikely() and settings.trackingMode == 'server' %}
+    <div class="readable">
+        <blockquote class="note warning">
+            <p>
+                {{ 'A full-page caching plugin is installed. Cached pages never reach PHP, so server-side tracking will silently under-count them — the numbers will look plausible and be wrong.'|t('craft-analytics') }}
+                <strong>{{ 'Switch to hybrid mode'|t('craft-analytics') }}</strong>{{ ': the beacon fills the gap automatically, with no cache configuration needed.'|t('craft-analytics') }}
+            </p>
+        </blockquote>
+    </div>
+{% endif %}
+
 {{ forms.selectField({
     label: 'Tracking mode'|t('craft-analytics'),
-    instructions: 'Hybrid (recommended) captures server-side and uses the beacon to fill gaps from full-page caching, with nonce-based dedupe.'|t('craft-analytics'),
+    instructions: 'Hybrid (recommended) captures server-side and uses the beacon to fill gaps from full-page caching and the back/forward cache, deduplicated by a one-time nonce.'|t('craft-analytics'),
     id: 'trackingMode',
     name: 'trackingMode',
     options: {
@@ -12,6 +23,27 @@
     },
     value: settings.trackingMode,
     errors: settings.getErrors('trackingMode'),
+    warning: settings.trackingMode == 'server'
+        ? 'Server-side only cannot measure time on page, and under-counts behind any full-page cache.'|t('craft-analytics')
+        : null,
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Inject the tracker automatically'|t('craft-analytics'),
+    instructions: 'Adds the deferred, dependency-free tracker script before </body> on site pages. Turn off to place it yourself.'|t('craft-analytics'),
+    id: 'injectScript',
+    name: 'injectScript',
+    on: settings.injectScript,
+    errors: settings.getErrors('injectScript'),
+}) }}
+
+{{ forms.textField({
+    label: 'Beacon path'|t('craft-analytics'),
+    instructions: 'First-party site path the tracker posts to.'|t('craft-analytics'),
+    id: 'beaconPath',
+    name: 'beaconPath',
+    value: settings.beaconPath,
+    errors: settings.getErrors('beaconPath'),
 }) }}
 
 {{ forms.selectField({

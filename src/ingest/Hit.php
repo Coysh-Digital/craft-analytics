@@ -25,6 +25,18 @@ final class Hit
         public readonly string $referrer = '',
         public readonly string $userAgent = '',
         public readonly string $acceptLanguage = '',
+        /**
+         * Time on page, from the beacon. Zero for server-side capture, which
+         * has no way of knowing.
+         */
+        public readonly int $dwellMs = 0,
+        /**
+         * Whether this hit is a pageview to be counted.
+         *
+         * False when a beacon is only reporting dwell for a view the server
+         * already counted — the hybrid-mode dedupe (see BeaconController).
+         */
+        public readonly bool $countView = true,
     ) {
     }
 
@@ -43,7 +55,10 @@ final class Hit
             'r' => $this->referrer,
             'ua' => $this->userAgent,
             'al' => $this->acceptLanguage,
-        ], static fn($value) => $value !== null && $value !== '');
+            'd' => $this->dwellMs,
+            // Only serialised when false, which is the exception.
+            'nv' => $this->countView ? null : 1,
+        ], static fn($value) => $value !== null && $value !== '' && $value !== 0);
     }
 
     /**
@@ -61,6 +76,8 @@ final class Hit
             referrer: (string)($data['r'] ?? ''),
             userAgent: (string)($data['ua'] ?? ''),
             acceptLanguage: (string)($data['al'] ?? ''),
+            dwellMs: (int)($data['d'] ?? 0),
+            countView: !isset($data['nv']),
         );
     }
 

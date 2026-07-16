@@ -65,7 +65,7 @@ class DbRollupSink extends Component implements RollupSinkInterface
             $this->db(),
             Table::PAGES_ROLLUP,
             $keys,
-            ['views' => $bucket->views],
+            ['views' => $bucket->views, 'totalDwellMs' => $bucket->dwellMs],
             // Only set when the row is created: a path's element doesn't
             // change mid-hour, and re-writing it on every upsert would be
             // pointless work.

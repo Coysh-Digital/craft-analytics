@@ -69,6 +69,28 @@ class Settings extends Model
     public int $sessionWindow = 1800;
 
     /**
+     * Whether the tracker script is injected automatically before </body> on
+     * site pages. Turn off to place it yourself.
+     */
+    public bool $injectScript = true;
+
+    /** Site path the beacon posts to. First-party by design (C7). */
+    public string $beaconPath = '_ca/collect';
+
+    /**
+     * How long a hybrid-mode dedupe nonce stays claimable, in seconds.
+     *
+     * Must outlast how long a visitor might stay on a page before leaving —
+     * the beacon only fires on the way out. If it expires first, that page's
+     * view can be counted twice (once server-side, once from the beacon).
+     * Costs one small cache entry per server-counted pageview for this long.
+     */
+    public int $nonceTtl = 1800;
+
+    /** Maximum beacons accepted from one visitor per minute. */
+    public int $beaconRateLimit = 120;
+
+    /**
      * Seconds between visitor-hash salt rotations. 24h is the privacy posture
      * the banner-free claim rests on; the privacy panel warns when extended.
      */
@@ -125,7 +147,11 @@ class Settings extends Model
             [['dimensionCap'], 'integer', 'min' => 10, 'max' => 100000],
             [['rollupRetentionMonths'], 'integer', 'min' => 1, 'max' => 26],
             [['spoolMaxBytes'], 'integer', 'min' => 1048576],
-            [['honourGpc', 'honourDnt'], 'boolean'],
+            [['nonceTtl'], 'integer', 'min' => 60, 'max' => 86400],
+            [['beaconRateLimit'], 'integer', 'min' => 1],
+            [['beaconPath'], 'string'],
+            [['beaconPath'], 'match', 'pattern' => '/^[A-Za-z0-9\-_\/\.]+$/'],
+            [['honourGpc', 'honourDnt', 'injectScript'], 'boolean'],
             [['excludePaths', 'excludeQueryParams'], 'each', 'rule' => ['string']],
         ];
     }

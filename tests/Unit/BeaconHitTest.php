@@ -1,0 +1,99 @@
+<?php
+
+use coyshdigital\craftanalytics\ingest\Hit;
+use coyshdigital\craftanalytics\rollup\Aggregator;
+use coyshdigital\craftanalytics\session\SessionDelta;
+
+function beaconHit(bool $countView, int $dwellMs = 0, string $path = '/pricing'): Hit
+{
+    return new Hit(
+        siteId: 1,
+        path: $path,
+        visitorHash: 'aaaaaaaaaaaaaaaa',
+        sessionKey: 'k',
+        timestamp: mktime(10, 0, 0, 7, 16, 2026),
+        dwellMs: $dwellMs,
+        countView: $countView,
+    );
+}
+
+test('a hit round-trips its dwell and count flag through the spool', function() {
+    $hit = beaconHit(false, 4200);
+    $restored = Hit::decode($hit->encode());
+
+    expect($restored->dwellMs)->toBe(4200)
+        ->and($restored->countView)->toBeFalse();
+});
+
+test('the common case stays compact on the wire', function() {
+    // countView is only serialised when false, and dwell only when non-zero,
+    // so server-side capture pays nothing for either.
+    $encoded = beaconHit(true, 0)->encode();
+
+    expect($encoded)->not->toContain('nv')
+        ->and($encoded)->not->toContain('"d"');
+});
+
+test('a dwell-only beacon adds time without adding a view', function() {
+    $aggregator = new Aggregator(new DateTimeZone('UTC'));
+
+    // What hybrid mode produces: the server counted the view, and the beacon
+    // arrives afterwards carrying only how long they stayed.
+    $aggregator->add(beaconHit(true));
+    $aggregator->add(beaconHit(false, 5000));
+
+    $bucket = array_values($aggregator->buckets())[0];
+
+    expect($bucket->views)->toBe(1)
+        ->and($bucket->dwellMs)->toBe(5000);
+});
+
+test('a beacon for a cached page counts the view', function() {
+    $aggregator = new Aggregator(new DateTimeZone('UTC'));
+
+    // No server-side hit at all: PHP never ran, so the beacon is the only
+    // record of this pageview.
+    $aggregator->add(beaconHit(true, 3000));
+
+    $bucket = array_values($aggregator->buckets())[0];
+
+    expect($bucket->views)->toBe(1)
+        ->and($bucket->dwellMs)->toBe(3000);
+});
+
+test('dwell accumulates across a bucket while views count separately', function() {
+    $aggregator = new Aggregator(new DateTimeZone('UTC'));
+
+    $aggregator->add(beaconHit(true));
+    $aggregator->add(beaconHit(false, 1000));
+    $aggregator->add(beaconHit(true));
+    $aggregator->add(beaconHit(false, 2000));
+
+    $bucket = array_values($aggregator->buckets())[0];
+
+    expect($bucket->views)->toBe(2)
+        ->and($bucket->dwellMs)->toBe(3000);
+});
+
+test('a dwell-only beacon keeps the session alive without inflating pageviews', function() {
+    $delta = SessionDelta::fromHit(beaconHit(true));
+    $delta->add(beaconHit(false, 5000));
+
+    // Two hits, one pageview: the beacon is the same view being reported on,
+    // not a second one.
+    expect($delta->views)->toBe(1);
+});
+
+test('a session starting from a cached-page beacon still counts its view', function() {
+    $delta = SessionDelta::fromHit(beaconHit(true, 3000));
+
+    expect($delta->views)->toBe(1);
+});
+
+test('a session built only from dwell beacons has no pageviews', function() {
+    // Shouldn't happen in practice (the server hit is spooled first), but it
+    // must not invent a view if it does.
+    $delta = SessionDelta::fromHit(beaconHit(false, 1000));
+
+    expect($delta->views)->toBe(0);
+});

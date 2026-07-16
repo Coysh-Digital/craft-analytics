@@ -3,6 +3,8 @@
 namespace coyshdigital\craftanalytics;
 
 use coyshdigital\craftanalytics\ingest\CaptureService;
+use coyshdigital\craftanalytics\ingest\NonceRegistry;
+use coyshdigital\craftanalytics\ingest\ScriptInjector;
 use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\rollup\DbRollupSink;
 use coyshdigital\craftanalytics\rollup\RollupSinkInterface;
@@ -33,6 +35,7 @@ use craft\web\Application as WebApplication;
 use craft\web\Request as WebRequest;
 use craft\web\Response;
 use craft\web\UrlManager;
+use craft\web\View;
 use yii\base\Event;
 
 /**
@@ -86,6 +89,8 @@ class Plugin extends BasePlugin
                 'bots' => BotFilter::class,
                 'sessions' => SessionStore::class,
                 'capture' => CaptureService::class,
+                'nonces' => NonceRegistry::class,
+                'scriptInjector' => ScriptInjector::class,
                 'channels' => ChannelClassifier::class,
                 'deviceParser' => DeviceParser::class,
                 'rollupSink' => DbRollupSink::class,
@@ -133,6 +138,38 @@ class Plugin extends BasePlugin
     {
         /** @var CaptureService */
         return $this->get('capture');
+    }
+
+    public function getNonces(): NonceRegistry
+    {
+        /** @var NonceRegistry */
+        return $this->get('nonces');
+    }
+
+    public function getScriptInjector(): ScriptInjector
+    {
+        /** @var ScriptInjector */
+        return $this->get('scriptInjector');
+    }
+
+    /**
+     * Whether Blitz is installed and caching pages.
+     *
+     * Matters because a cached page never reaches PHP, so server-only
+     * tracking silently under-counts — the failure mode nobody notices,
+     * because the numbers still look plausible.
+     */
+    public function isFullPageCachingLikely(): bool
+    {
+        $plugins = Craft::$app->getPlugins();
+
+        foreach (['blitz', 'static-cache'] as $handle) {
+            if ($plugins->isPluginEnabled($handle)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function getChannels(): ChannelClassifier
@@ -289,9 +326,43 @@ class Plugin extends BasePlugin
         }
     }
 
+    /**
+     * Injects the tracker just before </body>, and registers the beacon's
+     * site route.
+     */
+    private function attachBeacon(): void
+    {
+        if (Craft::$app instanceof WebApplication === false) {
+            return;
+        }
+
+        Event::on(
+            UrlManager::class,
+            UrlManager::EVENT_REGISTER_SITE_URL_RULES,
+            function(RegisterUrlRulesEvent $event) {
+                $event->rules[$this->getSettings()->beaconPath] = 'craft-analytics/beacon/index';
+            },
+        );
+
+        Event::on(
+            View::class,
+            View::EVENT_END_BODY,
+            function() {
+                try {
+                    echo $this->getScriptInjector()->tag() ?? '';
+                } catch (\Throwable $e) {
+                    // A tracker that can't be placed is not a reason to break
+                    // someone's page.
+                    Craft::warning('craft-analytics could not inject its script: ' . $e->getMessage(), __METHOD__);
+                }
+            },
+        );
+    }
+
     private function attachEventHandlers(): void
     {
         $this->attachCapture();
+        $this->attachBeacon();
 
         // Craft's GC is a convenience, not the guarantee — the console
         // command is what a site should schedule (see GcController).

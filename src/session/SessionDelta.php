@@ -43,7 +43,7 @@ final class SessionDelta
             userAgent: $hit->userAgent,
             firstHit: $hit,
         );
-        $delta->views = 1;
+        $delta->views = $hit->countView ? 1 : 0;
 
         return $delta;
     }
@@ -55,7 +55,11 @@ final class SessionDelta
      */
     public function add(Hit $hit): void
     {
-        $this->views++;
+        // A beacon reporting dwell for a view the server already counted
+        // keeps the session alive without adding a pageview to it.
+        if ($hit->countView) {
+            $this->views++;
+        }
 
         if ($hit->timestamp < $this->firstSeen) {
             $this->firstSeen = $hit->timestamp;

@@ -21,6 +21,25 @@ jobs:
       - uses: ramsey/composer-install@v3
       - run: composer check-cs
 
+  tracker-size:
+    name: Tracker size budget (C3)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Report and enforce the gzipped size
+        run: |
+          php -r '
+            $s = file_get_contents("src/resources/js/tracker.js");
+            $gz = strlen(gzencode($s, 9));
+            printf("tracker.js: %d bytes raw, %d bytes gzipped (budget 2048)\n", strlen($s), $gz);
+            if ($gz > 2048) { echo "FAIL: over the 2 KB budget (C3).\n"; exit(1); }
+            printf("PASS: %.0f%% of budget used.\n", $gz / 2048 * 100);
+          '
+
   phpstan:
     name: Static analysis
     runs-on: ubuntu-latest

@@ -33,6 +33,19 @@ return [
         // Session inactivity window, seconds
         'sessionWindow' => 1800,
 
+        // Inject the tracker script automatically before </body> on site pages
+        'injectScript' => true,
+
+        // First-party site path the beacon posts to
+        'beaconPath' => '_ca/collect',
+
+        // How long a hybrid dedupe nonce stays claimable, seconds. Must outlast
+        // how long a visitor might sit on a page before leaving.
+        'nonceTtl' => 1800,
+
+        // Maximum beacons accepted from one visitor per minute
+        'beaconRateLimit' => 120,
+
         // Visitor-hash salt rotation. 24h + destruction of the old salt is the
         // basis of the banner-free privacy posture — extend with care.
         'saltRotationInterval' => 86400,
