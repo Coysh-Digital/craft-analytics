@@ -30,6 +30,18 @@ final class SessionDelta
     public string $countryCode = '';
     public string $region = '';
 
+    /**
+     * Handles of goals matched by this batch's hits. Filled by the drain via
+     * {@see matchGoal()}, because the delta is where the hits still exist —
+     * by the time the session closes, they are gone.
+     *
+     * @var array<int,string>
+     */
+    public array $goals = [];
+
+    /** Deepest scroll bucket seen in this batch. */
+    public int $maxScroll = 0;
+
     public function __construct(
         public readonly int $siteId,
         public readonly string $sessionKey,
@@ -61,8 +73,17 @@ final class SessionDelta
             firstHit: $hit,
         );
         $delta->views = $hit->countView ? 1 : 0;
+        $delta->maxScroll = $hit->scrollBucket ?? 0;
 
         return $delta;
+    }
+
+    /** Records that a hit in this batch converted a goal. */
+    public function matchGoal(string $handle): void
+    {
+        if (!in_array($handle, $this->goals, true)) {
+            $this->goals[] = $handle;
+        }
     }
 
     /**
@@ -100,6 +121,8 @@ final class SessionDelta
                 $this->campaigns[] = $hit->campaign->toArray();
             }
         }
+
+        $this->maxScroll = max($this->maxScroll, $hit->scrollBucket ?? 0);
 
         // Geo is resolved once, when they arrive.
         if ($this->countryCode === '' && $hit->countryCode !== '') {

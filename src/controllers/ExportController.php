@@ -107,6 +107,70 @@ class ExportController extends BaseCpController
     }
 
     /**
+     * Traffic by section, entry type and author in one file — the same three
+     * tables the Content screen shows, distinguished by a `dimension` column.
+     */
+    public function actionContent(): Response
+    {
+        $site = $this->currentSite();
+        $siteId = $this->siteId($site);
+        $range = $this->range();
+        $content = Plugin::getInstance()->getContentStats();
+        $rows = [];
+
+        foreach ($content->bySection($siteId, $range, 5000) as $row) {
+            $rows[] = [
+                'dimension' => 'section',
+                'value' => $row['name'],
+                'views' => $row['views'],
+                'entries' => $row['entries'],
+            ];
+        }
+
+        foreach ($content->byEntryType($siteId, $range, 5000) as $row) {
+            $rows[] = [
+                'dimension' => 'entryType',
+                'value' => $row['section'] !== '' ? $row['section'] . ' / ' . $row['name'] : $row['name'],
+                'views' => $row['views'],
+                'entries' => $row['entries'],
+            ];
+        }
+
+        foreach ($content->byAuthor($siteId, $range, 5000) as $row) {
+            $rows[] = [
+                'dimension' => 'author',
+                'value' => $row['name'],
+                'views' => $row['views'],
+                'entries' => $row['entries'],
+            ];
+        }
+
+        return $this->deliver('content', $site, $range, $rows);
+    }
+
+    public function actionGoals(): Response
+    {
+        $site = $this->currentSite();
+        $siteId = $this->siteId($site);
+        $range = $this->range();
+
+        if (!Plugin::getInstance()->is(Plugin::EDITION_PRO)) {
+            throw new \yii\web\ForbiddenHttpException('Goals are a Craft Analytics Pro feature.');
+        }
+
+        $rows = array_map(static fn(array $goal): array => [
+            'goal' => $goal['name'],
+            'handle' => $goal['handle'],
+            'type' => $goal['type'],
+            'conversions' => $goal['conversions'],
+            'value' => round($goal['value'], 2),
+            'conversionRate' => round($goal['rate'], 2),
+        ], Plugin::getInstance()->getConversionStats()->goals($siteId, $range));
+
+        return $this->deliver('goals', $site, $range, $rows);
+    }
+
+    /**
      * @param array<int,array<string,mixed>> $rows
      */
     private function deliver(string $kind, Site $site, DateRange $range, array $rows): Response

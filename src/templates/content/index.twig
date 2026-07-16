@@ -1,0 +1,163 @@
+{% extends 'craft-analytics/_layout.twig' %}
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% block report %}
+    {# The three dimensions are tabs rather than three stacked tables: they
+       answer the same question from different angles, and a reader wants one
+       at a time. #}
+    <div class="ca-tabs" role="tablist">
+        {% set tabs = {
+            section: 'Sections'|t('craft-analytics'),
+            type: 'Entry types'|t('craft-analytics'),
+            author: 'Authors'|t('craft-analytics')
+        } %}
+        {% for value, label in tabs %}
+            <a class="ca-tab{{ value == by ? ' is-selected' }}"
+               role="tab"
+               href="{{ url(currentPath, currentParams|merge({ by: value })) }}"
+               {{ value == by ? 'aria-selected="true"' }}>{{ label }}</a>
+        {% endfor %}
+    </div>
+
+    {% if by == 'section' %}
+        <div class="ca-card">
+            <div class="ca-card-head">
+                <h2 class="ca-card-title">{{ 'Traffic by section'|t('craft-analytics') }}</h2>
+                <span class="ca-muted">{{ '{count} sections'|t('craft-analytics', { count: sections|length }) }}</span>
+            </div>
+            <div class="ca-card-body ca-table-scroll">
+                {% if sections|length %}
+                    {% set maxViews = max(sections|map(s => s.views)) %}
+                    <table class="ca-table">
+                        <thead>
+                        <tr>
+                            <th>{{ 'Section'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Views'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Entries'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Views per entry'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Avg. time'|t('craft-analytics') }}</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for section in sections %}
+                            <tr>
+                                {{ ca.barCell(
+                                    section.name,
+                                    section.views,
+                                    maxViews,
+                                    url('craft-analytics/content/section/' ~ section.id, currentParams)
+                                ) }}
+                                <td class="ca-num">{{ section.views|number_format }}</td>
+                                <td class="ca-num ca-muted">{{ section.entries|number_format }}</td>
+                                <td class="ca-num ca-muted">
+                                    {{ section.entries ? (section.views / section.entries)|number_format(1) : '—' }}
+                                </td>
+                                <td class="ca-num ca-muted">
+                                    {{ section.avgDwellMs ? ca.duration(section.avgDwellMs) : '—' }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    {{ ca.empty(
+                        'No section traffic for this period'|t('craft-analytics'),
+                        'This counts views of pages that resolved to an entry. Pages that aren’t entries — a template-only route, say — appear under Pages instead.'|t('craft-analytics')
+                    ) }}
+                {% endif %}
+            </div>
+        </div>
+
+        <p class="ca-footnote">
+            {{ '“Views per entry” is often the more useful column: a section with 20 entries and 2,000 views is not obviously beating one with 2 entries and 800.'|t('craft-analytics') }}
+        </p>
+    {% elseif by == 'type' %}
+        <div class="ca-card">
+            <div class="ca-card-head">
+                <h2 class="ca-card-title">{{ 'Traffic by entry type'|t('craft-analytics') }}</h2>
+            </div>
+            <div class="ca-card-body ca-table-scroll">
+                {% if entryTypes|length %}
+                    {% set maxViews = max(entryTypes|map(t => t.views)) %}
+                    <table class="ca-table">
+                        <thead>
+                        <tr>
+                            <th>{{ 'Entry type'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Views'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Entries'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Views per entry'|t('craft-analytics') }}</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for type in entryTypes %}
+                            <tr>
+                                {{ ca.barCell(
+                                    type.section ? type.section ~ ' / ' ~ type.name : type.name,
+                                    type.views,
+                                    maxViews
+                                ) }}
+                                <td class="ca-num">{{ type.views|number_format }}</td>
+                                <td class="ca-num ca-muted">{{ type.entries|number_format }}</td>
+                                <td class="ca-num ca-muted">
+                                    {{ type.entries ? (type.views / type.entries)|number_format(1) : '—' }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    {{ ca.empty(
+                        'No entry type traffic for this period'|t('craft-analytics'),
+                        'Once entries have been viewed, their types appear here.'|t('craft-analytics')
+                    ) }}
+                {% endif %}
+            </div>
+        </div>
+    {% else %}
+        <div class="ca-card">
+            <div class="ca-card-head">
+                <h2 class="ca-card-title">{{ 'Traffic by author'|t('craft-analytics') }}</h2>
+            </div>
+            <div class="ca-card-body ca-table-scroll">
+                {% if authors|length %}
+                    {% set maxViews = max(authors|map(a => a.views)) %}
+                    <table class="ca-table">
+                        <thead>
+                        <tr>
+                            <th>{{ 'Author'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Views'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Entries'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Views per entry'|t('craft-analytics') }}</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for author in authors %}
+                            <tr>
+                                {{ ca.barCell(author.name, author.views, maxViews) }}
+                                <td class="ca-num">{{ author.views|number_format }}</td>
+                                <td class="ca-num ca-muted">{{ author.entries|number_format }}</td>
+                                <td class="ca-num ca-muted">
+                                    {{ author.entries ? (author.views / author.entries)|number_format(1) : '—' }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    {{ ca.empty(
+                        'No author traffic for this period'|t('craft-analytics'),
+                        'Once entries with authors have been viewed, they appear here.'|t('craft-analytics')
+                    ) }}
+                {% endif %}
+            </div>
+        </div>
+
+        <p class="ca-footnote">
+            {{ 'Craft allows several authors per entry, and each gets the full view count rather than a share of it — so these views can add up to more than the site’s total where entries are co-authored.'|t('craft-analytics') }}
+        </p>
+    {% endif %}
+
+    <p class="ca-footnote">
+        {{ 'These figures come from joining views to Craft’s own content model, so they always reflect how the site is structured right now. Move an entry to another section and its history moves with it.'|t('craft-analytics') }}
+    </p>
+{% endblock %}

@@ -227,6 +227,92 @@ final class SchemaBuilder
     }
 
     /**
+     * Goals and funnels (Pro).
+     *
+     * The definition tables are the readable, joinable mirror of project
+     * config — project config remains the source of truth, so goals deploy
+     * with the site rather than being retyped in production. These rows exist
+     * because a rollup needs a foreign key to point at, and because a report
+     * shouldn't have to parse YAML to learn a goal's name.
+     */
+    public static function createGoalTables(Migration $m): void
+    {
+        $m->createTable(Table::GOALS, [
+            'id' => $m->primaryKey(),
+            'name' => $m->string()->notNull(),
+            'handle' => $m->string(64)->notNull(),
+            'type' => $m->string(16)->notNull(),
+            'target' => $m->string(500)->notNull(),
+            'value' => $m->decimal(14, 2)->notNull()->defaultValue(0),
+            'enabled' => $m->boolean()->notNull()->defaultValue(true),
+            // Null = every site.
+            'siteId' => $m->integer(),
+            'sortOrder' => $m->smallInteger()->notNull()->defaultValue(0),
+            'uid' => $m->uid(),
+            'dateCreated' => $m->dateTime()->notNull(),
+            'dateUpdated' => $m->dateTime()->notNull(),
+        ]);
+        $m->createIndex(null, Table::GOALS, ['handle'], true);
+        $m->createIndex(null, Table::GOALS, ['uid'], true);
+
+        // Conversions, keyed by day — cardinality × time, like everything
+        // else. `value` is the monetary total, `sessions` the denominator a
+        // conversion *rate* needs.
+        $m->createTable(Table::GOALS_ROLLUP, [
+            'id' => $m->primaryKey(),
+            'siteId' => $m->integer()->notNull(),
+            'date' => $m->date()->notNull(),
+            'goalId' => $m->integer()->notNull(),
+            'conversions' => $m->integer()->notNull()->defaultValue(0),
+            'value' => $m->decimal(14, 2)->notNull()->defaultValue(0),
+        ]);
+        $m->createIndex(null, Table::GOALS_ROLLUP, ['siteId', 'date', 'goalId'], true);
+        $m->addForeignKey(null, Table::GOALS_ROLLUP, ['goalId'], Table::GOALS, ['id'], 'CASCADE');
+
+        $m->createTable(Table::FUNNELS, [
+            'id' => $m->primaryKey(),
+            'name' => $m->string()->notNull(),
+            'handle' => $m->string(64)->notNull(),
+            'siteId' => $m->integer(),
+            'enabled' => $m->boolean()->notNull()->defaultValue(true),
+            'sortOrder' => $m->smallInteger()->notNull()->defaultValue(0),
+            'uid' => $m->uid(),
+            'dateCreated' => $m->dateTime()->notNull(),
+            'dateUpdated' => $m->dateTime()->notNull(),
+        ]);
+        $m->createIndex(null, Table::FUNNELS, ['handle'], true);
+        $m->createIndex(null, Table::FUNNELS, ['uid'], true);
+
+        // A step is a goal in a position. Reusing goals rather than inventing
+        // a parallel matcher means a funnel step and a goal can never
+        // disagree about what a conversion is.
+        $m->createTable(Table::FUNNEL_STEPS, [
+            'id' => $m->primaryKey(),
+            'funnelId' => $m->integer()->notNull(),
+            'goalId' => $m->integer()->notNull(),
+            'position' => $m->smallInteger()->notNull(),
+            'uid' => $m->uid(),
+        ]);
+        $m->createIndex(null, Table::FUNNEL_STEPS, ['funnelId', 'position'], true);
+        $m->addForeignKey(null, Table::FUNNEL_STEPS, ['funnelId'], Table::FUNNELS, ['id'], 'CASCADE');
+        $m->addForeignKey(null, Table::FUNNEL_STEPS, ['goalId'], Table::GOALS, ['id'], 'CASCADE');
+
+        // One row per funnel-step-day: how many sessions reached this far.
+        // Drop-off is the difference between neighbouring positions, computed
+        // at read time — storing it would be storing a subtraction.
+        $m->createTable(Table::FUNNEL_STEP_ROLLUP, [
+            'id' => $m->primaryKey(),
+            'siteId' => $m->integer()->notNull(),
+            'date' => $m->date()->notNull(),
+            'funnelId' => $m->integer()->notNull(),
+            'position' => $m->smallInteger()->notNull(),
+            'sessions' => $m->integer()->notNull()->defaultValue(0),
+        ]);
+        $m->createIndex(null, Table::FUNNEL_STEP_ROLLUP, ['siteId', 'date', 'funnelId', 'position'], true);
+        $m->addForeignKey(null, Table::FUNNEL_STEP_ROLLUP, ['funnelId'], Table::FUNNELS, ['id'], 'CASCADE');
+    }
+
+    /**
      * The consented (Tier-2) tables — the only place per-visitor rows may
      * ever exist, and only for visitors who affirmatively agreed.
      */
@@ -284,6 +370,11 @@ final class SchemaBuilder
     public static function allTables(): array
     {
         return [
+            Table::FUNNEL_STEP_ROLLUP,
+            Table::FUNNEL_STEPS,
+            Table::FUNNELS,
+            Table::GOALS_ROLLUP,
+            Table::GOALS,
             Table::OUTBOUND_ROLLUP,
             Table::SEARCH_ROLLUP,
             Table::SCROLL_ROLLUP,

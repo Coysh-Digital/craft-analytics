@@ -75,6 +75,8 @@ class SessionStore extends Component
                 campaigns: $delta->campaigns,
                 countryCode: $delta->countryCode,
                 region: $delta->region,
+                goals: $delta->goals,
+                maxScroll: $delta->maxScroll,
             );
         } else {
             $session->pageviews += $delta->views;
@@ -98,6 +100,16 @@ class SessionStore extends Component
                 $session->countryCode = $delta->countryCode;
                 $session->region = $delta->region;
             }
+
+            // A goal converts once per session, so a handle already here
+            // stays here once — this union is what enforces that.
+            foreach ($delta->goals as $handle) {
+                if (!in_array($handle, $session->goals, true)) {
+                    $session->goals[] = $handle;
+                }
+            }
+
+            $session->maxScroll = max($session->maxScroll, $delta->maxScroll);
         }
 
         $session->lastBatch = $batchId;

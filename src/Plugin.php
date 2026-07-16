@@ -13,10 +13,14 @@ use coyshdigital\craftanalytics\rollup\RollupSinkInterface;
 use coyshdigital\craftanalytics\services\BotFilter;
 use coyshdigital\craftanalytics\services\ChannelClassifier;
 use coyshdigital\craftanalytics\services\ConsentService;
+use coyshdigital\craftanalytics\services\ContentStatsService;
+use coyshdigital\craftanalytics\services\ConversionStatsService;
 use coyshdigital\craftanalytics\services\DeviceParser;
 use coyshdigital\craftanalytics\services\DimensionsService;
+use coyshdigital\craftanalytics\services\FunnelsService;
 use coyshdigital\craftanalytics\services\GcService;
 use coyshdigital\craftanalytics\services\GeoService;
+use coyshdigital\craftanalytics\services\GoalsService;
 use coyshdigital\craftanalytics\services\IdentityService;
 use coyshdigital\craftanalytics\services\PrivacyDocumentService;
 use coyshdigital\craftanalytics\services\PrivacyService;
@@ -39,6 +43,7 @@ use craft\base\Plugin as BasePlugin;
 use craft\elements\Entry;
 use craft\events\DefineAttributeHtmlEvent;
 use craft\events\DefineHtmlEvent;
+use craft\events\RebuildConfigEvent;
 use craft\events\RegisterComponentTypesEvent;
 use craft\events\RegisterElementTableAttributesEvent;
 use craft\events\RegisterUrlRulesEvent;
@@ -46,6 +51,7 @@ use craft\events\RegisterUserPermissionsEvent;
 use craft\helpers\Html;
 use craft\services\Dashboard;
 use craft\services\Gc;
+use craft\services\ProjectConfig;
 use craft\services\UserPermissions;
 use craft\web\Application as WebApplication;
 use craft\web\Request as WebRequest;
@@ -120,6 +126,10 @@ class Plugin extends BasePlugin
                 'consent' => ConsentService::class,
                 'privacy' => PrivacyService::class,
                 'privacyDocuments' => PrivacyDocumentService::class,
+                'goals' => GoalsService::class,
+                'funnels' => FunnelsService::class,
+                'contentStats' => ContentStatsService::class,
+                'conversionStats' => ConversionStatsService::class,
             ],
         ];
     }
@@ -219,6 +229,30 @@ class Plugin extends BasePlugin
         return $this->get('rollupSink');
     }
 
+    public function getGoals(): GoalsService
+    {
+        /** @var GoalsService */
+        return $this->get('goals');
+    }
+
+    public function getFunnels(): FunnelsService
+    {
+        /** @var FunnelsService */
+        return $this->get('funnels');
+    }
+
+    public function getContentStats(): ContentStatsService
+    {
+        /** @var ContentStatsService */
+        return $this->get('contentStats');
+    }
+
+    public function getConversionStats(): ConversionStatsService
+    {
+        /** @var ConversionStatsService */
+        return $this->get('conversionStats');
+    }
+
     /**
      * The configured unique-visitor counter.
      *
@@ -305,11 +339,14 @@ class Plugin extends BasePlugin
             'dashboard' => ['label' => Craft::t('craft-analytics', 'Dashboard'), 'url' => 'craft-analytics'],
             'realtime' => ['label' => Craft::t('craft-analytics', 'Real-time'), 'url' => 'craft-analytics/realtime'],
             'pages' => ['label' => Craft::t('craft-analytics', 'Pages'), 'url' => 'craft-analytics/pages'],
+            'content' => ['label' => Craft::t('craft-analytics', 'Content'), 'url' => 'craft-analytics/content'],
             'sources' => ['label' => Craft::t('craft-analytics', 'Sources'), 'url' => 'craft-analytics/sources'],
             'devices' => ['label' => Craft::t('craft-analytics', 'Devices'), 'url' => 'craft-analytics/devices'],
             'campaigns' => ['label' => Craft::t('craft-analytics', 'Campaigns'), 'url' => 'craft-analytics/campaigns'],
             'geo' => ['label' => Craft::t('craft-analytics', 'Locations'), 'url' => 'craft-analytics/geo'],
             'events' => ['label' => Craft::t('craft-analytics', 'Events'), 'url' => 'craft-analytics/events'],
+            'goals' => ['label' => Craft::t('craft-analytics', 'Goals'), 'url' => 'craft-analytics/goals'],
+            'funnels' => ['label' => Craft::t('craft-analytics', 'Funnels'), 'url' => 'craft-analytics/funnels'],
             'privacy' => ['label' => Craft::t('craft-analytics', 'Privacy'), 'url' => 'craft-analytics/privacy'],
         ];
 
@@ -536,10 +573,41 @@ class Plugin extends BasePlugin
         return $this->indexViews[$siteId][$elementId];
     }
 
+    /**
+     * Keeps the goal and funnel tables in step with project config, which is
+     * the source of truth for both.
+     *
+     * Goals are applied before funnels, and the handler re-asserts that
+     * ordering itself: a funnel step points at a goal, and applying them the
+     * other way round would drop every step on a fresh environment.
+     */
+    private function attachProjectConfig(): void
+    {
+        $projectConfig = Craft::$app->getProjectConfig();
+
+        $projectConfig
+            ->onAdd(GoalsService::CONFIG_PATH . '.{uid}', [$this->getGoals(), 'handleChangedGoal'])
+            ->onUpdate(GoalsService::CONFIG_PATH . '.{uid}', [$this->getGoals(), 'handleChangedGoal'])
+            ->onRemove(GoalsService::CONFIG_PATH . '.{uid}', [$this->getGoals(), 'handleDeletedGoal'])
+            ->onAdd(FunnelsService::CONFIG_PATH . '.{uid}', [$this->getFunnels(), 'handleChangedFunnel'])
+            ->onUpdate(FunnelsService::CONFIG_PATH . '.{uid}', [$this->getFunnels(), 'handleChangedFunnel'])
+            ->onRemove(FunnelsService::CONFIG_PATH . '.{uid}', [$this->getFunnels(), 'handleDeletedFunnel']);
+
+        Event::on(
+            ProjectConfig::class,
+            ProjectConfig::EVENT_REBUILD,
+            function(RebuildConfigEvent $event) {
+                $event->config['craftAnalytics']['goals'] = $this->getGoals()->rebuildConfig();
+                $event->config['craftAnalytics']['funnels'] = $this->getFunnels()->rebuildConfig();
+            },
+        );
+    }
+
     private function attachEventHandlers(): void
     {
         $this->attachCapture();
         $this->attachBeacon();
+        $this->attachProjectConfig();
 
         // Craft's GC is a convenience, not the guarantee — the console
         // command is what a site should schedule (see GcController).
@@ -565,7 +633,20 @@ class Plugin extends BasePlugin
                 $event->rules['craft-analytics/campaigns'] = 'craft-analytics/pro-reports/campaigns';
                 $event->rules['craft-analytics/geo'] = 'craft-analytics/pro-reports/geo';
                 $event->rules['craft-analytics/events'] = 'craft-analytics/pro-reports/events';
-                foreach (['pages', 'sources', 'devices', 'trend'] as $kind) {
+                $event->rules['craft-analytics/content'] = 'craft-analytics/content/index';
+                $event->rules['craft-analytics/content/section/<sectionId:\d+>'] = 'craft-analytics/content/section';
+                $event->rules['craft-analytics/goals'] = 'craft-analytics/conversions/goals';
+                $event->rules['craft-analytics/funnels'] = 'craft-analytics/conversions/funnels';
+
+                // Definitions live under Settings, where the rest of the
+                // things that write project config live.
+                $event->rules['settings/plugins/craft-analytics/goals'] = 'craft-analytics/goals/index';
+                $event->rules['settings/plugins/craft-analytics/goals/new'] = 'craft-analytics/goals/edit';
+                $event->rules['settings/plugins/craft-analytics/goals/<uid:{uid}>'] = 'craft-analytics/goals/edit';
+                $event->rules['settings/plugins/craft-analytics/funnels/new'] = 'craft-analytics/goals/edit-funnel';
+                $event->rules['settings/plugins/craft-analytics/funnels/<uid:{uid}>'] = 'craft-analytics/goals/edit-funnel';
+
+                foreach (['pages', 'sources', 'devices', 'trend', 'content', 'goals'] as $kind) {
                     $event->rules["craft-analytics/export/$kind"] = "craft-analytics/export/$kind";
                 }
             },

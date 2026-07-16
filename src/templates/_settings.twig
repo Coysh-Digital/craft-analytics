@@ -80,6 +80,22 @@
     errors: settings.getErrors('honourGpc'),
 }) }}
 
+{% if craft.app.plugins.getPlugin('craft-analytics').is('pro') %}
+    <hr>
+
+    <h2>{{ 'Goals & funnels'|t('craft-analytics') }}</h2>
+
+    <p class="light">
+        {{ 'Goals name the things worth counting, and funnels put them in order. They live in project config, so they deploy with the rest of the site.'|t('craft-analytics') }}
+    </p>
+
+    <p>
+        <a class="btn" href="{{ url('settings/plugins/craft-analytics/goals') }}">
+            {{ 'Manage goals & funnels'|t('craft-analytics') }}
+        </a>
+    </p>
+{% endif %}
+
 <p class="light">
     {{ 'All settings can be overridden per environment in config/craft-analytics.php.'|t('craft-analytics') }}
 </p>

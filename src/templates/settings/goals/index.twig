@@ -1,0 +1,153 @@
+{% extends '_layouts/cp.twig' %}
+{% import '_includes/forms.twig' as forms %}
+
+{% set title = 'Goals & funnels'|t('craft-analytics') %}
+{% set docTitle = title ~ ' - ' ~ 'Craft Analytics'|t('craft-analytics') %}
+
+{% set crumbs = [
+    { label: 'Settings'|t('app'), url: url('settings') },
+    { label: 'Plugins'|t('app'), url: url('settings/plugins') },
+    { label: 'Craft Analytics'|t('craft-analytics'), url: url('settings/plugins/craft-analytics') }
+] %}
+
+{% block actionButton %}
+    {% if not readOnly %}
+        <div class="btngroup">
+            <a class="btn submit" href="{{ url('settings/plugins/craft-analytics/goals/new') }}">
+                {{ 'New goal'|t('craft-analytics') }}
+            </a>
+            <a class="btn" href="{{ url('settings/plugins/craft-analytics/funnels/new') }}">
+                {{ 'New funnel'|t('craft-analytics') }}
+            </a>
+        </div>
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+    {% if readOnly %}
+        <div class="readable">
+            <blockquote class="note">
+                <p>{{ 'Goals and funnels are stored in project config, which is read-only while `allowAdminChanges` is disabled. Edit them in an environment where admin changes are allowed, and deploy the change.'|t('craft-analytics') }}</p>
+            </blockquote>
+        </div>
+    {% endif %}
+
+    <h2>{{ 'Goals'|t('craft-analytics') }}</h2>
+
+    {% if goals|length %}
+        <table class="data fullwidth">
+            <thead>
+            <tr>
+                <th scope="col">{{ 'Name'|t('app') }}</th>
+                <th scope="col">{{ 'Type'|t('craft-analytics') }}</th>
+                <th scope="col">{{ 'Target'|t('craft-analytics') }}</th>
+                <th scope="col">{{ 'Value'|t('craft-analytics') }}</th>
+                <th scope="col">{{ 'Site'|t('app') }}</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for goal in goals %}
+                <tr data-id="{{ goal.id }}">
+                    <th scope="row" data-title="{{ 'Name'|t('app') }}">
+                        <a href="{{ url('settings/plugins/craft-analytics/goals/' ~ goal.uid) }}">{{ goal.name }}</a>
+                        {% if not goal.enabled %}
+                            <span class="status off"></span><span class="light">{{ 'Disabled'|t('app') }}</span>
+                        {% endif %}
+                        <div class="light code">{{ goal.handle }}</div>
+                    </th>
+                    <td>{{ goal.goalType().label()|t('craft-analytics') }}</td>
+                    <td class="code">{{ goal.target }}</td>
+                    <td>{{ goal.value ? goal.value|currency : '—' }}</td>
+                    <td class="light">
+                        {%- if goal.siteId -%}
+                            {{ craft.app.sites.getSiteById(goal.siteId).name ?? '—' }}
+                        {%- else -%}
+                            {{ 'All sites'|t('craft-analytics') }}
+                        {%- endif -%}
+                    </td>
+                    <td class="thin">
+                        {% if not readOnly %}
+                            <a class="delete icon" title="{{ 'Delete'|t('app') }}"
+                               role="button"
+                               data-ca-delete="{{ actionUrl('craft-analytics/goals/delete') }}"
+                               data-ca-uid="{{ goal.uid }}"
+                               data-ca-confirm="{{ 'Delete “{name}”? Its conversions are deleted with it — they only mean anything as that goal’s conversions.'|t('craft-analytics', { name: goal.name }) }}"></a>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="light">{{ 'No goals yet. A goal names something worth counting — a page reached, an event fired, a session that lasted.'|t('craft-analytics') }}</p>
+    {% endif %}
+
+    <hr>
+
+    <h2>{{ 'Funnels'|t('craft-analytics') }}</h2>
+
+    {% if funnels|length %}
+        <table class="data fullwidth">
+            <thead>
+            <tr>
+                <th scope="col">{{ 'Name'|t('app') }}</th>
+                <th scope="col">{{ 'Steps'|t('craft-analytics') }}</th>
+                <th scope="col">{{ 'Site'|t('app') }}</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for funnel in funnels %}
+                <tr>
+                    <th scope="row">
+                        <a href="{{ url('settings/plugins/craft-analytics/funnels/' ~ funnel.uid) }}">{{ funnel.name }}</a>
+                        {% if not funnel.enabled %}
+                            <span class="status off"></span><span class="light">{{ 'Disabled'|t('app') }}</span>
+                        {% endif %}
+                        <div class="light code">{{ funnel.handle }}</div>
+                    </th>
+                    <td class="light">{{ funnel.steps|join(' → ') }}</td>
+                    <td class="light">
+                        {%- if funnel.siteId -%}
+                            {{ craft.app.sites.getSiteById(funnel.siteId).name ?? '—' }}
+                        {%- else -%}
+                            {{ 'All sites'|t('craft-analytics') }}
+                        {%- endif -%}
+                    </td>
+                    <td class="thin">
+                        {% if not readOnly %}
+                            <a class="delete icon" title="{{ 'Delete'|t('app') }}"
+                               role="button"
+                               data-ca-delete="{{ actionUrl('craft-analytics/goals/delete-funnel') }}"
+                               data-ca-uid="{{ funnel.uid }}"
+                               data-ca-confirm="{{ 'Delete “{name}”?'|t('craft-analytics', { name: funnel.name }) }}"></a>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="light">{{ 'No funnels yet. A funnel is two or more goals in the order they should happen.'|t('craft-analytics') }}</p>
+    {% endif %}
+{% endblock %}
+
+{% js %}
+// Delete, with the consequence stated before it happens rather than after.
+document.querySelectorAll('[data-ca-delete]').forEach(function(el) {
+    el.addEventListener('click', function() {
+        if (!confirm(el.dataset.caConfirm)) {
+            return;
+        }
+
+        Craft.sendActionRequest('POST', el.dataset.caDelete, {
+            data: { uid: el.dataset.caUid }
+        }).then(function() {
+            el.closest('tr').remove();
+        }).catch(function(e) {
+            Craft.cp.displayError(e.response?.data?.message);
+        });
+    });
+});
+{% endjs %}

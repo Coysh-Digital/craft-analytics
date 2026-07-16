@@ -1,0 +1,129 @@
+{% extends 'craft-analytics/_layout.twig' %}
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% block report %}
+    {% if not isPro %}
+        {% include 'craft-analytics/_partials/pro-gate.twig' with {
+            title: 'Funnels'|t('craft-analytics'),
+            description: 'Put goals in order and see where people leave: how many landed, how many reached the basket, how many actually checked out — and the drop between each.'|t('craft-analytics')
+        } only %}
+    {% elseif funnels|length == 0 %}
+        <div class="ca-card">
+            <div class="ca-card-body">
+                {{ ca.empty(
+                    'No funnels yet'|t('craft-analytics'),
+                    'A funnel is two or more goals in order. Define the goals first, then the sequence they should happen in.'|t('craft-analytics')
+                ) }}
+                {% if canManage %}
+                    <p style="margin-top: 12px">
+                        <a class="btn submit" href="{{ url('settings/plugins/craft-analytics/funnels/new') }}">
+                            {{ 'New funnel'|t('craft-analytics') }}
+                        </a>
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+    {% else %}
+        {% if funnels|length > 1 %}
+            <div class="ca-tabs" role="tablist">
+                {% for f in funnels %}
+                    <a class="ca-tab{{ f.id == selectedFunnel.id ? ' is-selected' }}"
+                       role="tab"
+                       href="{{ url(currentPath, currentParams|merge({ funnel: f.handle })) }}"
+                       {{ f.id == selectedFunnel.id ? 'aria-selected="true"' }}>{{ f.name }}</a>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% set first = steps|length ? steps[0].sessions : 0 %}
+        {% set last = steps|length ? steps[steps|length - 1].sessions : 0 %}
+
+        <div class="ca-kpis">
+            {{ ca.kpi('Entered'|t('craft-analytics'), first, {
+                sub: steps|length ? steps[0].name : ''
+            }) }}
+            {{ ca.kpi('Completed'|t('craft-analytics'), last, {
+                sub: steps|length ? steps[steps|length - 1].name : ''
+            }) }}
+            {{ ca.kpi('Completion rate'|t('craft-analytics'), 0, {
+                raw: first ? (last / first * 100)|number_format(1) ~ '%' : '—',
+                sub: 'Of the sessions that reached step 1'|t('craft-analytics')
+            }) }}
+        </div>
+
+        <div class="ca-card">
+            <div class="ca-card-head">
+                <h2 class="ca-card-title">{{ selectedFunnel.name }}</h2>
+                {% if canManage %}
+                    <a class="go" href="{{ url('settings/plugins/craft-analytics/funnels/' ~ selectedFunnel.uid) }}">
+                        {{ 'Edit funnel'|t('craft-analytics') }}
+                    </a>
+                {% endif %}
+            </div>
+            <div class="ca-card-body">
+                {% if first %}
+                    {# Each step is a bar as wide as its share of step 1, with
+                       the drop stated beside it. Bars are proportional to the
+                       first step rather than to each other, because "half the
+                       people who started" is the thing being asked. #}
+                    <ol class="ca-funnel">
+                        {% for step in steps %}
+                            <li class="ca-funnel-step">
+                                <div class="ca-funnel-head">
+                                    <span class="ca-funnel-name">
+                                        <span class="ca-funnel-num">{{ step.position }}</span>
+                                        {{ step.name }}
+                                    </span>
+                                    <span class="ca-funnel-count">
+                                        {{ step.sessions|number_format }}
+                                        <span class="ca-muted">({{ step.ofFirst|number_format(1) }}%)</span>
+                                    </span>
+                                </div>
+                                <div class="ca-funnel-track">
+                                    <div class="ca-funnel-fill" style="width: {{ step.ofFirst|round(1) }}%"></div>
+                                </div>
+                                {% if not loop.first and step.dropOff %}
+                                    <div class="ca-funnel-drop">
+                                        {{ '{count} left here'|t('craft-analytics', { count: step.dropOff|number_format }) }}
+                                        ({{ step.dropOffRate|number_format(1) }}%)
+                                    </div>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ol>
+
+                    <table class="ca-table ca-visually-hidden-table">
+                        <caption>{{ 'Funnel steps as a table'|t('craft-analytics') }}</caption>
+                        <thead>
+                        <tr>
+                            <th>{{ 'Step'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Sessions'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Of first step'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Drop-off'|t('craft-analytics') }}</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for step in steps %}
+                            <tr>
+                                <td>{{ step.position }}. {{ step.name }}</td>
+                                <td class="ca-num">{{ step.sessions|number_format }}</td>
+                                <td class="ca-num">{{ step.ofFirst|number_format(1) }}%</td>
+                                <td class="ca-num">{{ loop.first ? '—' : step.dropOff|number_format }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    {{ ca.empty(
+                        'Nobody entered this funnel in this period'|t('craft-analytics'),
+                        'No session converted the first step. Check that its goal is matching what you expect on the Goals screen.'|t('craft-analytics')
+                    ) }}
+                {% endif %}
+            </div>
+        </div>
+
+        <p class="ca-footnote">
+            {{ 'Funnels are measured within a session, and steps must happen in order — reaching step 3 before step 2 doesn’t count as step 3. There is no cross-session funnel: the visitor hash is destroyed when the salt rotates each day, so a purchase decided over three visits is three sessions, and this reports each of them honestly rather than stitching them together.'|t('craft-analytics') }}
+        </p>
+    {% endif %}
+{% endblock %}

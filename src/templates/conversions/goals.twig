@@ -1,0 +1,82 @@
+{% extends 'craft-analytics/_layout.twig' %}
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% block report %}
+    {% if not isPro %}
+        {% include 'craft-analytics/_partials/pro-gate.twig' with {
+            title: 'Goals'|t('craft-analytics'),
+            description: 'Count what matters: a page reached, an event fired, an entry read, a session that lasted, a page read to the bottom — each with a value, so a report can say what the traffic was worth.'|t('craft-analytics')
+        } only %}
+    {% else %}
+        {% set totalConversions = goals|length ? goals|reduce((sum, g) => sum + g.conversions, 0) : 0 %}
+        {% set totalValue = goals|length ? goals|reduce((sum, g) => sum + g.value, 0) : 0 %}
+
+        {% if totalConversions or totalValue %}
+            <div class="ca-kpis">
+                {{ ca.kpi('Conversions'|t('craft-analytics'), totalConversions, {
+                    sub: '{count} goals'|t('craft-analytics', { count: goals|length })
+                }) }}
+                {% if totalValue %}
+                    {{ ca.kpi('Value'|t('craft-analytics'), totalValue, {
+                        raw: totalValue|currency,
+                        sub: 'Sum of the value on each converted goal'|t('craft-analytics')
+                    }) }}
+                {% endif %}
+            </div>
+        {% endif %}
+
+        <div class="ca-card">
+            <div class="ca-card-head">
+                <h2 class="ca-card-title">{{ 'Goals'|t('craft-analytics') }}</h2>
+                {% if canManage %}
+                    <a class="go" href="{{ url('settings/plugins/craft-analytics/goals') }}">
+                        {{ 'Manage goals'|t('craft-analytics') }}
+                    </a>
+                {% endif %}
+            </div>
+            <div class="ca-card-body ca-table-scroll">
+                {% if goals|length %}
+                    {% set maxConversions = max(goals|map(g => g.conversions)) %}
+                    <table class="ca-table">
+                        <thead>
+                        <tr>
+                            <th>{{ 'Goal'|t('craft-analytics') }}</th>
+                            <th>{{ 'Type'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Conversions'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Rate'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Value'|t('craft-analytics') }}</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for goal in goals %}
+                            <tr>
+                                {{ ca.barCell(goal.name, goal.conversions, maxConversions) }}
+                                <td class="ca-muted">{{ goal.type|t('craft-analytics') }}</td>
+                                <td class="ca-num">{{ goal.conversions|number_format }}</td>
+                                <td class="ca-num ca-muted">{{ goal.rate|number_format(2) }}%</td>
+                                <td class="ca-num ca-muted">{{ goal.value ? goal.value|currency : '—' }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    {{ ca.empty(
+                        'No goals yet'|t('craft-analytics'),
+                        'A goal names something worth counting — a page reached, an event fired, a session that lasted. Add one and it starts counting from the next visit.'|t('craft-analytics')
+                    ) }}
+                    {% if canManage %}
+                        <p style="margin-top: 12px">
+                            <a class="btn submit" href="{{ url('settings/plugins/craft-analytics/goals/new') }}">
+                                {{ 'New goal'|t('craft-analytics') }}
+                            </a>
+                        </p>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+
+        <p class="ca-footnote">
+            {{ 'A goal converts once per session, so the rate is conversions ÷ sessions — somebody who reloads the thank-you page three times converted once. Goals start counting when you add them; they are not applied retrospectively, because the pageviews they would have matched are already aggregated away.'|t('craft-analytics') }}
+        </p>
+    {% endif %}
+{% endblock %}

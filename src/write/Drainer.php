@@ -7,6 +7,7 @@ use coyshdigital\craftanalytics\ingest\Hit;
 use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\Plugin;
 use coyshdigital\craftanalytics\rollup\Aggregator;
+use coyshdigital\craftanalytics\rollup\GoalMatcher;
 use coyshdigital\craftanalytics\rollup\JourneyRecorder;
 use coyshdigital\craftanalytics\rollup\RollupSinkInterface;
 use coyshdigital\craftanalytics\session\Session;
@@ -44,6 +45,7 @@ class Drainer extends Component
     public ?SessionStore $sessions = null;
     public ?SpoolWriter $spool = null;
     public ?JourneyRecorder $journeys = null;
+    public ?GoalMatcher $goalMatcher = null;
 
     /** Settings override; defaults to the plugin's. Set in tests. */
     public ?Settings $settings = null;
@@ -118,7 +120,14 @@ class Drainer extends Component
             $aggregator->add($hit);
         }
 
-        foreach ($this->deltas($hits) as $delta) {
+        $deltas = $this->deltas($hits);
+
+        // Goals are matched here, against the hits, because this is the last
+        // moment they exist. By the time the session closes the paths and
+        // event names are gone — only the handles that matched survive.
+        $this->goalMatcher()->matchBatch($hits, $deltas);
+
+        foreach ($deltas as $delta) {
             $this->sessions()->apply($delta, $batchId);
         }
 
@@ -303,6 +312,11 @@ class Drainer extends Component
     private function journeys(): JourneyRecorder
     {
         return $this->journeys ??= new JourneyRecorder();
+    }
+
+    private function goalMatcher(): GoalMatcher
+    {
+        return $this->goalMatcher ??= new GoalMatcher();
     }
 
     private function sessions(): SessionStore

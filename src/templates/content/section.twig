@@ -1,0 +1,47 @@
+{% extends 'craft-analytics/_layout.twig' %}
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% block report %}
+    <p class="ca-footnote" style="margin-top: 0">
+        <a class="go" style="transform: scaleX(-1); display: inline-block" href="{{ url('craft-analytics/content', currentParams) }}"></a>
+        <a href="{{ url('craft-analytics/content', currentParams) }}">{{ 'All sections'|t('craft-analytics') }}</a>
+    </p>
+
+    <div class="ca-card">
+        <div class="ca-card-head">
+            <h2 class="ca-card-title">{{ section.name }}</h2>
+            <span class="ca-muted">{{ '{count} entries'|t('craft-analytics', { count: entries|length }) }}</span>
+        </div>
+        <div class="ca-card-body ca-table-scroll">
+            {% if entries|length %}
+                {% set maxViews = max(entries|map(e => e.views)) %}
+                <table class="ca-table">
+                    <thead>
+                    <tr>
+                        <th>{{ 'Entry'|t('craft-analytics') }}</th>
+                        <th class="ca-num">{{ 'Views'|t('craft-analytics') }}</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for entry in entries %}
+                        <tr>
+                            {{ ca.barCell(
+                                entry.title ?: 'Untitled'|t('craft-analytics'),
+                                entry.views,
+                                maxViews,
+                                cpUrl('entries/' ~ entry.elementId)
+                            ) }}
+                            <td class="ca-num">{{ entry.views|number_format }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                {{ ca.empty(
+                    'No traffic to this section for this period'|t('craft-analytics'),
+                    'Nothing in this section was viewed in the selected date range.'|t('craft-analytics')
+                ) }}
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

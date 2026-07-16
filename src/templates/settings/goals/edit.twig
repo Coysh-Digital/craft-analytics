@@ -1,0 +1,131 @@
+{% extends '_layouts/cp.twig' %}
+{% import '_includes/forms.twig' as forms %}
+
+{% set title = isNew ? 'New goal'|t('craft-analytics') : goal.name %}
+{% set docTitle = title ~ ' - ' ~ 'Craft Analytics'|t('craft-analytics') %}
+{% set fullPageForm = not readOnly %}
+
+{% set crumbs = [
+    { label: 'Settings'|t('app'), url: url('settings') },
+    { label: 'Plugins'|t('app'), url: url('settings/plugins') },
+    { label: 'Craft Analytics'|t('craft-analytics'), url: url('settings/plugins/craft-analytics') },
+    { label: 'Goals & funnels'|t('craft-analytics'), url: url('settings/plugins/craft-analytics/goals') }
+] %}
+
+{% block content %}
+    <input type="hidden" name="action" value="craft-analytics/goals/save">
+    <input type="hidden" name="redirect" value="{{ 'settings/plugins/craft-analytics/goals'|hash }}">
+    {% if not isNew %}<input type="hidden" name="uid" value="{{ goal.uid }}">{% endif %}
+
+    {{ forms.textField({
+        first: true,
+        label: 'Name'|t('app'),
+        instructions: 'What this goal is called in reports.'|t('craft-analytics'),
+        id: 'name',
+        name: 'name',
+        value: goal.name,
+        errors: goal.getErrors('name'),
+        autofocus: true,
+        required: true,
+        disabled: readOnly
+    }) }}
+
+    {{ forms.textField({
+        label: 'Handle'|t('app'),
+        instructions: 'Used in project config and the Twig API.'|t('craft-analytics'),
+        id: 'handle',
+        name: 'handle',
+        class: 'code',
+        value: goal.handle,
+        errors: goal.getErrors('handle'),
+        required: true,
+        disabled: readOnly
+    }) }}
+
+    {{ forms.selectField({
+        label: 'Type'|t('craft-analytics'),
+        id: 'type',
+        name: 'type',
+        options: types|map(t => { label: t.label, value: t.value }),
+        value: goal.type,
+        errors: goal.getErrors('type'),
+        disabled: readOnly
+    }) }}
+
+    {{ forms.textField({
+        label: 'Target'|t('craft-analytics'),
+        instructions: 'What has to happen for this to count.'|t('craft-analytics'),
+        id: 'target',
+        name: 'target',
+        class: 'code',
+        value: goal.target,
+        errors: goal.getErrors('target'),
+        required: true,
+        disabled: readOnly
+    }) }}
+
+    {{ forms.textField({
+        label: 'Value'|t('craft-analytics'),
+        instructions: 'What one conversion is worth. Leave at zero for goals that are worth knowing about but not worth money.'|t('craft-analytics'),
+        id: 'value',
+        name: 'value',
+        type: 'number',
+        step: 'any',
+        min: 0,
+        size: 10,
+        value: goal.value,
+        errors: goal.getErrors('value'),
+        disabled: readOnly
+    }) }}
+
+    {{ forms.selectField({
+        label: 'Site'|t('app'),
+        instructions: 'Which site this goal applies to.'|t('craft-analytics'),
+        id: 'siteId',
+        name: 'siteId',
+        options: [{ label: 'All sites'|t('craft-analytics'), value: '' }]|merge(
+            sites|map(s => { label: s.name, value: s.id })
+        ),
+        value: goal.siteId,
+        disabled: readOnly
+    }) }}
+
+    {{ forms.lightswitchField({
+        label: 'Enabled'|t('app'),
+        id: 'enabled',
+        name: 'enabled',
+        on: goal.enabled,
+        disabled: readOnly
+    }) }}
+
+    <div class="readable" style="margin-top: 24px">
+        <blockquote class="note">
+            <p>{{ 'A goal converts once per session — somebody who reloads the thank-you page three times converted once. Goals count from the moment you add them; they can’t be applied to past traffic, because the pageviews they would have matched have already been aggregated into rollups and the individual visits no longer exist.'|t('craft-analytics') }}</p>
+        </blockquote>
+    </div>
+{% endblock %}
+
+{% js %}
+// The target means something different for every type, so the hint changes
+// with it — the alternative is one vague instruction that fits none of them.
+(function() {
+    var hints = {{ types|map(t => { value: t.value, hint: t.hint })|json_encode|raw }};
+    var type = document.getElementById('type');
+    var field = document.getElementById('target-instructions')
+        || document.querySelector('#target-field .instructions');
+
+    function update() {
+        if (!field) {
+            return;
+        }
+
+        var match = hints.find(function(h) { return h.value === type.value; });
+        field.textContent = match ? match.hint : '';
+    }
+
+    if (type) {
+        type.addEventListener('change', update);
+        update();
+    }
+})();
+{% endjs %}

@@ -42,6 +42,18 @@ final class Session
         /** ISO country code resolved at capture; the address is long gone. */
         public string $countryCode = '',
         public string $region = '',
+        /**
+         * Handles of the goals this session has already converted.
+         *
+         * Bounded by the number of goals configured, not by how much the
+         * visitor browsed — the match happens as each hit arrives, so the
+         * paths themselves are never kept (Goal::matchesHit()).
+         *
+         * @var array<int,string>
+         */
+        public array $goals = [],
+        /** Deepest scroll bucket reached anywhere in the session, 0–100. */
+        public int $maxScroll = 0,
     ) {
     }
 
@@ -76,6 +88,8 @@ final class Session
             'cm' => $this->campaigns,
             'cc' => $this->countryCode,
             'rg' => $this->region,
+            'g' => $this->goals,
+            'ms' => $this->maxScroll,
         ];
     }
 
@@ -100,6 +114,11 @@ final class Session
             campaigns: is_array($data['cm'] ?? null) ? $data['cm'] : [],
             countryCode: (string)($data['cc'] ?? ''),
             region: (string)($data['rg'] ?? ''),
+            goals: array_values(array_map(
+                static fn($handle): string => (string)$handle,
+                is_array($data['g'] ?? null) ? $data['g'] : [],
+            )),
+            maxScroll: (int)($data['ms'] ?? 0),
         );
     }
 }

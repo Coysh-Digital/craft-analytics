@@ -9,6 +9,8 @@ use coyshdigital\craftanalytics\enums\DimensionType;
 use coyshdigital\craftanalytics\models\Campaign;
 use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\Plugin;
+use coyshdigital\craftanalytics\services\FunnelsService;
+use coyshdigital\craftanalytics\services\GoalsService;
 use coyshdigital\craftanalytics\session\Session;
 use Craft;
 use yii\base\Component;
@@ -29,6 +31,9 @@ class ProRollupWriter extends Component
     public ?Connection $db = null;
     public ?Settings $settings = null;
     public ?DimensionCapper $capper = null;
+    public ?GoalsService $goals = null;
+    public ?FunnelsService $funnels = null;
+    public ?GoalMatcher $matcher = null;
 
     /** Edition override; defaults to the plugin's own. Set in tests. */
     public ?bool $isPro = null;
@@ -47,8 +52,119 @@ class ProRollupWriter extends Component
             return;
         }
 
+        $conversions = $this->matcher()->conversions($session);
+
         $this->writeCampaigns($session, $date);
         $this->writeGeo($session, $date);
+        $this->writeConversions($session, $date, $conversions);
+        $this->writeCampaignConversions($session, $date, $conversions);
+        $this->writeFunnels($session, $date);
+    }
+
+    /**
+     * One row per goal per day, counted once per session.
+     *
+     * The goals were matched while the hits still existed; all that survives
+     * on the session is the set of handles, which is the whole point — a
+     * conversion costs one counter, not a stored journey.
+     *
+     * @param \coyshdigital\craftanalytics\models\Goal[] $conversions
+     */
+    private function writeConversions(Session $session, string $date, array $conversions): void
+    {
+        $ids = $this->goals()->idsByHandle();
+
+        foreach ($conversions as $goal) {
+            $goalId = $ids[$goal->handle] ?? null;
+
+            if ($goalId === null) {
+                continue;
+            }
+
+            Upsert::counters($this->db(), Table::GOALS_ROLLUP, [
+                'siteId' => $session->siteId,
+                'date' => $date,
+                'goalId' => $goalId,
+            ], [
+                'conversions' => 1,
+                'value' => $goal->value,
+            ]);
+        }
+    }
+
+    /**
+     * Credits the session's conversions to the campaigns that brought it,
+     * under the same attribution model and weights the sessions themselves
+     * use — so "this campaign drove 12.5 conversions worth £430" adds up
+     * against the campaign report rather than telling a second, different
+     * story.
+     *
+     * @param \coyshdigital\craftanalytics\models\Goal[] $conversions
+     */
+    private function writeCampaignConversions(Session $session, string $date, array $conversions): void
+    {
+        if (!$this->settings()->enableCampaigns || $session->campaigns === [] || $conversions === []) {
+            return;
+        }
+
+        $value = array_sum(array_map(static fn($goal): float => $goal->value, $conversions));
+        $count = count($conversions);
+
+        $model = AttributionModel::tryFrom($this->settings()->attributionModel) ?? AttributionModel::LastClick;
+        $weights = $model->weights(count($session->campaigns));
+
+        foreach ($session->campaigns as $index => $data) {
+            $weight = $weights[$index] ?? 0.0;
+
+            if ($weight <= 0.0) {
+                continue;
+            }
+
+            $campaign = Campaign::fromArray($data);
+
+            if ($campaign === null) {
+                continue;
+            }
+
+            Upsert::counters($this->db(), Table::CAMPAIGNS_ROLLUP, [
+                'siteId' => $session->siteId,
+                'date' => $date,
+                'sourceDimId' => $this->dimId($session->siteId, $date, DimensionType::CampaignSource, $campaign->source),
+                'mediumDimId' => $this->dimId($session->siteId, $date, DimensionType::CampaignMedium, $campaign->medium),
+                'campaignDimId' => $this->dimId($session->siteId, $date, DimensionType::CampaignName, $campaign->campaign),
+                'termDimId' => $this->dimId($session->siteId, $date, DimensionType::CampaignTerm, $campaign->term),
+                'contentDimId' => $this->dimId($session->siteId, $date, DimensionType::CampaignContent, $campaign->content),
+            ], [
+                'conversions' => $count * $weight,
+                'value' => $value * $weight,
+            ]);
+        }
+    }
+
+    /**
+     * How far this session walked each funnel.
+     *
+     * A session that reached step 3 counts at steps 1, 2 and 3 — the number a
+     * funnel chart wants is "how many got at least this far", and drop-off is
+     * then the difference between neighbours. Storing only the deepest step
+     * would make every step's number mean something subtly different.
+     */
+    private function writeFunnels(Session $session, string $date): void
+    {
+        foreach ($this->funnels()->enabledForSite($session->siteId) as $funnel) {
+            $reached = $funnel->reachedStep($session);
+
+            for ($position = 1; $position <= $reached; $position++) {
+                Upsert::counters($this->db(), Table::FUNNEL_STEP_ROLLUP, [
+                    'siteId' => $session->siteId,
+                    'date' => $date,
+                    'funnelId' => $funnel->id,
+                    'position' => $position,
+                ], [
+                    'sessions' => 1,
+                ]);
+            }
+        }
     }
 
     /**
@@ -194,6 +310,21 @@ class ProRollupWriter extends Component
     private function capper(): DimensionCapper
     {
         return $this->capper ??= new DimensionCapper(['db' => $this->db]);
+    }
+
+    private function goals(): GoalsService
+    {
+        return $this->goals ??= Plugin::getInstance()->getGoals();
+    }
+
+    private function funnels(): FunnelsService
+    {
+        return $this->funnels ??= Plugin::getInstance()->getFunnels();
+    }
+
+    private function matcher(): GoalMatcher
+    {
+        return $this->matcher ??= new GoalMatcher($this->goals(), $this->isPro());
     }
 
     private function settings(): Settings
