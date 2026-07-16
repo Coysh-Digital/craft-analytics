@@ -22,11 +22,19 @@ Or via the Craft Plugin Store in the control panel.
 1. Review **Settings → Craft Analytics**, or copy
    `vendor/coyshdigital/craft-analytics/src/config.php` to
    `config/craft-analytics.php` to manage settings per environment.
-2. With the default `spool` write driver, schedule the drain command to run
-   every minute *(available from phase 2)*:
+2. With the default `spool` write driver, schedule the drain to run every
+   minute — without it, hits accumulate in the spool and never become
+   statistics:
    ```cron
    * * * * * /usr/bin/php /path/to/craft craft-analytics/drain/run
    ```
+   Or run it continuously under a process supervisor:
+   ```bash
+   php craft craft-analytics/drain/run --watch --interval=60
+   ```
+   The drain is safe to interrupt at any point: batches are claimed by rename
+   and committed exactly once, so killing it mid-run never double-counts or
+   loses data.
 3. Verify the wiring:
    ```bash
    php craft craft-analytics/info

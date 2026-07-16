@@ -55,4 +55,9 @@ Craft::$app = new class {
     {
         return true;
     }
+
+    public function getTimeZone(): string
+    {
+        return 'UTC';
+    }
 };
