@@ -7,7 +7,7 @@ scroll depth. All Pro, all gated at the service layer rather than in the UI.
 
 Links tagged with `utm_source` (and optionally `utm_medium`, `utm_campaign`,
 `utm_term`, `utm_content`) are attributed to the **session**, not the
-pageview — a campaign brings somebody to the site once, not once per page
+pageview - a campaign brings somebody to the site once, not once per page
 they then read.
 
 Values are lower-cased and trimmed, so `Newsletter` and `newsletter` stay one
@@ -17,7 +17,7 @@ campaign rather than becoming two.
 describe how somebody arrived, not which page they arrived at, and they are
 captured separately. Leaving them on would split one page into a row per
 campaign and inflate path cardinality for data recorded elsewhere. `gclid`,
-`fbclid`, `msclkid` and friends are stripped for the same reason — but they
+`fbclid`, `msclkid` and friends are stripped for the same reason - but they
 are *not* read as campaigns, because a click id identifies an ad click, not a
 source, and inventing a campaign from one would be making data up.
 
@@ -30,7 +30,7 @@ source, and inventing a campaign from one would be making data up.
 | `linear` | Split evenly across every touch |
 
 The model only matters for a session with more than one touch, which is
-uncommon — with a single touch, every model gives an identical answer.
+uncommon - with a single touch, every model gives an identical answer.
 
 One session is always credited as exactly one session. Under `linear`, a
 session with three touches contributes 0.333 to each, so the column can be
@@ -46,17 +46,17 @@ will not fake one.**
 The Tier-1 visitor hash is re-salted every 24 hours and the old salt
 destroyed, so there is no way to know that today's visitor is the person who
 clicked an ad last week. That is the same property the banner-free claim rests
-on — you cannot have both. Attribution is therefore within a session.
+on - you cannot have both. Attribution is therefore within a session.
 
 Consented (Tier-2) visitors keep a durable identifier and *can* be followed
 across sessions; if multi-touch attribution over weeks matters to you, that is
-what it costs. See [privacy](privacy.md).
+what it costs. See [privacy](../privacy/README.md).
 
 ## Locations
 
 Country and region, resolved from a database **on your own server**. No lookup
 service is called, nothing leaves the machine, and the address is resolved and
-discarded inside a single call frame — only the country code and region name
+discarded inside a single call frame - only the country code and region name
 are stored (C5, C7).
 
 ```bash
@@ -72,7 +72,7 @@ is a decision an operator makes.
 | **DB-IP Lite** (recommended) | CC BY 4.0 | Free and redistributable. Attribution to DB-IP is required, and the CP shows it for you. |
 | MaxMind GeoLite2 | MaxMind's own | Free with an account. We can read the file; we can't ship it for you. |
 
-Both are monthly releases — re-run the install command to update.
+Both are monthly releases - re-run the install command to update.
 
 ## Events
 
@@ -89,7 +89,7 @@ The client can say anything; an event worth 10²⁰ is not a sale.
 Tracked automatically when enabled. Clicks are caught in the capture phase, so
 they are recorded even when the page's own handlers stop propagation or
 navigate away. A click is genuinely a separate event from the pageview, so it
-sends its own beacon — there is no way to report a click on the way out of the
+sends its own beacon - there is no way to report a click on the way out of the
 page it left.
 
 Downloads are same-host links to a file with one of the extensions in
@@ -97,7 +97,7 @@ Downloads are same-host links to a file with one of the extensions in
 
 ## Scroll depth
 
-Four buckets — 25/50/75/100 — because "how far down did people get" has four
+Four buckets - 25/50/75/100 - because "how far down did people get" has four
 useful answers and 101 useless ones.
 
 **It rides the pageview beacon** rather than sending its own request, via an
@@ -107,7 +107,7 @@ means they also passed 25% and 50%.
 
 ## Site search
 
-Read from the URL of your search page — **no JavaScript required**, so it
+Read from the URL of your search page - **no JavaScript required**, so it
 works for visitors who have it turned off:
 
 ```php
