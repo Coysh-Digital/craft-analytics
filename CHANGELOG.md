@@ -50,7 +50,24 @@
 - Site-search tracking read from the URL — no JavaScript required.
 - Campaigns, Locations and Events CP screens, Pro-gated at the controller with a plain Lite explanation.
 
+- Content reports: traffic by section, entry type and author, joined from Craft's own tables at query time so they always reflect how the site is structured now, and cost no extra storage.
+- Goals (Pro): page, event, entry, session-duration and scroll-depth, each with an optional monetary value. Stored in project config so they deploy; converted once per session; matched while the hits still exist, so session state stays bounded by goal count rather than by how much a visitor browsed.
+- Funnels (Pro): goals in order, with step-level drop-off. Order is enforced - reaching step 3 before step 2 does not count as step 3.
+- Formie and Commerce integrations (Pro): both are noticed rather than required, wiring by class name only when their plugin is installed. A submission is an event named `form:<handle>`; an order carries its total and nothing about the customer.
+- Emailed summary reports (Pro), sent with the site's own mailer. No third-party service, and no tracking pixel.
+- Crawler reporting: bots are kept out of the numbers by default and counted separately, so the gap between your server logs and your reports has an answer on a screen.
+- Front-end Twig API: `totals()`, `views()`, `popularPages()`, `popularEntries()` (an entry query that keeps its view order through `.all()`) and `gpcDetected`.
+- GraphQL API (Pro): `craftAnalyticsTotals` and `craftAnalyticsTopPages`, behind a schema component that is off by default.
+- Configurable aggregate retention and hourly-detail window, editable from the settings screen.
+- The settings screen now explains what each tracking mode and write driver actually does and what it costs you, rather than asserting which is recommended.
+
 ### Fixed
+- **Pageviews were counted twice behind Blitz.** Blitz's default setup serves its cache from inside PHP, which fires the same event a real render does, so the server counted cache hits while the beacon counted them too - its nonce having been baked into the cached HTML and claimed long ago. Three visitors to a cached page produced five views. Cached deliveries are now left to the beacon, exactly as they already were when a web server serves the cache and PHP never runs, so the numbers no longer depend on how the cache is wired up.
+- Craft passes project-config token matches numerically rather than by name, so reading `tokenMatches['uid']` silently yielded an empty string and collapsed every goal onto a single row.
+- `project-config/rebuild` collapsed every goal onto one empty key, by packing the outer uid-keyed map when only nested associative values need it.
+- Funnels apply before goals alphabetically, so funnel steps found no goals to point at on a fresh environment and were silently dropped. The steps are now written in a deferred pass.
+- Em dashes are gone from everything a person reads - control panel, emails and console output.
+
 - A visitor who withdrew consent between a hit being spooled and the drain running could have their already-spooled hits written back afterwards, silently resurrecting data they had asked to be erased. The drain now re-checks the consent log at write time.
 - UTM and ad click-id parameters were kept on the recorded path, fragmenting the Pages report into a row per campaign and inflating path cardinality. They are now stripped, since they describe how a visitor arrived rather than which page they arrived at.
 - The beacon sent its path and query as one string but the endpoint normalised it as if it had no query, so a beacon's dwell time could land on a different row from the pageview it belonged to.
