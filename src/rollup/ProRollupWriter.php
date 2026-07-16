@@ -322,6 +322,7 @@ class ProRollupWriter extends Component
         return $this->funnels ??= Plugin::getInstance()->getFunnels();
     }
 
+
     private function matcher(): GoalMatcher
     {
         return $this->matcher ??= new GoalMatcher($this->goals(), $this->isPro());

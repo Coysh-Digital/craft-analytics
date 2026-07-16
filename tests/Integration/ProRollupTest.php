@@ -10,6 +10,8 @@ use coyshdigital\craftanalytics\rollup\Aggregator;
 use coyshdigital\craftanalytics\rollup\DimensionCapper;
 use coyshdigital\craftanalytics\rollup\ProRollupWriter;
 use coyshdigital\craftanalytics\services\DimensionsService;
+use coyshdigital\craftanalytics\services\FunnelsService;
+use coyshdigital\craftanalytics\services\GoalsService;
 use coyshdigital\craftanalytics\session\Session;
 use coyshdigital\craftanalytics\tests\TestDb;
 use yii\db\Query;
@@ -39,6 +41,11 @@ function proWriter(object $ctx, array $overrides = []): ProRollupWriter
             'dimensions' => new DimensionsService(['db' => $db]),
         ]),
         'isPro' => true,
+        // Goals and funnels read the same test database as everything else.
+        // Both tables are empty here, so no session converts anything - the
+        // campaign attribution under test is unaffected either way.
+        'goals' => new GoalsService(['db' => $db]),
+        'funnels' => new FunnelsService(['db' => $db]),
     ], $overrides));
 }
 

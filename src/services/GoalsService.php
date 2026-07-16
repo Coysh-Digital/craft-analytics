@@ -10,6 +10,7 @@ use craft\events\ConfigEvent;
 use craft\helpers\Db;
 use craft\helpers\StringHelper;
 use yii\base\Component;
+use yii\db\Connection;
 
 /**
  * Goal definitions, stored in project config.
@@ -26,6 +27,11 @@ use yii\base\Component;
 class GoalsService extends Component
 {
     public const CONFIG_PATH = 'craftAnalytics.goals';
+
+    /**
+     * Connection override; defaults to Craft's. Set in tests.
+     */
+    public ?Connection $db = null;
 
     /** @var Goal[]|null */
     private ?array $goals = null;
@@ -45,7 +51,7 @@ class GoalsService extends Component
             ->select(['id', 'uid', 'name', 'handle', 'type', 'target', 'value', 'enabled', 'siteId', 'sortOrder'])
             ->from([Table::GOALS])
             ->orderBy(['sortOrder' => SORT_ASC, 'name' => SORT_ASC])
-            ->all();
+            ->all($this->db);
 
         return $this->goals = array_map(static function(array $row): Goal {
             $goal = new Goal();

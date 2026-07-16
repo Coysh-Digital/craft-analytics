@@ -11,6 +11,7 @@ use craft\events\ConfigEvent;
 use craft\helpers\Db;
 use craft\helpers\StringHelper;
 use yii\base\Component;
+use yii\db\Connection;
 
 /**
  * Funnel definitions, in project config for the same reasons goals are: they
@@ -23,6 +24,11 @@ use yii\base\Component;
 class FunnelsService extends Component
 {
     public const CONFIG_PATH = 'craftAnalytics.funnels';
+
+    /**
+     * Connection override; defaults to Craft's. Set in tests.
+     */
+    public ?Connection $db = null;
 
     /** @var Funnel[]|null */
     private ?array $funnels = null;
@@ -42,7 +48,7 @@ class FunnelsService extends Component
             ->select(['id', 'uid', 'name', 'handle', 'siteId', 'enabled', 'sortOrder'])
             ->from([Table::FUNNELS])
             ->orderBy(['sortOrder' => SORT_ASC, 'name' => SORT_ASC])
-            ->all();
+            ->all($this->db);
 
         $steps = $this->stepHandles();
 
@@ -269,7 +275,7 @@ class FunnelsService extends Component
             ->from(['s' => Table::FUNNEL_STEPS])
             ->innerJoin(['g' => Table::GOALS], '[[g]].[[id]] = [[s]].[[goalId]]')
             ->orderBy(['s.funnelId' => SORT_ASC, 's.position' => SORT_ASC])
-            ->all();
+            ->all($this->db);
 
         $steps = [];
 

@@ -5,6 +5,7 @@ use coyshdigital\craftanalytics\db\Table;
 use coyshdigital\craftanalytics\ingest\Hit;
 use coyshdigital\craftanalytics\migrations\Install;
 use coyshdigital\craftanalytics\models\Settings;
+use coyshdigital\craftanalytics\rollup\GoalMatcher;
 use coyshdigital\craftanalytics\rollup\JourneyRecorder;
 use coyshdigital\craftanalytics\rollup\NullRollupSink;
 use coyshdigital\craftanalytics\rollup\RollupSinkInterface;
@@ -77,6 +78,8 @@ function makeDrainer(object $ctx, ?RollupSinkInterface $sink = null): Drainer
         ]),
         // Consent is off by default, so the consented layer writes nothing.
         'journeys' => new JourneyRecorder(['settings' => $ctx->settings, 'isPro' => false]),
+        // Goals are Pro; on Lite the matcher does nothing at all.
+        'goalMatcher' => new GoalMatcher(isPro: false),
     ]);
 }
 
