@@ -1,6 +1,7 @@
 <?php
 
 use coyshdigital\craftanalytics\ingest\Hit;
+use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\rollup\Aggregator;
 use coyshdigital\craftanalytics\session\SessionDelta;
 
@@ -35,7 +36,7 @@ test('the common case stays compact on the wire', function() {
 });
 
 test('a dwell-only beacon adds time without adding a view', function() {
-    $aggregator = new Aggregator(new DateTimeZone('UTC'));
+    $aggregator = new Aggregator(new DateTimeZone('UTC'), new Settings());
 
     // What hybrid mode produces: the server counted the view, and the beacon
     // arrives afterwards carrying only how long they stayed.
@@ -49,7 +50,7 @@ test('a dwell-only beacon adds time without adding a view', function() {
 });
 
 test('a beacon for a cached page counts the view', function() {
-    $aggregator = new Aggregator(new DateTimeZone('UTC'));
+    $aggregator = new Aggregator(new DateTimeZone('UTC'), new Settings());
 
     // No server-side hit at all: PHP never ran, so the beacon is the only
     // record of this pageview.
@@ -62,7 +63,7 @@ test('a beacon for a cached page counts the view', function() {
 });
 
 test('dwell accumulates across a bucket while views count separately', function() {
-    $aggregator = new Aggregator(new DateTimeZone('UTC'));
+    $aggregator = new Aggregator(new DateTimeZone('UTC'), new Settings());
 
     $aggregator->add(beaconHit(true));
     $aggregator->add(beaconHit(false, 1000));

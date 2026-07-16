@@ -349,6 +349,233 @@ class StatsService extends Component
         ], $rows);
     }
 
+    // ------------------------------------------------- Pro analytics (§7)
+
+    /**
+     * Campaign performance.
+     *
+     * Session credit is fractional when the linear model is in use, so these
+     * are rounded for display — a campaign credited with 3.5 sessions is
+     * correct arithmetic and a strange thing to print.
+     *
+     * @return array<int,array{source: string, medium: string, campaign: string, sessions: float, bounces: float, bounceRate: float}>
+     */
+    public function campaigns(int $siteId, DateRange $range, int $limit = 200): array
+    {
+        $rows = (new Query())
+            ->select([
+                'source' => '[[s]].[[value]]',
+                'medium' => '[[m]].[[value]]',
+                'campaign' => '[[c]].[[value]]',
+                'sessions' => 'SUM([[r]].[[sessions]])',
+                'bounces' => 'SUM([[r]].[[bounces]])',
+            ])
+            ->from(['r' => Table::CAMPAIGNS_ROLLUP])
+            ->innerJoin(['s' => Table::DIMENSIONS], '[[s]].[[id]] = [[r]].[[sourceDimId]]')
+            ->leftJoin(['m' => Table::DIMENSIONS], '[[m]].[[id]] = [[r]].[[mediumDimId]]')
+            ->leftJoin(['c' => Table::DIMENSIONS], '[[c]].[[id]] = [[r]].[[campaignDimId]]')
+            ->where(['[[r]].[[siteId]]' => $siteId])
+            ->andWhere(['between', '[[r]].[[date]]', $range->from, $range->to])
+            ->groupBy(['[[s]].[[value]]', '[[m]].[[value]]', '[[c]].[[value]]'])
+            ->orderBy(['sessions' => SORT_DESC])
+            ->limit($limit)
+            ->all($this->db());
+
+        return array_map(static function(array $row): array {
+            $sessions = (float)$row['sessions'];
+            $bounces = (float)$row['bounces'];
+
+            return [
+                'source' => (string)$row['source'],
+                'medium' => (string)($row['medium'] ?? ''),
+                'campaign' => (string)($row['campaign'] ?? ''),
+                'sessions' => $sessions,
+                'bounces' => $bounces,
+                'bounceRate' => $sessions > 0 ? $bounces / $sessions * 100 : 0.0,
+            ];
+        }, $rows);
+    }
+
+    /**
+     * @return array<int,array{country: string, sessions: int}>
+     */
+    public function countries(int $siteId, DateRange $range, int $limit = 250): array
+    {
+        $rows = (new Query())
+            ->select(['countryCode', 'sessions' => 'SUM([[sessions]])'])
+            ->from(Table::GEO_ROLLUP)
+            ->where(['siteId' => $siteId])
+            ->andWhere(['between', 'date', $range->from, $range->to])
+            ->groupBy('countryCode')
+            ->orderBy(['sessions' => SORT_DESC])
+            ->limit($limit)
+            ->all($this->db());
+
+        return array_map(static fn(array $row): array => [
+            'country' => (string)$row['countryCode'],
+            'sessions' => (int)$row['sessions'],
+        ], $rows);
+    }
+
+    /**
+     * @return array<int,array{region: string, country: string, sessions: int}>
+     */
+    public function regions(int $siteId, DateRange $range, int $limit = 100): array
+    {
+        $rows = (new Query())
+            ->select([
+                'region' => '[[d]].[[value]]',
+                'country' => '[[g]].[[countryCode]]',
+                'sessions' => 'SUM([[g]].[[sessions]])',
+            ])
+            ->from(['g' => Table::GEO_ROLLUP])
+            ->innerJoin(['d' => Table::DIMENSIONS], '[[d]].[[id]] = [[g]].[[regionDimId]]')
+            ->where(['[[g]].[[siteId]]' => $siteId])
+            ->andWhere(['between', '[[g]].[[date]]', $range->from, $range->to])
+            ->groupBy(['[[d]].[[value]]', '[[g]].[[countryCode]]'])
+            ->orderBy(['sessions' => SORT_DESC])
+            ->limit($limit)
+            ->all($this->db());
+
+        return array_map(static fn(array $row): array => [
+            'region' => (string)$row['region'],
+            'country' => (string)$row['country'],
+            'sessions' => (int)$row['sessions'],
+        ], $rows);
+    }
+
+    /**
+     * @return array<int,array{name: string, count: int, value: float}>
+     */
+    public function events(int $siteId, DateRange $range, int $limit = 200): array
+    {
+        $rows = (new Query())
+            ->select([
+                'name' => '[[d]].[[value]]',
+                'count' => 'SUM([[e]].[[count]])',
+                'value' => 'SUM([[e]].[[sumValue]])',
+            ])
+            ->from(['e' => Table::EVENTS_ROLLUP])
+            ->innerJoin(['d' => Table::DIMENSIONS], '[[d]].[[id]] = [[e]].[[eventNameDimId]]')
+            ->where(['[[e]].[[siteId]]' => $siteId])
+            ->andWhere(['between', '[[e]].[[date]]', $range->from, $range->to])
+            ->groupBy('[[d]].[[value]]')
+            ->orderBy(['count' => SORT_DESC])
+            ->limit($limit)
+            ->all($this->db());
+
+        return array_map(static fn(array $row): array => [
+            'name' => (string)$row['name'],
+            'count' => (int)$row['count'],
+            'value' => (float)$row['value'],
+        ], $rows);
+    }
+
+    /**
+     * @return array<int,array{host: string, url: string, count: int}>
+     */
+    public function outbound(int $siteId, DateRange $range, int $limit = 200): array
+    {
+        $rows = (new Query())
+            ->select([
+                'host' => '[[h]].[[value]]',
+                'url' => '[[u]].[[value]]',
+                'count' => 'SUM([[o]].[[count]])',
+            ])
+            ->from(['o' => Table::OUTBOUND_ROLLUP])
+            ->innerJoin(['h' => Table::DIMENSIONS], '[[h]].[[id]] = [[o]].[[targetHostDimId]]')
+            ->leftJoin(['u' => Table::DIMENSIONS], '[[u]].[[id]] = [[o]].[[targetDimId]]')
+            ->where(['[[o]].[[siteId]]' => $siteId])
+            ->andWhere(['between', '[[o]].[[date]]', $range->from, $range->to])
+            ->groupBy(['[[h]].[[value]]', '[[u]].[[value]]'])
+            ->orderBy(['count' => SORT_DESC])
+            ->limit($limit)
+            ->all($this->db());
+
+        return array_map(static fn(array $row): array => [
+            'host' => (string)$row['host'],
+            'url' => (string)($row['url'] ?? ''),
+            'count' => (int)$row['count'],
+        ], $rows);
+    }
+
+    /**
+     * @return array<int,array{term: string, count: int, zeroResults: int}>
+     */
+    public function searches(int $siteId, DateRange $range, int $limit = 200): array
+    {
+        $rows = (new Query())
+            ->select([
+                'term' => '[[d]].[[value]]',
+                'count' => 'SUM([[s]].[[count]])',
+                'zeroResults' => 'SUM([[s]].[[zeroResults]])',
+            ])
+            ->from(['s' => Table::SEARCH_ROLLUP])
+            ->innerJoin(['d' => Table::DIMENSIONS], '[[d]].[[id]] = [[s]].[[termDimId]]')
+            ->where(['[[s]].[[siteId]]' => $siteId])
+            ->andWhere(['between', '[[s]].[[date]]', $range->from, $range->to])
+            ->groupBy('[[d]].[[value]]')
+            ->orderBy(['count' => SORT_DESC])
+            ->limit($limit)
+            ->all($this->db());
+
+        return array_map(static fn(array $row): array => [
+            'term' => (string)$row['term'],
+            'count' => (int)$row['count'],
+            'zeroResults' => (int)$row['zeroResults'],
+        ], $rows);
+    }
+
+    /**
+     * How far down each page people actually read.
+     *
+     * Reported as the share reaching each depth, which is cumulative by
+     * nature: everyone who reached 75% also reached 25%.
+     *
+     * @return array<int,array{path: string, reached25: int, reached50: int, reached75: int, reached100: int}>
+     */
+    public function scrollDepth(int $siteId, DateRange $range, int $limit = 100): array
+    {
+        $rows = (new Query())
+            ->select([
+                'path' => '[[d]].[[value]]',
+                'bucket' => '[[s]].[[bucket]]',
+                'count' => 'SUM([[s]].[[count]])',
+            ])
+            ->from(['s' => Table::SCROLL_ROLLUP])
+            ->innerJoin(['d' => Table::DIMENSIONS], '[[d]].[[id]] = [[s]].[[pathDimId]]')
+            ->where(['[[s]].[[siteId]]' => $siteId])
+            ->andWhere(['between', '[[s]].[[date]]', $range->from, $range->to])
+            ->groupBy(['[[d]].[[value]]', '[[s]].[[bucket]]'])
+            ->all($this->db());
+
+        /** @var array<string,array{path: string, reached25: int, reached50: int, reached75: int, reached100: int}> $byPath */
+        $byPath = [];
+
+        foreach ($rows as $row) {
+            $path = (string)$row['path'];
+            $byPath[$path] ??= ['path' => $path, 'reached25' => 0, 'reached50' => 0, 'reached75' => 0, 'reached100' => 0];
+
+            $key = match ((int)$row['bucket']) {
+                25 => 'reached25',
+                50 => 'reached50',
+                75 => 'reached75',
+                100 => 'reached100',
+                default => null,
+            };
+
+            if ($key !== null) {
+                $byPath[$path][$key] = (int)$row['count'];
+            }
+        }
+
+        // Deepest-read first: the interesting question is which pages hold
+        // people, not which are alphabetically first.
+        uasort($byPath, static fn(array $a, array $b) => $b['reached100'] <=> $a['reached100']);
+
+        return array_slice(array_values($byPath), 0, $limit);
+    }
+
     /**
      * Visitors active right now.
      *

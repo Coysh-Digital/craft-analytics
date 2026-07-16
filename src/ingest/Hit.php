@@ -2,8 +2,11 @@
 
 namespace coyshdigital\craftanalytics\ingest;
 
+use coyshdigital\craftanalytics\models\Campaign;
+
 /**
- * One captured pageview, in transit between capture and the drain.
+ * One captured interaction — a pageview, or (Pro) an event, an outbound
+ * click or a download — in transit between capture and the drain.
  *
  * Deliberately not an ActiveRecord and never persisted as-is: hits exist in
  * the spool for seconds, are folded into rollups by the drain, and are then
@@ -48,7 +51,38 @@ final class Hit
          * `associateUserId` is separately enabled.
          */
         public readonly ?int $userId = null,
+        /**
+         * The campaign this hit arrived with, if its URL was tagged.
+         * Attributed to the session, not the pageview.
+         */
+        public readonly ?Campaign $campaign = null,
+        /**
+         * Country and region, resolved from the address at capture and
+         * carried here in its place. The address itself never travels (C5).
+         */
+        public readonly string $countryCode = '',
+        public readonly string $region = '',
+        /** What happened: a pageview, or one of the Pro interaction kinds. */
+        public readonly string $kind = self::KIND_VIEW,
+        /** Pro: the custom event's name and optional monetary value. */
+        public readonly ?string $eventName = null,
+        public readonly ?float $eventValue = null,
+        /** Pro: the URL an outbound click or download went to. */
+        public readonly ?string $target = null,
+        /** Pro: how far down the page they read, as a 25/50/75/100 bucket. */
+        public readonly ?int $scrollBucket = null,
     ) {
+    }
+
+    public const KIND_VIEW = 'view';
+    public const KIND_EVENT = 'event';
+    public const KIND_OUTBOUND = 'outbound';
+    public const KIND_DOWNLOAD = 'download';
+
+    /** Whether this is a pageview rather than a Pro interaction. */
+    public function isPageview(): bool
+    {
+        return $this->kind === self::KIND_VIEW;
     }
 
     /**
@@ -71,6 +105,15 @@ final class Hit
             'nv' => $this->countView ? null : 1,
             'vid' => $this->visitorId,
             'uid' => $this->userId,
+            'cm' => $this->campaign?->toArray(),
+            'cc' => $this->countryCode,
+            'rg' => $this->region,
+            // Only serialised when it isn't an ordinary pageview.
+            'kd' => $this->kind === self::KIND_VIEW ? null : $this->kind,
+            'en' => $this->eventName,
+            'ev' => $this->eventValue,
+            'tg' => $this->target,
+            'sb' => $this->scrollBucket,
         ], static fn($value) => $value !== null && $value !== '' && $value !== 0);
     }
 
@@ -93,6 +136,14 @@ final class Hit
             countView: !isset($data['nv']),
             visitorId: isset($data['vid']) ? (string)$data['vid'] : null,
             userId: isset($data['uid']) ? (int)$data['uid'] : null,
+            campaign: is_array($data['cm'] ?? null) ? Campaign::fromArray($data['cm']) : null,
+            countryCode: (string)($data['cc'] ?? ''),
+            region: (string)($data['rg'] ?? ''),
+            kind: (string)($data['kd'] ?? self::KIND_VIEW),
+            eventName: isset($data['en']) ? (string)$data['en'] : null,
+            eventValue: isset($data['ev']) ? (float)$data['ev'] : null,
+            target: isset($data['tg']) ? (string)$data['tg'] : null,
+            scrollBucket: isset($data['sb']) ? (int)$data['sb'] : null,
         );
     }
 

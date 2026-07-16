@@ -44,5 +44,13 @@
 - `craft-analytics/privacy/export|erase` DSAR commands, and `craft-analytics/privacy/document` generating ROPA, privacy-notice appendix and DPIA summary from the live configuration.
 - GC enforces journey and consent-log retention.
 
+- Campaign/UTM tracking with last-click (default), first-click and linear attribution; one session is always credited as exactly one session.
+- Country and region from a local DB-IP Lite or GeoLite2 database, installed via `craft-analytics/geo/install`; no lookup service is ever called and no address is stored.
+- Custom events with monetary values, outbound link clicks, file downloads, and scroll depth, via a separate `pro.js` so `tracker.js` stays small.
+- Site-search tracking read from the URL — no JavaScript required.
+- Campaigns, Locations and Events CP screens, Pro-gated at the controller with a plain Lite explanation.
+
 ### Fixed
 - A visitor who withdrew consent between a hit being spooled and the drain running could have their already-spooled hits written back afterwards, silently resurrecting data they had asked to be erased. The drain now re-checks the consent log at write time.
+- UTM and ad click-id parameters were kept on the recorded path, fragmenting the Pages report into a row per campaign and inflating path cardinality. They are now stripped, since they describe how a visitor arrived rather than which page they arrived at.
+- The beacon sent its path and query as one string but the endpoint normalised it as if it had no query, so a beacon's dwell time could land on a different row from the pageview it belonged to.

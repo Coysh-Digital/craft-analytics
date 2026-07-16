@@ -72,6 +72,9 @@ class SessionStore extends Component
                 lastPath: $delta->lastPath,
                 referrer: $delta->referrer,
                 userAgent: $delta->userAgent,
+                campaigns: $delta->campaigns,
+                countryCode: $delta->countryCode,
+                region: $delta->region,
             );
         } else {
             $session->pageviews += $delta->views;
@@ -80,6 +83,20 @@ class SessionStore extends Component
             if ($delta->lastSeen >= $session->lastSeenAt) {
                 $session->lastSeenAt = $delta->lastSeen;
                 $session->lastPath = $delta->lastPath;
+            }
+
+            // Later touches extend the session's campaign list rather than
+            // replacing it: the attribution model decides who gets credit,
+            // not the order they happened to be written.
+            foreach ($delta->campaigns as $campaign) {
+                if (!in_array($campaign, $session->campaigns, true)) {
+                    $session->campaigns[] = $campaign;
+                }
+            }
+
+            if ($session->countryCode === '' && $delta->countryCode !== '') {
+                $session->countryCode = $delta->countryCode;
+                $session->region = $delta->region;
             }
         }
 

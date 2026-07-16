@@ -1,0 +1,106 @@
+{% extends 'craft-analytics/_layout.twig' %}
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% block report %}
+    {% if not isPro %}
+        {% include 'craft-analytics/_partials/pro-gate.twig' with {
+            title: 'Locations'|t('craft-analytics'),
+            description: 'See which countries and regions your visitors are in, resolved from a database on your own server. No lookup service is ever called and no address is stored.'|t('craft-analytics'),
+        } only %}
+    {% elseif not database.installed %}
+        <div class="ca-card">
+            <div class="ca-card-body">
+                <div class="ca-posture is-consent">
+                    <div class="ca-posture-icon" aria-hidden="true">!</div>
+                    <div>
+                        <div class="ca-posture-title">{{ 'No geolocation database installed'|t('craft-analytics') }}</div>
+                        <p class="ca-posture-body">
+                            {{ 'Locations are resolved from a database on this server — nothing is ever sent to a lookup service. Install one, and nothing downloads on its own:'|t('craft-analytics') }}
+                        </p>
+                        <pre class="ca-code" style="margin-top: 10px">php craft craft-analytics/geo/install --url=&lt;db-ip lite url&gt;
+php craft craft-analytics/geo/status</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% elseif not enabled %}
+        {{ ca.empty(
+            'Location tracking is off'|t('craft-analytics'),
+            'The database is installed. Turn on enableGeo to start resolving countries.'|t('craft-analytics')
+        ) }}
+    {% else %}
+        <div class="ca-card">
+            <div class="ca-card-head">
+                <h2 class="ca-card-title">{{ 'Countries'|t('craft-analytics') }}</h2>
+            </div>
+            <div class="ca-card-body ca-table-scroll">
+                {% if countries|length %}
+                    {% set maxSessions = max(countries|map(c => c.sessions)) %}
+                    {% set total = countries|map(c => c.sessions)|reduce((a, b) => a + b, 0) %}
+                    <table class="ca-table">
+                        <thead>
+                        <tr>
+                            <th>{{ 'Country'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Sessions'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Share'|t('craft-analytics') }}</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for row in countries %}
+                            <tr>
+                                {{ ca.barCell(row.country, row.sessions, maxSessions, null) }}
+                                <td class="ca-num">{{ row.sessions|number_format }}</td>
+                                <td class="ca-num ca-muted">{{ total ? (row.sessions / total * 100)|number_format(1) ~ '%' : '—' }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    {{ ca.empty(
+                        'No locations for this period'|t('craft-analytics'),
+                        'Sessions appear once they have closed and the drain has run.'|t('craft-analytics')
+                    ) }}
+                {% endif %}
+            </div>
+        </div>
+
+        {% if regions|length %}
+            <div class="ca-card">
+                <div class="ca-card-head">
+                    <h2 class="ca-card-title">{{ 'Regions'|t('craft-analytics') }}</h2>
+                </div>
+                <div class="ca-card-body ca-table-scroll">
+                    {% set maxRegion = max(regions|map(r => r.sessions)) %}
+                    <table class="ca-table">
+                        <thead>
+                        <tr>
+                            <th>{{ 'Region'|t('craft-analytics') }}</th>
+                            <th>{{ 'Country'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Sessions'|t('craft-analytics') }}</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for row in regions %}
+                            <tr>
+                                {{ ca.barCell(row.region, row.sessions, maxRegion, null) }}
+                                <td class="ca-muted">{{ row.country }}</td>
+                                <td class="ca-num">{{ row.sessions|number_format }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% endif %}
+    {% endif %}
+
+    {% if isPro and database.installed %}
+        <p class="ca-footnote">
+            {{ 'Resolved on this server from {type}, built {built}. The address is looked up in memory and discarded — it is never stored, logged, or sent anywhere.'|t('craft-analytics', {
+                type: database.type ?? 'a local database',
+                built: database.buildDate ?? 'unknown',
+            }) }}
+            {% if attribution %}<br>{{ attribution }}{% endif %}
+        </p>
+    {% endif %}
+{% endblock %}

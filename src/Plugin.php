@@ -16,6 +16,7 @@ use coyshdigital\craftanalytics\services\ConsentService;
 use coyshdigital\craftanalytics\services\DeviceParser;
 use coyshdigital\craftanalytics\services\DimensionsService;
 use coyshdigital\craftanalytics\services\GcService;
+use coyshdigital\craftanalytics\services\GeoService;
 use coyshdigital\craftanalytics\services\IdentityService;
 use coyshdigital\craftanalytics\services\PrivacyDocumentService;
 use coyshdigital\craftanalytics\services\PrivacyService;
@@ -78,7 +79,7 @@ class Plugin extends BasePlugin
     public const PERMISSION_EXPORT = 'craftAnalytics:export';
     public const PERMISSION_MANAGE_SETTINGS = 'craftAnalytics:manageSettings';
 
-    public string $schemaVersion = '1.2.0';
+    public string $schemaVersion = '1.3.0';
     public bool $hasCpSettings = true;
     public bool $hasCpSection = true;
 
@@ -115,6 +116,7 @@ class Plugin extends BasePlugin
                 'deviceParser' => DeviceParser::class,
                 'rollupSink' => DbRollupSink::class,
                 'stats' => StatsService::class,
+                'geo' => GeoService::class,
                 'consent' => ConsentService::class,
                 'privacy' => PrivacyService::class,
                 'privacyDocuments' => PrivacyDocumentService::class,
@@ -258,6 +260,12 @@ class Plugin extends BasePlugin
         return $this->get('stats');
     }
 
+    public function getGeo(): GeoService
+    {
+        /** @var GeoService */
+        return $this->get('geo');
+    }
+
     public function getConsent(): ConsentService
     {
         /** @var ConsentService */
@@ -299,6 +307,9 @@ class Plugin extends BasePlugin
             'pages' => ['label' => Craft::t('craft-analytics', 'Pages'), 'url' => 'craft-analytics/pages'],
             'sources' => ['label' => Craft::t('craft-analytics', 'Sources'), 'url' => 'craft-analytics/sources'],
             'devices' => ['label' => Craft::t('craft-analytics', 'Devices'), 'url' => 'craft-analytics/devices'],
+            'campaigns' => ['label' => Craft::t('craft-analytics', 'Campaigns'), 'url' => 'craft-analytics/campaigns'],
+            'geo' => ['label' => Craft::t('craft-analytics', 'Locations'), 'url' => 'craft-analytics/geo'],
+            'events' => ['label' => Craft::t('craft-analytics', 'Events'), 'url' => 'craft-analytics/events'],
             'privacy' => ['label' => Craft::t('craft-analytics', 'Privacy'), 'url' => 'craft-analytics/privacy'],
         ];
 
@@ -551,6 +562,9 @@ class Plugin extends BasePlugin
                 $event->rules['craft-analytics/sources'] = 'craft-analytics/reports/sources';
                 $event->rules['craft-analytics/devices'] = 'craft-analytics/reports/devices';
                 $event->rules['craft-analytics/privacy'] = 'craft-analytics/privacy/index';
+                $event->rules['craft-analytics/campaigns'] = 'craft-analytics/pro-reports/campaigns';
+                $event->rules['craft-analytics/geo'] = 'craft-analytics/pro-reports/geo';
+                $event->rules['craft-analytics/events'] = 'craft-analytics/pro-reports/events';
                 foreach (['pages', 'sources', 'devices', 'trend'] as $kind) {
                     $event->rules["craft-analytics/export/$kind"] = "craft-analytics/export/$kind";
                 }

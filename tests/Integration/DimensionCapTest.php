@@ -8,6 +8,7 @@ use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\rollup\Aggregator;
 use coyshdigital\craftanalytics\rollup\DbRollupSink;
 use coyshdigital\craftanalytics\rollup\DimensionCapper;
+use coyshdigital\craftanalytics\rollup\ProRollupWriter;
 use coyshdigital\craftanalytics\services\ChannelClassifier;
 use coyshdigital\craftanalytics\services\DeviceParser;
 use coyshdigital\craftanalytics\services\DimensionsService;
@@ -38,13 +39,19 @@ beforeEach(function() {
         'capper' => $this->capper,
         'channels' => new ChannelClassifier(),
         'devices' => new DeviceParser(),
+        // Lite by default: the Pro rollups stay untouched in these tests.
+        'pro' => new ProRollupWriter([
+            'db' => $db,
+            'settings' => new Settings(),
+            'isPro' => false,
+        ]),
     ]);
 });
 
 function drainPaths(object $ctx, array $paths, ?int $ts = null): void
 {
     $ts ??= mktime(10, 0, 0, 7, 16, 2026);
-    $aggregator = new Aggregator(new DateTimeZone('UTC'));
+    $aggregator = new Aggregator(new DateTimeZone('UTC'), new Settings());
 
     foreach ($paths as $i => $path) {
         $aggregator->add(new coyshdigital\craftanalytics\ingest\Hit(
@@ -133,7 +140,7 @@ test('the cap is per day: a new day starts fresh', function() {
 });
 
 test('the cap is per site', function() {
-    $aggregator = new Aggregator(new DateTimeZone('UTC'));
+    $aggregator = new Aggregator(new DateTimeZone('UTC'), new Settings());
     foreach (range(1, 20) as $i) {
         $aggregator->add(new coyshdigital\craftanalytics\ingest\Hit(
             siteId: 1, path: "/p$i", visitorHash: str_pad((string)$i, 16, '0', STR_PAD_LEFT),

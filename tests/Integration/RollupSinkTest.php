@@ -9,6 +9,7 @@ use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\rollup\Aggregator;
 use coyshdigital\craftanalytics\rollup\DbRollupSink;
 use coyshdigital\craftanalytics\rollup\DimensionCapper;
+use coyshdigital\craftanalytics\rollup\ProRollupWriter;
 use coyshdigital\craftanalytics\services\ChannelClassifier;
 use coyshdigital\craftanalytics\services\DeviceParser;
 use coyshdigital\craftanalytics\services\DimensionsService;
@@ -39,6 +40,12 @@ beforeEach(function() {
         ]),
         'channels' => new ChannelClassifier(),
         'devices' => new DeviceParser(),
+        // Lite by default: the Pro rollups stay untouched in these tests.
+        'pro' => new ProRollupWriter([
+            'db' => $db,
+            'settings' => new Settings(),
+            'isPro' => false,
+        ]),
     ]);
 });
 
@@ -58,7 +65,7 @@ function sinkHit(string $path = '/pricing', string $visitor = 'aaaaaaaaaaaaaaaa'
 /** @param coyshdigital\craftanalytics\ingest\Hit[] $hits */
 function flushHits(object $ctx, array $hits, array $sessions = []): void
 {
-    $aggregator = new Aggregator(new DateTimeZone('UTC'));
+    $aggregator = new Aggregator(new DateTimeZone('UTC'), new Settings());
     foreach ($hits as $hit) {
         $aggregator->add($hit);
     }

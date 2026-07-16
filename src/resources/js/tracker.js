@@ -36,6 +36,22 @@
     var nonce = script.getAttribute('data-nonce') || '';
     var started = clock();
     var sent = false;
+    var extras = [];
+
+    var api = window.craftAnalytics = window.craftAnalytics || {};
+
+    /**
+     * Lets the Pro tracker add fields to this pageview's beacon — scroll
+     * depth, say — instead of sending a second request for them. One request
+     * per pageview is the budget, and it stays the budget.
+     *
+     * @param {function(): Object} fn returns extra params at send time
+     */
+    api.extend = function(fn) {
+        if (typeof fn === 'function') {
+            extras.push(fn);
+        }
+    };
 
     function clock() {
         return window.performance && performance.now ? performance.now() : Date.now();
@@ -54,6 +70,20 @@
 
         if (nonce) {
             body.set('n', nonce);
+        }
+
+        for (var i = 0; i < extras.length; i++) {
+            try {
+                var fields = extras[i]() || {};
+
+                for (var key in fields) {
+                    if (Object.prototype.hasOwnProperty.call(fields, key)) {
+                        body.set(key, String(fields[key]));
+                    }
+                }
+            } catch (e) {
+                // An extension that throws must not cost us the pageview.
+            }
         }
 
         navigator.sendBeacon(endpoint, body);

@@ -87,15 +87,26 @@ class BeaconController extends Controller
             return $this->noContent();
         }
 
-        // If this nonce is ours, PHP already counted this pageview and the
-        // beacon is only here to report how long they stayed. If it isn't,
-        // the page came from a cache (or bfcache) and this beacon is the only
-        // record of the view.
-        $countView = !$plugin->getNonces()->claim((string)$request->getBodyParam('n', ''));
+        $kind = self::sanitizeKind((string)$request->getBodyParam('k', Hit::KIND_VIEW));
+
+        // Pro interactions are gated here as well as in the writer: a Lite
+        // site's endpoint simply does not accept them.
+        if ($kind !== Hit::KIND_VIEW && !$plugin->is(Plugin::EDITION_PRO)) {
+            return $this->noContent();
+        }
+
+        // A pageview's nonce decides whether the server already counted it.
+        // An event is not a pageview and never claims one.
+        $countView = $kind === Hit::KIND_VIEW
+            && !$plugin->getNonces()->claim((string)$request->getBodyParam('n', ''));
 
         $plugin->getWriter()->write(new Hit(
             siteId: $site->id,
-            path: $capture->normalizePath($path, ''),
+            // The beacon sends one string of path-and-query; split it so the
+            // same normalisation the server-side path gets is applied here.
+            // Otherwise a beacon's dwell time lands on a *different* row from
+            // the pageview it belongs to.
+            path: $capture->normalizePath(...self::splitPath($path)),
             visitorHash: $visitorHash,
             sessionKey: $plugin->getIdentity()->sessionKey($visitorHash, $site->id),
             timestamp: time(),
@@ -104,6 +115,11 @@ class BeaconController extends Controller
             acceptLanguage: (string)$request->getHeaders()->get('accept-language', ''),
             dwellMs: self::sanitizeDwell($request->getBodyParam('d')),
             countView: $countView,
+            kind: $kind,
+            eventName: self::sanitizeEventName($request->getBodyParam('en')),
+            eventValue: self::sanitizeEventValue($request->getBodyParam('ev')),
+            target: self::sanitizeTarget($request->getBodyParam('t')),
+            scrollBucket: self::sanitizeScroll($request->getBodyParam('s')),
         ));
 
         return $this->noContent();
@@ -150,6 +166,85 @@ class BeaconController extends Controller
         }
 
         return $path;
+    }
+
+    /**
+     * Only the kinds we know about; anything else is an ordinary pageview.
+     */
+    private static function sanitizeKind(string $kind): string
+    {
+        return in_array($kind, [Hit::KIND_EVENT, Hit::KIND_OUTBOUND, Hit::KIND_DOWNLOAD], true)
+            ? $kind
+            : Hit::KIND_VIEW;
+    }
+
+    private static function sanitizeEventName(mixed $value): ?string
+    {
+        if (!is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        // Control characters stripped: an event name ends up in a dimension
+        // row and on a screen.
+        $name = preg_replace('/[\x00-\x1F\x7F]/u', '', trim($value)) ?? '';
+
+        return $name === '' ? null : mb_substr($name, 0, 120);
+    }
+
+    /**
+     * A monetary value. Clamped rather than trusted: the client can say
+     * anything, and an event worth 10^20 is not a sale.
+     */
+    private static function sanitizeEventValue(mixed $value): ?float
+    {
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        $number = (float)$value;
+
+        if (!is_finite($number)) {
+            return null;
+        }
+
+        return max(-1000000000, min(1000000000, round($number, 2)));
+    }
+
+    private static function sanitizeTarget(mixed $value): ?string
+    {
+        if (!is_string($value) || $value === '') {
+            return null;
+        }
+
+        $url = parse_url($value);
+
+        // Must be a real http(s) URL — not a javascript: or data: payload.
+        if (!is_array($url) || !in_array($url['scheme'] ?? '', ['http', 'https'], true)) {
+            return null;
+        }
+
+        return mb_substr($value, 0, 500);
+    }
+
+    /** The four buckets, or nothing. */
+    private static function sanitizeScroll(mixed $value): ?int
+    {
+        $bucket = is_numeric($value) ? (int)$value : 0;
+
+        return in_array($bucket, [25, 50, 75, 100], true) ? $bucket : null;
+    }
+
+    /**
+     * Splits "/page?a=1" into ["/page", "a=1"], matching what the server-side
+     * request hands to normalizePath().
+     *
+     * @return array{0: string, 1: string}
+     */
+    private static function splitPath(string $path): array
+    {
+        $parts = explode('?', $path, 2);
+
+        return [$parts[0], $parts[1] ?? ''];
     }
 
     private static function sanitizeDwell(mixed $value): int

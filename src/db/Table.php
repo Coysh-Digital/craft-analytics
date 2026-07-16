@@ -24,4 +24,12 @@ final class Table
     /** Pro, consented visitors only. */
     public const CONSENT_LOG = '{{%craftanalytics_consentlog}}';
     public const JOURNEYS = '{{%craftanalytics_journeys}}';
+
+    /** Pro analytics. */
+    public const CAMPAIGNS_ROLLUP = '{{%craftanalytics_campaignsrollup}}';
+    public const GEO_ROLLUP = '{{%craftanalytics_georollup}}';
+    public const EVENTS_ROLLUP = '{{%craftanalytics_eventsrollup}}';
+    public const SCROLL_ROLLUP = '{{%craftanalytics_scrollrollup}}';
+    public const SEARCH_ROLLUP = '{{%craftanalytics_searchrollup}}';
+    public const OUTBOUND_ROLLUP = '{{%craftanalytics_outboundrollup}}';
 }

@@ -8,13 +8,14 @@ project's IP rules — no GPL/AGPL/LGPL/EUPL/SSPL code may enter this codebase.
 |---|---|---|
 | [donatj/phpuseragentparser](https://github.com/donatj/PhpUserAgent) | MIT | User-agent parsing (browser, OS, device type) for the devices rollup |
 | [jaybizzle/crawler-detect](https://github.com/JayBizzle/Crawler-Detect) | MIT | Bot/crawler user-agent filtering |
+| [maxmind-db/reader](https://github.com/maxmind/MaxMind-DB-Reader-php) | Apache-2.0 | Reading the local geolocation database (Pro) |
 
-Planned (Pro, later phases — record before first use):
+Data, not code — installed by the operator, never shipped by us:
 
-| Package / material | Licence | Used for |
+| Material | Licence | Used for |
 |---|---|---|
-| maxmind-db/reader (pure-PHP MMDB reader) | Apache-2.0 | Reading local GeoIP databases |
-| DB-IP Lite country/city database | CC BY 4.0 (attribution required, shown in CP + docs) | Local geo resolution; IP discarded in memory |
+| DB-IP Lite country/city database | CC BY 4.0 — **attribution required**, shown in the CP and the generated privacy documents whenever the database is in use | Local geo resolution; the address is resolved in memory and discarded |
+| MaxMind GeoLite2 (optional alternative) | MaxMind's own EULA — requires an account and is not redistributable, so we read it but never ship it | Same |
 
 Dev-only (never shipped to a production site):
 

@@ -27,7 +27,8 @@
         "php": "^8.2",
         "craftcms/cms": "^5.0",
         "donatj/phpuseragentparser": "^1.8",
-        "jaybizzle/crawler-detect": "^1.2"
+        "jaybizzle/crawler-detect": "^1.2",
+        "maxmind-db/reader": "^1.11"
     },
     "require-dev": {
         "craftcms/ecs": "dev-main",

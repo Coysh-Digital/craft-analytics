@@ -33,8 +33,9 @@ class DbRollupSink extends Component implements RollupSinkInterface
     public ?DimensionCapper $capper = null;
     public ?ChannelClassifier $channels = null;
     public ?DeviceParser $devices = null;
+    public ?ProRollupWriter $pro = null;
 
-    public function flush(array $buckets, array $closedSessions): void
+    public function flush(array $buckets, array $closedSessions, ?InteractionBuckets $interactions = null): void
     {
         foreach ($buckets as $bucket) {
             $this->writePageBucket($bucket);
@@ -42,6 +43,10 @@ class DbRollupSink extends Component implements RollupSinkInterface
 
         foreach ($closedSessions as $session) {
             $this->writeSession($session);
+        }
+
+        if ($interactions !== null && !$interactions->isEmpty()) {
+            $this->pro()->writeInteractions($interactions);
         }
     }
 
@@ -111,7 +116,17 @@ class DbRollupSink extends Component implements RollupSinkInterface
         $this->writeSource($session, $date, $hour, $isBounce);
         $this->writeDevice($session, $date);
         $this->writeEntryAndExit($session, $date, $hour, $isBounce);
+
+        // Campaigns and geo are session-scoped and Pro-gated; on Lite this
+        // returns immediately.
+        $this->pro()->writeSession($session, $date);
     }
+
+    private function pro(): ProRollupWriter
+    {
+        return $this->pro ??= new ProRollupWriter(['db' => $this->db, 'capper' => $this->capper]);
+    }
+
 
     private function writeSource(Session $session, string $date, int $hour, bool $isBounce): void
     {

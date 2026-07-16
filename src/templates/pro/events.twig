@@ -1,0 +1,152 @@
+{% extends 'craft-analytics/_layout.twig' %}
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% block report %}
+    {% if not isPro %}
+        {% include 'craft-analytics/_partials/pro-gate.twig' with {
+            title: 'Events'|t('craft-analytics'),
+            description: 'Record custom events with monetary values, outbound link clicks, file downloads, site-search terms and how far down each page people read.'|t('craft-analytics'),
+        } only %}
+    {% elseif not enabled %}
+        {{ ca.empty(
+            'Event tracking is off'|t('craft-analytics'),
+            'Turn on enableEvents to record custom events, outbound clicks, downloads and scroll depth.'|t('craft-analytics')
+        ) }}
+    {% else %}
+        <div class="ca-card">
+            <div class="ca-card-head">
+                <h2 class="ca-card-title">{{ 'Events'|t('craft-analytics') }}</h2>
+            </div>
+            <div class="ca-card-body ca-table-scroll">
+                {% if events|length %}
+                    {% set maxCount = max(events|map(e => e.count)) %}
+                    <table class="ca-table">
+                        <thead>
+                        <tr>
+                            <th>{{ 'Event'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Count'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Total value'|t('craft-analytics') }}</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for row in events %}
+                            <tr>
+                                {{ ca.barCell(row.name, row.count, maxCount, null) }}
+                                <td class="ca-num">{{ row.count|number_format }}</td>
+                                <td class="ca-num ca-muted">{{ row.value ? row.value|number_format(2) : '—' }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    {{ ca.empty(
+                        'No events for this period'|t('craft-analytics'),
+                        'Record one from your own code with craftAnalytics.event(\'name\', { value: 9.99 }).'|t('craft-analytics')
+                    ) }}
+                {% endif %}
+            </div>
+        </div>
+
+        {% if outbound|length %}
+            <div class="ca-card">
+                <div class="ca-card-head">
+                    <h2 class="ca-card-title">{{ 'Outbound links and downloads'|t('craft-analytics') }}</h2>
+                </div>
+                <div class="ca-card-body ca-table-scroll">
+                    {% set maxOut = max(outbound|map(o => o.count)) %}
+                    <table class="ca-table">
+                        <thead>
+                        <tr>
+                            <th>{{ 'Destination'|t('craft-analytics') }}</th>
+                            <th>{{ 'Host'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Clicks'|t('craft-analytics') }}</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for row in outbound %}
+                            <tr>
+                                {{ ca.barCell(row.url ?: row.host, row.count, maxOut, null) }}
+                                <td class="ca-muted">{{ row.host }}</td>
+                                <td class="ca-num">{{ row.count|number_format }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% endif %}
+
+        {% if searchEnabled %}
+            <div class="ca-card">
+                <div class="ca-card-head">
+                    <h2 class="ca-card-title">{{ 'Site search'|t('craft-analytics') }}</h2>
+                </div>
+                <div class="ca-card-body ca-table-scroll">
+                    {% if searches|length %}
+                        {% set maxSearch = max(searches|map(s => s.count)) %}
+                        <table class="ca-table">
+                            <thead>
+                            <tr>
+                                <th>{{ 'Term'|t('craft-analytics') }}</th>
+                                <th class="ca-num">{{ 'Searches'|t('craft-analytics') }}</th>
+                                <th class="ca-num">{{ 'No results'|t('craft-analytics') }}</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {% for row in searches %}
+                                <tr>
+                                    {{ ca.barCell(row.term, row.count, maxSearch, null) }}
+                                    <td class="ca-num">{{ row.count|number_format }}</td>
+                                    <td class="ca-num ca-muted">{{ row.zeroResults ?: '—' }}</td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        {{ ca.empty(
+                            'No searches for this period'|t('craft-analytics'),
+                            'Searches are read from the URL of your search page — no JavaScript needed.'|t('craft-analytics')
+                        ) }}
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+
+        {% if scroll|length %}
+            <div class="ca-card">
+                <div class="ca-card-head">
+                    <h2 class="ca-card-title">{{ 'How far people read'|t('craft-analytics') }}</h2>
+                </div>
+                <div class="ca-card-body ca-table-scroll">
+                    <table class="ca-table">
+                        <thead>
+                        <tr>
+                            <th>{{ 'Page'|t('craft-analytics') }}</th>
+                            <th class="ca-num">25%</th>
+                            <th class="ca-num">50%</th>
+                            <th class="ca-num">75%</th>
+                            <th class="ca-num">100%</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for row in scroll %}
+                            {% set top = max([row.reached25, row.reached50, row.reached75, row.reached100]) %}
+                            <tr>
+                                {{ ca.barCell(row.path, row.reached100, top, null) }}
+                                <td class="ca-num ca-muted">{{ row.reached25|number_format }}</td>
+                                <td class="ca-num ca-muted">{{ row.reached50|number_format }}</td>
+                                <td class="ca-num ca-muted">{{ row.reached75|number_format }}</td>
+                                <td class="ca-num">{{ row.reached100|number_format }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <p class="ca-footnote">
+                {{ 'Scroll depth rides the pageview beacon rather than sending requests of its own, so it costs nothing extra. Reaching a depth counts once per pageview, and reaching 75% means they also passed 25% and 50%.'|t('craft-analytics') }}
+            </p>
+        {% endif %}
+    {% endif %}
+{% endblock %}

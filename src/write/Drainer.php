@@ -4,6 +4,7 @@ namespace coyshdigital\craftanalytics\write;
 
 use coyshdigital\craftanalytics\db\Table;
 use coyshdigital\craftanalytics\ingest\Hit;
+use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\Plugin;
 use coyshdigital\craftanalytics\rollup\Aggregator;
 use coyshdigital\craftanalytics\rollup\JourneyRecorder;
@@ -43,6 +44,9 @@ class Drainer extends Component
     public ?SessionStore $sessions = null;
     public ?SpoolWriter $spool = null;
     public ?JourneyRecorder $journeys = null;
+
+    /** Settings override; defaults to the plugin's. Set in tests. */
+    public ?Settings $settings = null;
 
     /**
      * Drains everything currently spooled.
@@ -109,7 +113,7 @@ class Drainer extends Component
             return;
         }
 
-        $aggregator = new Aggregator();
+        $aggregator = new Aggregator(null, $this->settings());
         foreach ($hits as $hit) {
             $aggregator->add($hit);
         }
@@ -120,7 +124,7 @@ class Drainer extends Component
 
         $closed = $this->stageIdleSessions($now, $batchId);
 
-        $this->commit($batchId, $aggregator->buckets(), $closed, $hits);
+        $this->commit($batchId, $aggregator->buckets(), $closed, $hits, $aggregator->interactions);
 
         // Past the commit the batch is counted; dropping the closed records
         // and the file is cleanup, and is safe to redo.
@@ -191,13 +195,18 @@ class Drainer extends Component
      * @param Session[] $closed
      * @param Hit[] $hits the batch's hits, for the consented journeys layer
      */
-    private function commit(string $batchId, array $buckets, array $closed, array $hits = []): void
-    {
+    private function commit(
+        string $batchId,
+        array $buckets,
+        array $closed,
+        array $hits = [],
+        ?\coyshdigital\craftanalytics\rollup\InteractionBuckets $interactions = null,
+    ): void {
         $db = $this->db();
         $transaction = $db->beginTransaction();
 
         try {
-            $this->sink()->flush($buckets, $closed);
+            $this->sink()->flush($buckets, $closed, $interactions);
 
             // Inside the same transaction as the batch marker: a replayed
             // batch is skipped wholesale, so these rows cannot double up.
@@ -284,6 +293,11 @@ class Drainer extends Component
     private function sink(): RollupSinkInterface
     {
         return $this->sink ??= Plugin::getInstance()->getRollupSink();
+    }
+
+    private function settings(): Settings
+    {
+        return $this->settings ??= Plugin::getInstance()->getSettings();
     }
 
     private function journeys(): JourneyRecorder

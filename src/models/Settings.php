@@ -202,6 +202,55 @@ class Settings extends Model
      */
     public string $policyVersion = '1';
 
+    // ------------------------------------------------- Pro analytics (§7)
+
+    /** Record campaign (`utm_*`) attribution. */
+    public bool $enableCampaigns = true;
+
+    /**
+     * How a session's credit is divided between the campaigns that touched
+     * it. Only matters for multi-touch sessions; with a single touch every
+     * model agrees.
+     */
+    public string $attributionModel = 'last-click';
+
+    /**
+     * Country and region from a local database. Requires the database to be
+     * installed first (`craft-analytics/geo/install`); no lookup service is
+     * ever called (C7).
+     */
+    public bool $enableGeo = false;
+
+    /** Custom events, outbound links, downloads and scroll depth. */
+    public bool $enableEvents = true;
+
+    /** Track clicks on links leaving the site. */
+    public bool $trackOutbound = true;
+
+    /** Track clicks on links to downloadable files. */
+    public bool $trackDownloads = true;
+
+    /**
+     * File extensions counted as a download.
+     *
+     * @var string[]
+     */
+    public array $downloadExtensions = [
+        'pdf', 'zip', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+        'csv', 'dmg', 'exe', 'pkg', 'rar', 'gz', 'mp3', 'mp4', 'epub',
+    ];
+
+    /** Record how far down each page visitors read. */
+    public bool $trackScroll = true;
+
+    /**
+     * Site-search terms. The path a search lands on, and the query parameter
+     * holding the term — e.g. '/search' and 'q'.
+     */
+    public bool $trackSiteSearch = false;
+    public string $siteSearchPath = '/search';
+    public string $siteSearchParam = 'q';
+
     /**
      * @return array<int,array<int|string,mixed>>
      */
@@ -272,6 +321,18 @@ class Settings extends Model
             [['consentLogRetentionDays'], 'integer', 'min' => 0],
             [['policyVersion'], 'string', 'max' => 32],
             [['policyVersion'], 'required'],
+
+            // Pro analytics
+            [
+                [
+                    'enableCampaigns', 'enableGeo', 'enableEvents', 'trackOutbound',
+                    'trackDownloads', 'trackScroll', 'trackSiteSearch',
+                ],
+                'boolean',
+            ],
+            [['attributionModel'], 'in', 'range' => ['last-click', 'first-click', 'linear']],
+            [['siteSearchPath', 'siteSearchParam'], 'string', 'max' => 128],
+            [['downloadExtensions'], 'each', 'rule' => ['string']],
         ];
     }
 

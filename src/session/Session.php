@@ -32,6 +32,16 @@ final class Session
          * twice.
          */
         public ?string $lastBatch = null,
+        /**
+         * Campaign touches, in order, for attribution when the session
+         * closes. Almost always zero or one.
+         *
+         * @var array<int,array<string,string>>
+         */
+        public array $campaigns = [],
+        /** ISO country code resolved at capture; the address is long gone. */
+        public string $countryCode = '',
+        public string $region = '',
     ) {
     }
 
@@ -63,6 +73,9 @@ final class Session
             'ua' => $this->userAgent,
             'cb' => $this->closedByBatch,
             'lb' => $this->lastBatch,
+            'cm' => $this->campaigns,
+            'cc' => $this->countryCode,
+            'rg' => $this->region,
         ];
     }
 
@@ -84,6 +97,9 @@ final class Session
             userAgent: (string)($data['ua'] ?? ''),
             closedByBatch: isset($data['cb']) ? (string)$data['cb'] : null,
             lastBatch: isset($data['lb']) ? (string)$data['lb'] : null,
+            campaigns: is_array($data['cm'] ?? null) ? $data['cm'] : [],
+            countryCode: (string)($data['cc'] ?? ''),
+            region: (string)($data['rg'] ?? ''),
         );
     }
 }

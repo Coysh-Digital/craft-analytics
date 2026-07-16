@@ -19,6 +19,17 @@ final class SessionDelta
     public string $entryPath;
     public string $lastPath;
 
+    /**
+     * Campaign touches in this batch, in order and deduplicated — a visitor
+     * reloading a tagged URL is one touch, not five.
+     *
+     * @var array<int,array<string,string>>
+     */
+    public array $campaigns = [];
+
+    public string $countryCode = '';
+    public string $region = '';
+
     public function __construct(
         public readonly int $siteId,
         public readonly string $sessionKey,
@@ -31,6 +42,12 @@ final class SessionDelta
         $this->lastSeen = $firstHit->timestamp;
         $this->entryPath = $firstHit->path;
         $this->lastPath = $firstHit->path;
+        $this->countryCode = $firstHit->countryCode;
+        $this->region = $firstHit->region;
+
+        if ($firstHit->campaign !== null) {
+            $this->campaigns[] = $firstHit->campaign->toArray();
+        }
     }
 
     public static function fromHit(Hit $hit): self
@@ -69,6 +86,25 @@ final class SessionDelta
         if ($hit->timestamp >= $this->lastSeen) {
             $this->lastSeen = $hit->timestamp;
             $this->lastPath = $hit->path;
+        }
+
+        if ($hit->campaign !== null) {
+            $key = $hit->campaign->key();
+            $seen = array_map(
+                static fn(array $c) => implode('|', [$c['s'] ?? '', $c['m'] ?? '', $c['c'] ?? '', $c['t'] ?? '', $c['o'] ?? '']),
+                $this->campaigns,
+            );
+
+            // The same campaign seen again mid-session is the same touch.
+            if (!in_array($key, $seen, true)) {
+                $this->campaigns[] = $hit->campaign->toArray();
+            }
+        }
+
+        // Geo is resolved once, when they arrive.
+        if ($this->countryCode === '' && $hit->countryCode !== '') {
+            $this->countryCode = $hit->countryCode;
+            $this->region = $hit->region;
         }
     }
 }

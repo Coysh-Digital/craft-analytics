@@ -121,7 +121,7 @@ class SeedController extends Controller
         $growth = 0.75 + (1 - (int)$day->diff(new \DateTimeImmutable('now'))->days / max(1, $this->days)) * 0.5;
         $target = (int)round($this->perDay * $weekendFactor * $growth * random_int(85, 115) / 100);
 
-        $aggregator = new Aggregator(new \DateTimeZone(Craft::$app->getTimeZone()));
+        $aggregator = new Aggregator(new \DateTimeZone(Craft::$app->getTimeZone()), Plugin::getInstance()->getSettings());
         $sessions = [];
         $visitorCount = max(1, (int)round($target / 2.4));
 

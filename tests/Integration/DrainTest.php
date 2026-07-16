@@ -68,6 +68,7 @@ function makeDrainer(object $ctx, ?RollupSinkInterface $sink = null): Drainer
     return new Drainer([
         'db' => TestDb::connection(),
         'sink' => $sink ?? $ctx->sink,
+        'settings' => $ctx->settings,
         'spool' => new SpoolWriter(['spoolDir' => $ctx->spoolDir, 'settings' => $ctx->settings]),
         'sessions' => new SessionStore([
             'settings' => $ctx->settings,
@@ -172,8 +173,11 @@ test('a failing sink rolls the batch back and leaves it to retry intact', functi
     makeSpool($this->spoolDir, [makeHit('/pricing'), makeHit('/about')]);
 
     $failing = new class extends NullRollupSink {
-        public function flush(array $buckets, array $closedSessions): void
-        {
+        public function flush(
+            array $buckets,
+            array $closedSessions,
+            ?coyshdigital\craftanalytics\rollup\InteractionBuckets $interactions = null,
+        ): void {
             throw new \RuntimeException('sink is down');
         }
     };

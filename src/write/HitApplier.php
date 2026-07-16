@@ -32,7 +32,7 @@ class HitApplier extends Component
         // so the id only needs to be unique, not stable.
         $batchId = 'single-' . bin2hex(random_bytes(8));
 
-        $aggregator = new Aggregator();
+        $aggregator = new Aggregator(null, Plugin::getInstance()->getSettings());
         $aggregator->add($hit);
 
         $this->sessions()->apply(SessionDelta::fromHit($hit), $batchId);

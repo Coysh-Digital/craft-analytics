@@ -18,7 +18,7 @@ class NullRollupSink extends Component implements RollupSinkInterface
     public int $flushedViews = 0;
     public int $flushedSessions = 0;
 
-    public function flush(array $buckets, array $closedSessions): void
+    public function flush(array $buckets, array $closedSessions, ?InteractionBuckets $interactions = null): void
     {
         $this->flushedBuckets += count($buckets);
         $this->flushedSessions += count($closedSessions);

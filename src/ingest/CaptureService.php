@@ -3,6 +3,7 @@
 namespace coyshdigital\craftanalytics\ingest;
 
 use coyshdigital\craftanalytics\events\TrackEvent;
+use coyshdigital\craftanalytics\models\Campaign;
 use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\Plugin;
 use coyshdigital\craftanalytics\services\BotFilter;
@@ -146,11 +147,17 @@ class CaptureService extends Component
     /**
      * Strips excluded query params, keeping the rest in a stable order so the
      * same page doesn't fragment into several path dimensions.
+     *
+     * Campaign parameters are always stripped. They describe how somebody
+     * arrived, not which page they arrived at — and they are captured into
+     * the campaign dimensions separately. Leaving them on the path would
+     * split one page into a row per campaign and inflate path cardinality
+     * for data already recorded elsewhere (C2).
      */
     public function normalizePath(string $pathInfo, string $queryString): string
     {
         $path = '/' . ltrim($pathInfo, '/');
-        $excluded = $this->settings()->excludeQueryParams;
+        $excluded = array_merge($this->settings()->excludeQueryParams, Campaign::PARAMS);
 
         if ($queryString === '') {
             return $path;
@@ -191,6 +198,12 @@ class CaptureService extends Component
             ? $consent->visitorId($request)
             : null;
 
+        $plugin = Plugin::getInstance();
+
+        // Resolved here from the in-memory address, which is then gone. Only
+        // the country and region travel any further (C5).
+        $geo = $plugin->getGeo()->resolve((string)$request->getUserIP()) ?? ['country' => '', 'region' => ''];
+
         return new Hit(
             siteId: $siteId,
             path: $this->normalizePath($request->getPathInfo(), $request->getQueryString()),
@@ -203,6 +216,11 @@ class CaptureService extends Component
             acceptLanguage: (string)$request->getHeaders()->get('accept-language', ''),
             visitorId: $visitorId,
             userId: $visitorId !== null ? self::signedInUserId() : null,
+            campaign: $this->settings()->enableCampaigns
+                ? Campaign::fromQueryString($request->getQueryString())
+                : null,
+            countryCode: $geo['country'],
+            region: $geo['region'],
         );
     }
 

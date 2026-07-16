@@ -1,0 +1,62 @@
+{% extends 'craft-analytics/_layout.twig' %}
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% block report %}
+    {% if not isPro %}
+        {% include 'craft-analytics/_partials/pro-gate.twig' with {
+            title: 'Campaigns'|t('craft-analytics'),
+            description: 'Track which campaigns bring people to the site, using the utm_ parameters on your links, with last-click, first-click or linear attribution.'|t('craft-analytics'),
+        } only %}
+    {% elseif not enabled %}
+        {{ ca.empty(
+            'Campaign tracking is off'|t('craft-analytics'),
+            'Turn on enableCampaigns to record the utm_ parameters on incoming links.'|t('craft-analytics')
+        ) }}
+    {% else %}
+        <div class="ca-card">
+            <div class="ca-card-head">
+                <h2 class="ca-card-title">{{ 'Campaigns'|t('craft-analytics') }}</h2>
+                <span class="ca-muted">{{ '{model} attribution'|t('craft-analytics', { model: model.label() }) }}</span>
+            </div>
+            <div class="ca-card-body ca-table-scroll">
+                {% if campaigns|length %}
+                    {% set maxSessions = max(campaigns|map(c => c.sessions)) %}
+                    <table class="ca-table">
+                        <thead>
+                        <tr>
+                            <th>{{ 'Source'|t('craft-analytics') }}</th>
+                            <th>{{ 'Medium'|t('craft-analytics') }}</th>
+                            <th>{{ 'Campaign'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Sessions'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Bounce rate'|t('craft-analytics') }}</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for row in campaigns %}
+                            <tr>
+                                {{ ca.barCell(row.source, row.sessions, maxSessions, null) }}
+                                <td class="ca-muted">{{ row.medium ?: '—' }}</td>
+                                <td class="ca-muted">{{ row.campaign ?: '—' }}</td>
+                                <td class="ca-num">{{ row.sessions|number_format(row.sessions == row.sessions|round ? 0 : 1) }}</td>
+                                <td class="ca-num ca-muted">{{ row.bounceRate|number_format(1) }}%</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    {{ ca.empty(
+                        'No campaigns for this period'|t('craft-analytics'),
+                        'Tag your links with utm_source (and optionally utm_medium, utm_campaign, utm_term, utm_content) and they appear here once the sessions close.'|t('craft-analytics')
+                    ) }}
+                {% endif %}
+            </div>
+        </div>
+
+        <p class="ca-footnote">
+            {{ 'Attribution is within a session. Cross-session windows are not offered for anonymous visitors because the visitor salt rotates daily and destroys the link between visits — that is the privacy trade, and inventing an answer would be dishonest. Consented visitors keep a durable identifier and can be followed across sessions.'|t('craft-analytics') }}
+            {% if model.value == 'linear' %}
+                {{ 'Linear attribution splits one session between its touches, so session counts can be fractional — the total still sums to the sessions you actually had.'|t('craft-analytics') }}
+            {% endif %}
+        </p>
+    {% endif %}
+{% endblock %}

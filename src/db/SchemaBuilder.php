@@ -126,6 +126,106 @@ final class SchemaBuilder
         $m->createIndex(null, Table::UNIQUE_MEMBERS, ['siteId', 'date']);
     }
 
+
+    /**
+     * The Pro analytics rollups.
+     *
+     * Same shape rules as the Lite rollups: keyed on (siteId, date[, hour],
+     * …dimensionIds) with a unique index for upserting, dimension values held
+     * once in the dimensions table, and growth bounded by cardinality × time
+     * rather than by traffic (C2).
+     */
+    public static function createProRollupTables(Migration $m): void
+    {
+        // Campaign attribution. Sessions, not pageviews: a campaign brings
+        // somebody to the site once, not once per page they then read.
+        $m->createTable(Table::CAMPAIGNS_ROLLUP, [
+            'id' => $m->primaryKey(),
+            'siteId' => $m->integer()->notNull(),
+            'date' => $m->date()->notNull(),
+            'sourceDimId' => $m->integer()->notNull(),
+            'mediumDimId' => $m->integer()->notNull()->defaultValue(0),
+            'campaignDimId' => $m->integer()->notNull()->defaultValue(0),
+            'termDimId' => $m->integer()->notNull()->defaultValue(0),
+            'contentDimId' => $m->integer()->notNull()->defaultValue(0),
+            // Fractional credit, so the linear model can split a session
+            // across the campaigns that touched it without inventing sessions.
+            'sessions' => $m->decimal(12, 4)->notNull()->defaultValue(0),
+            'bounces' => $m->decimal(12, 4)->notNull()->defaultValue(0),
+            'conversions' => $m->decimal(12, 4)->notNull()->defaultValue(0),
+            'value' => $m->decimal(14, 2)->notNull()->defaultValue(0),
+        ]);
+        $m->createIndex(
+            null,
+            Table::CAMPAIGNS_ROLLUP,
+            ['siteId', 'date', 'sourceDimId', 'mediumDimId', 'campaignDimId', 'termDimId', 'contentDimId'],
+            true,
+        );
+
+        // Country is an ISO code — a closed, tiny set, so it needs no
+        // dimension row. Region does, and it is capped like any other.
+        $m->createTable(Table::GEO_ROLLUP, [
+            'id' => $m->primaryKey(),
+            'siteId' => $m->integer()->notNull(),
+            'date' => $m->date()->notNull(),
+            'countryCode' => $m->char(2)->notNull(),
+            'regionDimId' => $m->integer()->notNull()->defaultValue(0),
+            'sessions' => $m->integer()->notNull()->defaultValue(0),
+        ]);
+        $m->createIndex(null, Table::GEO_ROLLUP, ['siteId', 'date', 'countryCode', 'regionDimId'], true);
+
+        $m->createTable(Table::EVENTS_ROLLUP, [
+            'id' => $m->primaryKey(),
+            'siteId' => $m->integer()->notNull(),
+            'date' => $m->date()->notNull(),
+            'hour' => $m->smallInteger()->notNull(),
+            'eventNameDimId' => $m->integer()->notNull(),
+            'pathDimId' => $m->integer()->notNull()->defaultValue(0),
+            'count' => $m->integer()->notNull()->defaultValue(0),
+            'sumValue' => $m->decimal(14, 2)->notNull()->defaultValue(0),
+        ]);
+        $m->createIndex(null, Table::EVENTS_ROLLUP, ['siteId', 'date', 'hour', 'eventNameDimId', 'pathDimId'], true);
+
+        // Four buckets, not a percentage: "how far down did people get" is a
+        // question with four useful answers, and 101 useless ones.
+        $m->createTable(Table::SCROLL_ROLLUP, [
+            'id' => $m->primaryKey(),
+            'siteId' => $m->integer()->notNull(),
+            'date' => $m->date()->notNull(),
+            'pathDimId' => $m->integer()->notNull(),
+            'bucket' => $m->smallInteger()->notNull(),
+            'count' => $m->integer()->notNull()->defaultValue(0),
+        ]);
+        $m->createIndex(null, Table::SCROLL_ROLLUP, ['siteId', 'date', 'pathDimId', 'bucket'], true);
+
+        // What people looked for, and whether the site had it.
+        $m->createTable(Table::SEARCH_ROLLUP, [
+            'id' => $m->primaryKey(),
+            'siteId' => $m->integer()->notNull(),
+            'date' => $m->date()->notNull(),
+            'termDimId' => $m->integer()->notNull(),
+            'count' => $m->integer()->notNull()->defaultValue(0),
+            'zeroResults' => $m->integer()->notNull()->defaultValue(0),
+        ]);
+        $m->createIndex(null, Table::SEARCH_ROLLUP, ['siteId', 'date', 'termDimId'], true);
+
+        $m->createTable(Table::OUTBOUND_ROLLUP, [
+            'id' => $m->primaryKey(),
+            'siteId' => $m->integer()->notNull(),
+            'date' => $m->date()->notNull(),
+            'targetHostDimId' => $m->integer()->notNull(),
+            'targetDimId' => $m->integer()->notNull()->defaultValue(0),
+            'pathDimId' => $m->integer()->notNull()->defaultValue(0),
+            'count' => $m->integer()->notNull()->defaultValue(0),
+        ]);
+        $m->createIndex(
+            null,
+            Table::OUTBOUND_ROLLUP,
+            ['siteId', 'date', 'targetHostDimId', 'targetDimId', 'pathDimId'],
+            true,
+        );
+    }
+
     /**
      * The consented (Tier-2) tables — the only place per-visitor rows may
      * ever exist, and only for visitors who affirmatively agreed.
@@ -184,6 +284,12 @@ final class SchemaBuilder
     public static function allTables(): array
     {
         return [
+            Table::OUTBOUND_ROLLUP,
+            Table::SEARCH_ROLLUP,
+            Table::SCROLL_ROLLUP,
+            Table::EVENTS_ROLLUP,
+            Table::GEO_ROLLUP,
+            Table::CAMPAIGNS_ROLLUP,
             Table::JOURNEYS,
             Table::CONSENT_LOG,
             Table::UNIQUE_MEMBERS,

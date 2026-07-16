@@ -90,9 +90,38 @@ class ScriptInjector extends Component
         // Only shipped when consented tracking is actually switched on, so a
         // Lite site — or a Pro site that stays cookieless — downloads nothing
         // for a feature it doesn't use.
-        $consentTag = $this->consentTag();
+        return $tag . ($this->consentTag() ?? '') . ($this->proTag() ?? '');
+    }
 
-        return $consentTag === null ? $tag : $tag . $consentTag;
+    /**
+     * The Pro tracker: events, outbound clicks, downloads and scroll depth.
+     *
+     * Separate from tracker.js so a Lite site downloads nothing for features
+     * it does not have (C3).
+     */
+    private function proTag(): ?string
+    {
+        $settings = $this->settings();
+
+        if (!$settings->enableEvents || !Plugin::getInstance()->is(Plugin::EDITION_PRO)) {
+            return null;
+        }
+
+        $url = $this->publishedUrl('pro.js');
+
+        if ($url === null) {
+            return null;
+        }
+
+        return Html::tag('script', '', [
+            'src' => $url,
+            'defer' => true,
+            'data-endpoint' => UrlHelper::siteUrl($settings->beaconPath),
+            'data-outbound' => $settings->trackOutbound ? '1' : '0',
+            'data-downloads' => $settings->trackDownloads ? '1' : '0',
+            'data-scroll' => $settings->trackScroll ? '1' : '0',
+            'data-extensions' => implode(',', $settings->downloadExtensions),
+        ]);
     }
 
     /**

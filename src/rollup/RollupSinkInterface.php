@@ -20,6 +20,8 @@ interface RollupSinkInterface
      *
      * @param array<string,PageBucket> $buckets
      * @param Session[] $closedSessions sessions that ended in this batch
+     * @param InteractionBuckets|null $interactions Pro events, scroll and
+     *                                              outbound clicks
      */
-    public function flush(array $buckets, array $closedSessions): void;
+    public function flush(array $buckets, array $closedSessions, ?InteractionBuckets $interactions = null): void;
 }
