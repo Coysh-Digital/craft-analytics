@@ -1,0 +1,439 @@
+/**
+ * Craft Analytics control panel.
+ *
+ * Built on Craft's own CP variables (--gray-*, --text-color, --hairline-color)
+ * so it inherits the CP's typography, spacing and any future theming rather
+ * than sitting on top of it looking like a guest.
+ *
+ * Chart colours are Craft's blue-600 and teal-600. That pair is validated for
+ * colour-vision deficiency (CVD ΔE 20.7) and both clear 3:1 against the pane
+ * surface. Series are also direct-labelled and every chart has a table
+ * underneath, so identity is never carried by colour alone.
+ */
+
+.ca {
+    --ca-views: #2563eb;
+    --ca-uniques: #0d9488;
+    --ca-views-soft: rgba(37, 99, 235, 0.14);
+    --ca-bar: rgba(37, 99, 235, 0.16);
+    --ca-bar-strong: rgba(37, 99, 235, 0.32);
+    --ca-radius: 6px;
+}
+
+/* ---------------------------------------------------------------- toolbar */
+
+.ca-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.ca-toolbar .ca-spacer {
+    flex: 1 1 auto;
+}
+
+/* Filters sit in one row above the charts, never between them. */
+.ca-ranges {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 2px;
+    background: var(--gray-100);
+    border-radius: var(--ca-radius);
+}
+
+.ca-range {
+    padding: 5px 11px;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--medium-text-color);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.ca-range:hover {
+    color: var(--text-color);
+    background: rgba(255, 255, 255, 0.6);
+    text-decoration: none;
+}
+
+.ca-range.is-selected {
+    background: var(--white);
+    color: var(--text-color);
+    font-weight: 500;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.09);
+}
+
+/* ------------------------------------------------------------- stat tiles */
+
+/* A handful of headline numbers is a KPI row, not a bar chart. */
+.ca-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1px;
+    background: var(--hairline-color);
+    border: 1px solid var(--hairline-color);
+    border-radius: var(--ca-radius);
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+.ca-kpi {
+    background: var(--white);
+    padding: 16px 18px 18px;
+    min-width: 0;
+}
+
+.ca-kpi-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--medium-text-color);
+    margin-bottom: 6px;
+}
+
+.ca-kpi-value {
+    font-size: 28px;
+    line-height: 1.15;
+    font-weight: 600;
+    color: var(--text-color);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+}
+
+.ca-kpi-sub {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--medium-text-color);
+    font-variant-numeric: tabular-nums;
+}
+
+.ca-delta {
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+}
+
+.ca-delta.up { color: #15803d; }
+.ca-delta.down { color: #b91c1c; }
+.ca-delta.flat { color: var(--medium-text-color); }
+
+/* ------------------------------------------------------------------ chart */
+
+.ca-card {
+    background: var(--white);
+    border: 1px solid var(--hairline-color);
+    border-radius: var(--ca-radius);
+    margin-bottom: 24px;
+}
+
+.ca-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--hairline-color);
+}
+
+.ca-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-color);
+    margin: 0;
+}
+
+.ca-card-body {
+    padding: 18px;
+}
+
+.ca-legend {
+    display: flex;
+    gap: 14px;
+    font-size: 12px;
+    color: var(--medium-text-color);
+}
+
+.ca-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* A colour chip beside the label — the text itself stays in ink, never in
+   the series colour. */
+.ca-swatch {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    flex: none;
+}
+
+.ca-chart {
+    position: relative;
+}
+
+.ca-chart svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+}
+
+.ca-grid line {
+    stroke: var(--hairline-color);
+    stroke-width: 1;
+}
+
+.ca-axis text {
+    fill: var(--medium-text-color);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+
+.ca-line {
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.ca-dot {
+    r: 3.5;
+    stroke: var(--white);
+    stroke-width: 2;
+    opacity: 0;
+    transition: opacity 0.1s;
+}
+
+.ca-hover-band {
+    fill: transparent;
+    cursor: crosshair;
+}
+
+.ca-hover-band:hover ~ .ca-crosshair,
+.ca-hover-band.is-active ~ .ca-crosshair {
+    opacity: 1;
+}
+
+.ca-crosshair {
+    stroke: var(--gray-400);
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.ca-tooltip {
+    position: absolute;
+    z-index: 10;
+    pointer-events: none;
+    background: var(--gray-800);
+    color: var(--white);
+    border-radius: 5px;
+    padding: 8px 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translate(-50%, -100%);
+    transition: opacity 0.1s;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.ca-tooltip.is-visible {
+    opacity: 1;
+}
+
+.ca-tooltip-date {
+    font-weight: 600;
+    margin-bottom: 3px;
+}
+
+.ca-tooltip-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-variant-numeric: tabular-nums;
+}
+
+.ca-tooltip-row b {
+    font-weight: 600;
+    margin-left: auto;
+    padding-left: 10px;
+}
+
+/* ------------------------------------------------------------------ table */
+
+/* Magnitude compared across many named things: a table with an inline bar
+   beats a chart, and stays readable past seven rows. */
+.ca-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+}
+
+.ca-table th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--medium-text-color);
+    padding: 0 12px 8px;
+    border-bottom: 1px solid var(--hairline-color);
+    white-space: nowrap;
+}
+
+.ca-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--gray-100);
+    font-size: 13px;
+    color: var(--text-color);
+}
+
+.ca-table tr:last-child td {
+    border-bottom: 0;
+}
+
+.ca-table tr:hover td {
+    background: var(--gray-050);
+}
+
+.ca-table .ca-num {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.ca-table th.ca-num {
+    text-align: right;
+}
+
+/* The bar is a background wash behind the label; the value is always spelled
+   out in text beside it, so the encoding is never colour or length alone. */
+.ca-bar-cell {
+    position: relative;
+    min-width: 0;
+}
+
+.ca-bar-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: var(--ca-bar);
+    border-radius: 0 3px 3px 0;
+    pointer-events: none;
+}
+
+.ca-bar-label {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 46ch;
+}
+
+.ca-table a {
+    color: var(--text-color);
+    text-decoration: none;
+}
+
+.ca-table a:hover {
+    color: var(--link-color);
+    text-decoration: underline;
+}
+
+.ca-muted {
+    color: var(--medium-text-color);
+}
+
+/* --------------------------------------------------------------- realtime */
+
+.ca-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--medium-text-color);
+}
+
+.ca-live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #16a34a;
+    animation: ca-pulse 2s ease-in-out infinite;
+}
+
+@keyframes ca-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.45; transform: scale(0.85); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ca-live-dot { animation: none; }
+}
+
+.ca-hero {
+    font-size: 44px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--text-color);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------- entry sidebar */
+
+.ca-sidebar-stats {
+    display: flex;
+    gap: 18px;
+    margin-bottom: 8px;
+}
+
+.ca-sidebar-stat .ca-kpi-value {
+    font-size: 20px;
+}
+
+.ca-sparkline {
+    display: block;
+    width: 100%;
+    height: 32px;
+    overflow: visible;
+}
+
+/* ------------------------------------------------------------------ misc */
+
+.ca-empty {
+    text-align: center;
+    padding: 44px 20px;
+    color: var(--medium-text-color);
+}
+
+.ca-empty-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-color);
+    margin-bottom: 6px;
+}
+
+.ca-footnote {
+    font-size: 12px;
+    color: var(--medium-text-color);
+    margin-top: -12px;
+    margin-bottom: 24px;
+}
+
+@media (max-width: 600px) {
+    .ca-kpi-value { font-size: 22px; }
+    .ca-hero { font-size: 34px; }
+    /* Wide content scrolls inside its own container; the page never does. */
+    .ca-table-scroll { overflow-x: auto; }
+}

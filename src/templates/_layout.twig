@@ -1,0 +1,54 @@
+{% extends '_layouts/cp.twig' %}
+
+{% set docTitle = title ~ ' - ' ~ 'Analytics'|t('craft-analytics') %}
+
+{% set selectedSubnavItem = selectedSubnavItem ?? 'dashboard' %}
+
+{% set crumbs = [] %}
+
+{% block actionButton %}
+    {# Only where there is actually something to export — a button that
+       quietly exports a different screen's data is worse than no button. #}
+    {% if (canExport ?? false) and exportKind is defined %}
+        <div class="btngroup">
+            <a class="btn" href="{{ url('craft-analytics/export/' ~ exportKind, exportParams ?? {}) }}">
+                {{ 'Export CSV'|t('craft-analytics') }}
+            </a>
+        </div>
+    {% endif %}
+{% endblock %}
+
+{% set showRanges = showRanges ?? true %}
+
+{% block content %}
+    <div class="ca">
+        {% if sites|length > 1 or showRanges %}
+            <div class="ca-toolbar">
+                {% if showRanges %}
+                    <div class="ca-ranges" role="group" aria-label="{{ 'Date range'|t('craft-analytics') }}">
+                        {% for value, label in ranges %}
+                            <a class="ca-range{{ value == range.preset ? ' is-selected' }}"
+                               href="{{ url(currentPath, currentParams|merge({ range: value })) }}"
+                               {{ value == range.preset ? 'aria-current="true"' }}>{{ label }}</a>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="ca-spacer"></div>
+
+                {% if sites|length > 1 %}
+                    <div class="select">
+                        <select onchange="window.location = this.value;" aria-label="{{ 'Site'|t('craft-analytics') }}">
+                            {% for s in sites %}
+                                <option value="{{ url(currentPath, currentParams|merge({ site: s.handle })) }}"
+                                        {{ s.id == site.id ? 'selected' }}>{{ s.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+
+        {% block report %}{% endblock %}
+    </div>
+{% endblock %}

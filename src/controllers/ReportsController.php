@@ -1,0 +1,104 @@
+<?php
+
+namespace coyshdigital\craftanalytics\controllers;
+
+use yii\web\Response;
+
+/**
+ * The detail screens: pages, sources and devices.
+ */
+class ReportsController extends BaseCpController
+{
+    public function actionPages(): Response
+    {
+        $site = $this->currentSite();
+        $siteId = $this->siteId($site);
+        $range = $this->range();
+
+        return $this->renderTemplate('craft-analytics/reports/pages.twig', array_merge(
+            $this->commonVariables($site, $range),
+            [
+                'title' => 'Pages',
+                'selectedSubnavItem' => 'pages',
+                'pages' => $this->stats()->topPages($siteId, $range, 200),
+                'exportKind' => 'pages',
+                'exportParams' => ['site' => $site->handle, 'range' => $range->preset],
+            ],
+        ));
+    }
+
+    public function actionSources(): Response
+    {
+        $site = $this->currentSite();
+        $siteId = $this->siteId($site);
+        $range = $this->range();
+        $stats = $this->stats();
+
+        return $this->renderTemplate('craft-analytics/reports/sources.twig', array_merge(
+            $this->commonVariables($site, $range),
+            [
+                'title' => 'Sources',
+                'selectedSubnavItem' => 'sources',
+                'channels' => $stats->channels($siteId, $range),
+                'referrers' => $stats->sources($siteId, $range, 200),
+                'exportKind' => 'sources',
+                'exportParams' => ['site' => $site->handle, 'range' => $range->preset],
+            ],
+        ));
+    }
+
+    public function actionDevices(): Response
+    {
+        $site = $this->currentSite();
+        $siteId = $this->siteId($site);
+        $range = $this->range();
+        $stats = $this->stats();
+
+        return $this->renderTemplate('craft-analytics/reports/devices.twig', array_merge(
+            $this->commonVariables($site, $range),
+            [
+                'title' => 'Devices',
+                'selectedSubnavItem' => 'devices',
+                'browsers' => $stats->devices($siteId, $range, 'browser'),
+                'operatingSystems' => $stats->devices($siteId, $range, 'os'),
+                'deviceTypes' => $stats->devices($siteId, $range, 'deviceType'),
+                'exportKind' => 'devices',
+                'exportParams' => ['site' => $site->handle, 'range' => $range->preset],
+            ],
+        ));
+    }
+
+    public function actionRealtime(): Response
+    {
+        $site = $this->currentSite();
+        $siteId = $this->siteId($site);
+        $range = $this->range();
+
+        return $this->renderTemplate('craft-analytics/reports/realtime.twig', array_merge(
+            $this->commonVariables($site, $range),
+            [
+                'title' => 'Real-time',
+                'selectedSubnavItem' => 'realtime',
+                // "Right now" has no date range and nothing to export; showing
+                // either would be furniture that lies about what the screen is.
+                'showRanges' => false,
+                'canExport' => false,
+                'realtime' => $this->stats()->realtime($siteId),
+                'sessionWindow' => \coyshdigital\craftanalytics\Plugin::getInstance()->getSettings()->sessionWindow,
+            ],
+        ));
+    }
+
+    /**
+     * Polled by the real-time screen. Reads the session hot layer only — no
+     * database query, so refreshing it costs nothing.
+     */
+    public function actionRealtimeData(): Response
+    {
+        $this->requireAcceptsJson();
+        $site = $this->currentSite();
+        $siteId = $this->siteId($site);
+
+        return $this->asJson($this->stats()->realtime($siteId));
+    }
+}

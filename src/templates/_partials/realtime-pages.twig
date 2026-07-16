@@ -1,0 +1,23 @@
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% if realtime.pages|length %}
+    {% set maxVisitors = max(realtime.pages|map(p => p.visitors)) %}
+    <table class="ca-table">
+        <thead>
+        <tr>
+            <th>{{ 'Page'|t('craft-analytics') }}</th>
+            <th class="ca-num">{{ 'Visitors'|t('craft-analytics') }}</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for page in realtime.pages %}
+            <tr>
+                {{ ca.barCell(page.path, page.visitors, maxVisitors, null) }}
+                <td class="ca-num">{{ page.visitors|number_format }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p class="ca-muted">{{ 'Nobody is on the site right now.'|t('craft-analytics') }}</p>
+{% endif %}

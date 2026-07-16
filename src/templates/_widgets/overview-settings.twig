@@ -1,0 +1,10 @@
+{% import '_includes/forms.twig' as forms %}
+
+{{ forms.selectField({
+    label: 'Period'|t('craft-analytics'),
+    id: 'range',
+    name: 'range',
+    options: ranges,
+    value: widget.range,
+    errors: widget.getErrors('range'),
+}) }}

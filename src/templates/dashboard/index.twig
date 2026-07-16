@@ -1,9 +1,117 @@
-{% extends '_layouts/cp.twig' %}
+{% extends 'craft-analytics/_layout.twig' %}
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
 
-{% set title = 'Analytics'|t('craft-analytics') %}
+{% block report %}
+    {% if totals.views == 0 %}
+        <div class="ca-card">
+            {{ ca.empty(
+                'No data for this period'|t('craft-analytics'),
+                'Once the site has traffic and the drain has run, it appears here.'|t('craft-analytics')
+            ) }}
+        </div>
+    {% else %}
+        <div class="ca-kpis">
+            {{ ca.kpi('Pageviews'|t('craft-analytics'), totals.views, { delta: deltas.views }) }}
+            {{ ca.kpi('Unique visitors'|t('craft-analytics'), totals.uniques, {
+                delta: deltas.uniques,
+                info: 'Estimated to within %s. Because the visitor salt rotates daily, a visitor returning on another day counts once per day — a deliberate privacy property.'|t('craft-analytics', [uniquesAccuracy]),
+            }) }}
+            {{ ca.kpi('Sessions'|t('craft-analytics'), totals.sessions, { delta: deltas.sessions }) }}
+            {{ ca.kpi('Bounce rate'|t('craft-analytics'), totals.bounceRate, {
+                raw: totals.bounceRate|number_format(1) ~ '%',
+                delta: deltas.bounceRate,
+                inverse: true,
+            }) }}
+            {{ ca.kpi('Avg. session'|t('craft-analytics'), totals.avgDurationMs, {
+                raw: ca.duration(totals.avgDurationMs),
+                delta: deltas.avgDurationMs,
+            }) }}
+        </div>
 
-{% block content %}
-    <div class="zilch">
-        <p>{{ 'No analytics data yet. Tracking begins once ingestion is configured (phase 2).'|t('craft-analytics') }}</p>
-    </div>
+        {% include 'craft-analytics/_partials/trend.twig' %}
+
+        <div class="ca-card">
+            <div class="ca-card-head">
+                <h2 class="ca-card-title">{{ 'Top pages'|t('craft-analytics') }}</h2>
+                <a class="ca-muted" href="{{ url('craft-analytics/pages', currentParams) }}">{{ 'View all'|t('craft-analytics') }} &rarr;</a>
+            </div>
+            <div class="ca-card-body ca-table-scroll">
+                {% set maxViews = topPages|length ? max(topPages|map(p => p.views)) : 0 %}
+                <table class="ca-table">
+                    <thead>
+                    <tr>
+                        <th>{{ 'Page'|t('craft-analytics') }}</th>
+                        <th class="ca-num">{{ 'Views'|t('craft-analytics') }}</th>
+                        <th class="ca-num">{{ 'Avg. time'|t('craft-analytics') }}</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for page in topPages %}
+                        <tr>
+                            {{ ca.barCell(page.path, page.views, maxViews, page.elementId ? cpUrl('entries/' ~ page.elementId) : null) }}
+                            <td class="ca-num">{{ page.views|number_format }}</td>
+                            <td class="ca-num ca-muted">{{ page.avgDwellMs ? ca.duration(page.avgDwellMs) : '—' }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="ca-card">
+            <div class="ca-card-head">
+                <h2 class="ca-card-title">{{ 'Channels'|t('craft-analytics') }}</h2>
+                <a class="ca-muted" href="{{ url('craft-analytics/sources', currentParams) }}">{{ 'View all'|t('craft-analytics') }} &rarr;</a>
+            </div>
+            <div class="ca-card-body ca-table-scroll">
+                {% set maxChannel = channels|length ? max(channels|map(c => c.sessions)) : 0 %}
+                <table class="ca-table">
+                    <thead>
+                    <tr>
+                        <th>{{ 'Channel'|t('craft-analytics') }}</th>
+                        <th class="ca-num">{{ 'Sessions'|t('craft-analytics') }}</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for channel in channels %}
+                        <tr>
+                            {{ ca.barCell(channel.channel, channel.sessions, maxChannel, null) }}
+                            <td class="ca-num">{{ channel.sessions|number_format }}</td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="2" class="ca-muted">{{ 'No sessions have closed yet.'|t('craft-analytics') }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="ca-card">
+            <div class="ca-card-head">
+                <h2 class="ca-card-title">{{ 'Devices'|t('craft-analytics') }}</h2>
+                <a class="ca-muted" href="{{ url('craft-analytics/devices', currentParams) }}">{{ 'View all'|t('craft-analytics') }} &rarr;</a>
+            </div>
+            <div class="ca-card-body ca-table-scroll">
+                {% set maxDevice = deviceTypes|length ? max(deviceTypes|map(d => d.sessions)) : 0 %}
+                <table class="ca-table">
+                    <thead>
+                    <tr>
+                        <th>{{ 'Device'|t('craft-analytics') }}</th>
+                        <th class="ca-num">{{ 'Sessions'|t('craft-analytics') }}</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for device in deviceTypes %}
+                        <tr>
+                            {{ ca.barCell(device.label, device.sessions, maxDevice, null) }}
+                            <td class="ca-num">{{ device.sessions|number_format }}</td>
+                        </tr>
+                    {% else %}
+                        <tr><td colspan="2" class="ca-muted">{{ 'No sessions have closed yet.'|t('craft-analytics') }}</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
 {% endblock %}

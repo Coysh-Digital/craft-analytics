@@ -1,0 +1,37 @@
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+<div class="ca">
+    {% if totals.views > 0 %}
+        <div class="ca-sidebar-stats" style="margin-bottom: 12px">
+            <div class="ca-sidebar-stat">
+                <div class="ca-kpi-label">{{ 'Views'|t('craft-analytics') }}</div>
+                <div class="ca-kpi-value">{{ ca.compact(totals.views) }}</div>
+            </div>
+            <div class="ca-sidebar-stat">
+                <div class="ca-kpi-label">{{ 'Visitors'|t('craft-analytics') }}</div>
+                <div class="ca-kpi-value">{{ ca.compact(totals.uniques) }}</div>
+            </div>
+            <div class="ca-sidebar-stat">
+                <div class="ca-kpi-label">{{ 'Bounce'|t('craft-analytics') }}</div>
+                <div class="ca-kpi-value">{{ totals.bounceRate|number_format(0) }}%</div>
+            </div>
+        </div>
+
+        {% set spark = craft.craftAnalytics.sparkline(trend.views, 300, 40) %}
+        {% if spark %}
+            <svg class="ca-sparkline" style="height: 40px" viewBox="0 0 300 40" preserveAspectRatio="none" role="img"
+                 aria-label="{{ 'Views over the selected period'|t('craft-analytics') }}">
+                <path d="{{ spark }}" fill="none" stroke="#2563eb" stroke-width="1.5"
+                      stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></path>
+            </svg>
+        {% endif %}
+
+        <p style="margin-top: 10px">
+            <a class="go" href="{{ url('craft-analytics', { site: site.handle, range: range.preset }) }}">
+                {{ 'Open analytics'|t('craft-analytics') }}
+            </a>
+        </p>
+    {% else %}
+        <p class="ca-muted">{{ 'No traffic recorded for this period yet.'|t('craft-analytics') }}</p>
+    {% endif %}
+</div>

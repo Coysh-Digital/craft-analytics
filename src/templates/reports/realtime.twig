@@ -1,0 +1,87 @@
+{% extends 'craft-analytics/_layout.twig' %}
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% block report %}
+    <div class="ca-card">
+        <div class="ca-card-head">
+            <h2 class="ca-card-title">{{ 'Right now'|t('craft-analytics') }}</h2>
+            <span class="ca-live"><i class="ca-live-dot"></i>{{ 'Live'|t('craft-analytics') }}</span>
+        </div>
+        <div class="ca-card-body">
+            {# A single current value is a hero figure, not a one-bar chart. #}
+            <div class="ca-hero" id="ca-live-count">{{ realtime.visitors|number_format }}</div>
+            <p class="ca-kpi-sub">
+                {{ '{n,plural,=1{visitor} other{visitors}} active in the last {mins} minutes'|t('craft-analytics', {
+                    n: realtime.visitors,
+                    mins: (sessionWindow / 60)|round,
+                }) }}
+            </p>
+        </div>
+    </div>
+
+    <div class="ca-card">
+        <div class="ca-card-head">
+            <h2 class="ca-card-title">{{ 'Active pages'|t('craft-analytics') }}</h2>
+        </div>
+        <div class="ca-card-body ca-table-scroll" id="ca-live-pages">
+            {% include 'craft-analytics/_partials/realtime-pages.twig' %}
+        </div>
+    </div>
+
+    <p class="ca-footnote">
+        {{ 'Read entirely from the session cache — this screen costs no database queries. Sessions live only in the cache and are deleted once folded into the rollups.'|t('craft-analytics') }}
+    </p>
+{% endblock %}
+
+{% js %}
+(function () {
+    var count = document.getElementById('ca-live-count');
+    var pages = document.getElementById('ca-live-pages');
+    if (!count) return;
+
+    var url = {{ url('craft-analytics/realtime-data', currentParams)|json_encode|raw }};
+
+    function refresh() {
+        fetch(url, { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                if (!data) return;
+                count.textContent = data.visitors.toLocaleString();
+                if (!pages) return;
+
+                if (!data.pages.length) {
+                    pages.innerHTML = '<p class="ca-muted">{{ 'Nobody is on the site right now.'|t('craft-analytics') }}</p>';
+                    return;
+                }
+
+                var max = data.pages[0].visitors;
+                var rows = data.pages.map(function (page) {
+                    var width = max > 0 ? (page.visitors / max * 100).toFixed(1) : 0;
+                    var path = page.path.replace(/[<>&"]/g, function (c) {
+                        return { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c];
+                    });
+                    return '<tr><td class="ca-bar-cell"><div class="ca-bar-fill" style="width:' + width +
+                        '%"></div><span class="ca-bar-label">' + path + '</span></td>' +
+                        '<td class="ca-num">' + page.visitors.toLocaleString() + '</td></tr>';
+                }).join('');
+
+                pages.innerHTML = '<table class="ca-table"><thead><tr><th>{{ 'Page'|t('craft-analytics') }}</th>' +
+                    '<th class="ca-num">{{ 'Visitors'|t('craft-analytics') }}</th></tr></thead><tbody>' +
+                    rows + '</tbody></table>';
+            })
+            .catch(function () { /* a failed poll is not worth an error */ });
+    }
+
+    var timer = setInterval(refresh, 15000);
+
+    // Don't poll a tab nobody is looking at.
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') {
+            clearInterval(timer);
+        } else {
+            refresh();
+            timer = setInterval(refresh, 15000);
+        }
+    });
+})();
+{% endjs %}

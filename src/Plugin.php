@@ -2,9 +2,11 @@
 
 namespace coyshdigital\craftanalytics;
 
+use coyshdigital\craftanalytics\assets\CpAsset;
 use coyshdigital\craftanalytics\ingest\CaptureService;
 use coyshdigital\craftanalytics\ingest\NonceRegistry;
 use coyshdigital\craftanalytics\ingest\ScriptInjector;
+use coyshdigital\craftanalytics\models\DateRange;
 use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\rollup\DbRollupSink;
 use coyshdigital\craftanalytics\rollup\RollupSinkInterface;
@@ -15,11 +17,14 @@ use coyshdigital\craftanalytics\services\DimensionsService;
 use coyshdigital\craftanalytics\services\GcService;
 use coyshdigital\craftanalytics\services\IdentityService;
 use coyshdigital\craftanalytics\services\SaltService;
+use coyshdigital\craftanalytics\services\StatsService;
 use coyshdigital\craftanalytics\session\SessionStore;
 use coyshdigital\craftanalytics\uniques\ExactUniqueCounter;
 use coyshdigital\craftanalytics\uniques\HllUniqueCounter;
 use coyshdigital\craftanalytics\uniques\RedisUniqueCounter;
 use coyshdigital\craftanalytics\uniques\UniqueCounterInterface;
+use coyshdigital\craftanalytics\variables\CraftAnalyticsVariable;
+use coyshdigital\craftanalytics\widgets\OverviewWidget;
 use coyshdigital\craftanalytics\write\DirectWriter;
 use coyshdigital\craftanalytics\write\QueueWriter;
 use coyshdigital\craftanalytics\write\SpoolWriter;
@@ -27,13 +32,21 @@ use coyshdigital\craftanalytics\write\WriterInterface;
 use Craft;
 use craft\base\Model;
 use craft\base\Plugin as BasePlugin;
+use craft\elements\Entry;
+use craft\events\DefineAttributeHtmlEvent;
+use craft\events\DefineHtmlEvent;
+use craft\events\RegisterComponentTypesEvent;
+use craft\events\RegisterElementTableAttributesEvent;
 use craft\events\RegisterUrlRulesEvent;
 use craft\events\RegisterUserPermissionsEvent;
+use craft\helpers\Html;
+use craft\services\Dashboard;
 use craft\services\Gc;
 use craft\services\UserPermissions;
 use craft\web\Application as WebApplication;
 use craft\web\Request as WebRequest;
 use craft\web\Response;
+use craft\web\twig\variables\CraftVariable;
 use craft\web\UrlManager;
 use craft\web\View;
 use yii\base\Event;
@@ -58,6 +71,7 @@ class Plugin extends BasePlugin
     public const EDITION_PRO = 'pro';
 
     public const PERMISSION_VIEW = 'craftAnalytics:view';
+    public const PERMISSION_VIEW_ALL_SITES = 'craftAnalytics:viewAllSites';
     public const PERMISSION_EXPORT = 'craftAnalytics:export';
     public const PERMISSION_MANAGE_SETTINGS = 'craftAnalytics:manageSettings';
 
@@ -67,6 +81,9 @@ class Plugin extends BasePlugin
 
     private ?WriterInterface $writer = null;
     private ?UniqueCounterInterface $uniqueCounter = null;
+
+    /** @var array<int,array<int,int>>|null siteId => elementId => views */
+    private ?array $indexViews = null;
 
     public static function editions(): array
     {
@@ -94,6 +111,7 @@ class Plugin extends BasePlugin
                 'channels' => ChannelClassifier::class,
                 'deviceParser' => DeviceParser::class,
                 'rollupSink' => DbRollupSink::class,
+                'stats' => StatsService::class,
             ],
         ];
     }
@@ -228,16 +246,36 @@ class Plugin extends BasePlugin
         };
     }
 
+    public function getStats(): StatsService
+    {
+        /** @var StatsService */
+        return $this->get('stats');
+    }
+
     /**
      * @return array<string,mixed>|null
      */
     public function getCpNavItem(): ?array
     {
+        if (!Craft::$app->getUser()->checkPermission(self::PERMISSION_VIEW)) {
+            return null;
+        }
+
         $item = parent::getCpNavItem();
 
-        if ($item !== null) {
-            $item['label'] = Craft::t('craft-analytics', 'Analytics');
+        if ($item === null) {
+            return null;
         }
+
+        $item['label'] = Craft::t('craft-analytics', 'Analytics');
+        $item['icon'] = '@coyshdigital/craftanalytics/resources/icon-mask.svg';
+        $item['subnav'] = [
+            'dashboard' => ['label' => Craft::t('craft-analytics', 'Dashboard'), 'url' => 'craft-analytics'],
+            'realtime' => ['label' => Craft::t('craft-analytics', 'Real-time'), 'url' => 'craft-analytics/realtime'],
+            'pages' => ['label' => Craft::t('craft-analytics', 'Pages'), 'url' => 'craft-analytics/pages'],
+            'sources' => ['label' => Craft::t('craft-analytics', 'Sources'), 'url' => 'craft-analytics/sources'],
+            'devices' => ['label' => Craft::t('craft-analytics', 'Devices'), 'url' => 'craft-analytics/devices'],
+        ];
 
         return $item;
     }
@@ -359,6 +397,107 @@ class Plugin extends BasePlugin
         );
     }
 
+    /**
+     * Traffic where the content is.
+     *
+     * Stats in the entry editor and a views column on the entries index are
+     * the things a generic analytics tool structurally cannot do: it has no
+     * idea what an entry is.
+     */
+    private function attachElementIntegration(): void
+    {
+        Event::on(
+            Entry::class,
+            Entry::EVENT_DEFINE_SIDEBAR_HTML,
+            function(DefineHtmlEvent $event) {
+                $entry = $event->sender;
+
+                if (!$entry instanceof Entry || !$entry->id || $entry->siteId === null) {
+                    return;
+                }
+
+                if (!Craft::$app->getUser()->checkPermission(self::PERMISSION_VIEW)) {
+                    return;
+                }
+
+                try {
+                    $range = DateRange::fromPreset(DateRange::PRESET_30_DAYS);
+                    $stats = $this->getStats()->elementStats($entry->siteId, $entry->id, $range);
+
+                    Craft::$app->getView()->registerAssetBundle(CpAsset::class);
+
+                    $event->html .= Craft::$app->getView()->renderTemplate('craft-analytics/_partials/sidebar.twig', [
+                        'stats' => $stats,
+                        'entry' => $entry,
+                    ]);
+                } catch (\Throwable $e) {
+                    // Never take the entry editor down over a stats panel.
+                    Craft::warning('craft-analytics sidebar failed: ' . $e->getMessage(), __METHOD__);
+                }
+            },
+        );
+
+        Event::on(
+            Entry::class,
+            Entry::EVENT_REGISTER_TABLE_ATTRIBUTES,
+            static function(RegisterElementTableAttributesEvent $event) {
+                $event->tableAttributes['craftAnalyticsViews'] = [
+                    'label' => Craft::t('craft-analytics', 'Views (30d)'),
+                ];
+            },
+        );
+
+        Event::on(
+            Entry::class,
+            Entry::EVENT_DEFINE_ATTRIBUTE_HTML,
+            function(DefineAttributeHtmlEvent $event) {
+                if ($event->attribute !== 'craftAnalyticsViews') {
+                    return;
+                }
+
+                $entry = $event->sender;
+
+                if (!$entry instanceof Entry || !$entry->id || $entry->siteId === null) {
+                    return;
+                }
+
+                if (!Craft::$app->getUser()->checkPermission(self::PERMISSION_VIEW)) {
+                    $event->html = '';
+                    return;
+                }
+
+                $views = $this->elementIndexViews($entry->siteId, $entry->id);
+                $event->html = $views === 0
+                    ? '<span class="light">—</span>'
+                    : Html::encode(Craft::$app->getFormatter()->asDecimal($views, 0));
+            },
+        );
+    }
+
+    /**
+     * Views for one entry on an element index.
+     *
+     * Craft renders index rows one at a time, so this is memoised per request
+     * to keep a 100-row page to one query rather than a hundred.
+     */
+    private function elementIndexViews(int $siteId, int $elementId): int
+    {
+        $this->indexViews ??= [];
+
+        if (!isset($this->indexViews[$siteId])) {
+            $this->indexViews[$siteId] = [];
+        }
+
+        if (!array_key_exists($elementId, $this->indexViews[$siteId])) {
+            $range = DateRange::fromPreset(DateRange::PRESET_30_DAYS);
+            $ids = array_slice(array_keys($this->indexViews[$siteId] + [$elementId => 0]), 0, 200);
+            $this->indexViews[$siteId] += $this->getStats()->viewsByElement($siteId, $ids, $range);
+            $this->indexViews[$siteId][$elementId] ??= 0;
+        }
+
+        return $this->indexViews[$siteId][$elementId];
+    }
+
     private function attachEventHandlers(): void
     {
         $this->attachCapture();
@@ -379,8 +518,36 @@ class Plugin extends BasePlugin
             UrlManager::EVENT_REGISTER_CP_URL_RULES,
             static function(RegisterUrlRulesEvent $event) {
                 $event->rules['craft-analytics'] = 'craft-analytics/dashboard/index';
+                $event->rules['craft-analytics/realtime'] = 'craft-analytics/reports/realtime';
+                $event->rules['craft-analytics/realtime-data'] = 'craft-analytics/reports/realtime-data';
+                $event->rules['craft-analytics/pages'] = 'craft-analytics/reports/pages';
+                $event->rules['craft-analytics/sources'] = 'craft-analytics/reports/sources';
+                $event->rules['craft-analytics/devices'] = 'craft-analytics/reports/devices';
+                foreach (['pages', 'sources', 'devices', 'trend'] as $kind) {
+                    $event->rules["craft-analytics/export/$kind"] = "craft-analytics/export/$kind";
+                }
             },
         );
+
+        Event::on(
+            Dashboard::class,
+            Dashboard::EVENT_REGISTER_WIDGET_TYPES,
+            static function(RegisterComponentTypesEvent $event) {
+                $event->types[] = OverviewWidget::class;
+            },
+        );
+
+        Event::on(
+            CraftVariable::class,
+            CraftVariable::EVENT_INIT,
+            static function(Event $event) {
+                /** @var CraftVariable $variable */
+                $variable = $event->sender;
+                $variable->set('craftAnalytics', CraftAnalyticsVariable::class);
+            },
+        );
+
+        $this->attachElementIntegration();
 
         Event::on(
             UserPermissions::class,
@@ -391,9 +558,15 @@ class Plugin extends BasePlugin
                     'permissions' => [
                         self::PERMISSION_VIEW => [
                             'label' => Craft::t('craft-analytics', 'View analytics'),
-                        ],
-                        self::PERMISSION_EXPORT => [
-                            'label' => Craft::t('craft-analytics', 'Export analytics data'),
+                            'info' => Craft::t('craft-analytics', 'Limited to the sites the user can edit, unless “view all sites” is also granted.'),
+                            'nested' => [
+                                self::PERMISSION_VIEW_ALL_SITES => [
+                                    'label' => Craft::t('craft-analytics', 'View analytics for all sites'),
+                                ],
+                                self::PERMISSION_EXPORT => [
+                                    'label' => Craft::t('craft-analytics', 'Export analytics data'),
+                                ],
+                            ],
                         ],
                         self::PERMISSION_MANAGE_SETTINGS => [
                             'label' => Craft::t('craft-analytics', 'Manage plugin settings'),

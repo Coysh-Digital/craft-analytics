@@ -1,0 +1,70 @@
+{# Shared formatting and building blocks. #}
+
+{# Big numbers, short: 1.2k, 3.4M. Exact values stay in the tooltip and the
+   export, so nothing is only ever shown rounded. #}
+{% macro compact(value) %}
+    {%- if value >= 1000000 -%}
+        {{ (value / 1000000)|number_format(value >= 10000000 ? 0 : 1) }}M
+    {%- elseif value >= 1000 -%}
+        {{ (value / 1000)|number_format(value >= 10000 ? 0 : 1) }}k
+    {%- else -%}
+        {{ value|number_format }}
+    {%- endif -%}
+{% endmacro %}
+
+{% macro duration(ms) %}
+    {%- set seconds = (ms / 1000)|round -%}
+    {%- if seconds >= 3600 -%}
+        {{ (seconds // 3600) }}h {{ ((seconds % 3600) // 60) }}m
+    {%- elseif seconds >= 60 -%}
+        {{ (seconds // 60) }}m {{ seconds % 60 }}s
+    {%- else -%}
+        {{ seconds }}s
+    {%- endif -%}
+{% endmacro %}
+
+{# A headline number with an optional change against the previous period. #}
+{% macro kpi(label, value, options) %}
+    {% import _self as ca %}
+    {% set options = options ?? {} %}
+    <div class="ca-kpi">
+        <div class="ca-kpi-label">
+            {{ label }}
+            {% if options.info is defined %}
+                <span data-icon="info" title="{{ options.info }}" class="ca-muted"></span>
+            {% endif %}
+        </div>
+        <div class="ca-kpi-value">{{ options.raw ?? ca.compact(value) }}</div>
+        {% if options.delta is defined and options.delta is not null %}
+            {% set direction = options.delta > 0.5 ? 'up' : (options.delta < -0.5 ? 'down' : 'flat') %}
+            {% set better = options.inverse ?? false ? (direction == 'down' ? 'up' : (direction == 'up' ? 'down' : 'flat')) : direction %}
+            <div class="ca-kpi-sub">
+                <span class="ca-delta {{ better }}">
+                    {{- direction == 'up' ? '↑' : (direction == 'down' ? '↓' : '→') }}
+                    {{ options.delta|abs|number_format(1) }}%
+                </span>
+                {{ 'vs previous'|t('craft-analytics') }}
+            </div>
+        {% elseif options.sub is defined %}
+            <div class="ca-kpi-sub">{{ options.sub }}</div>
+        {% endif %}
+    </div>
+{% endmacro %}
+
+{# A table row whose bar is a background wash; the number is always spelled
+   out beside it, so magnitude is never encoded by length alone. #}
+{% macro barCell(label, value, max, url) %}
+    <td class="ca-bar-cell">
+        <div class="ca-bar-fill" style="width: {{ max > 0 ? (value / max * 100)|round(1) : 0 }}%"></div>
+        <span class="ca-bar-label">
+            {% if url %}<a href="{{ url }}">{{ label }}</a>{% else %}{{ label }}{% endif %}
+        </span>
+    </td>
+{% endmacro %}
+
+{% macro empty(title, message) %}
+    <div class="ca-empty">
+        <div class="ca-empty-title">{{ title }}</div>
+        <p>{{ message }}</p>
+    </div>
+{% endmacro %}

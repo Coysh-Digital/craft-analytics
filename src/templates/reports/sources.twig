@@ -1,0 +1,80 @@
+{% extends 'craft-analytics/_layout.twig' %}
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% block report %}
+    <div class="ca-card">
+        <div class="ca-card-head">
+            <h2 class="ca-card-title">{{ 'Channels'|t('craft-analytics') }}</h2>
+        </div>
+        <div class="ca-card-body ca-table-scroll">
+            {% if channels|length %}
+                {% set maxChannel = max(channels|map(c => c.sessions)) %}
+                <table class="ca-table">
+                    <thead>
+                    <tr>
+                        <th>{{ 'Channel'|t('craft-analytics') }}</th>
+                        <th class="ca-num">{{ 'Sessions'|t('craft-analytics') }}</th>
+                        <th class="ca-num">{{ 'Share'|t('craft-analytics') }}</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% set totalSessions = channels|map(c => c.sessions)|reduce((a, b) => a + b, 0) %}
+                    {% for channel in channels %}
+                        <tr>
+                            {{ ca.barCell(channel.channel, channel.sessions, maxChannel, null) }}
+                            <td class="ca-num">{{ channel.sessions|number_format }}</td>
+                            <td class="ca-num ca-muted">{{ totalSessions ? (channel.sessions / totalSessions * 100)|number_format(1) ~ '%' : '—' }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                {{ ca.empty(
+                    'No sessions for this period'|t('craft-analytics'),
+                    'Sessions appear once they have closed — after the inactivity window has passed and the drain has run.'|t('craft-analytics')
+                ) }}
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="ca-card">
+        <div class="ca-card-head">
+            <h2 class="ca-card-title">{{ 'Referrers'|t('craft-analytics') }}</h2>
+        </div>
+        <div class="ca-card-body ca-table-scroll">
+            {% set referrers = referrers|filter(r => r.host) %}
+            {% if referrers|length %}
+                {% set maxRef = max(referrers|map(r => r.sessions)) %}
+                <table class="ca-table">
+                    <thead>
+                    <tr>
+                        <th>{{ 'Referrer'|t('craft-analytics') }}</th>
+                        <th>{{ 'Channel'|t('craft-analytics') }}</th>
+                        <th class="ca-num">{{ 'Sessions'|t('craft-analytics') }}</th>
+                        <th class="ca-num">{{ 'Bounce rate'|t('craft-analytics') }}</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for referrer in referrers %}
+                        <tr>
+                            {{ ca.barCell(referrer.host, referrer.sessions, maxRef, null) }}
+                            <td class="ca-muted">{{ referrer.channel }}</td>
+                            <td class="ca-num">{{ referrer.sessions|number_format }}</td>
+                            <td class="ca-num ca-muted">{{ referrer.bounceRate|number_format(1) }}%</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                {{ ca.empty(
+                    'No referrers for this period'|t('craft-analytics'),
+                    'Only the referrer’s host is ever stored — never the full URL, which can carry search terms.'|t('craft-analytics')
+                ) }}
+            {% endif %}
+        </div>
+    </div>
+
+    <p class="ca-footnote">
+        {{ 'Only the referring host is stored, never the full referrer URL.'|t('craft-analytics') }}
+    </p>
+{% endblock %}

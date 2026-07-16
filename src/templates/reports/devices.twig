@@ -1,0 +1,63 @@
+{% extends 'craft-analytics/_layout.twig' %}
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% macro deviceTable(title, rows, emptyMessage) %}
+    {% import 'craft-analytics/_partials/macros.twig' as ca %}
+    <div class="ca-card">
+        <div class="ca-card-head">
+            <h2 class="ca-card-title">{{ title }}</h2>
+        </div>
+        <div class="ca-card-body ca-table-scroll">
+            {% if rows|length %}
+                {% set maxSessions = max(rows|map(r => r.sessions)) %}
+                {% set total = rows|map(r => r.sessions)|reduce((a, b) => a + b, 0) %}
+                <table class="ca-table">
+                    <thead>
+                    <tr>
+                        <th>{{ title }}</th>
+                        <th class="ca-num">{{ 'Sessions'|t('craft-analytics') }}</th>
+                        <th class="ca-num">{{ 'Share'|t('craft-analytics') }}</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for row in rows %}
+                        <tr>
+                            {{ ca.barCell(row.label, row.sessions, maxSessions, null) }}
+                            <td class="ca-num">{{ row.sessions|number_format }}</td>
+                            <td class="ca-num ca-muted">{{ total ? (row.sessions / total * 100)|number_format(1) ~ '%' : '—' }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                {{ ca.empty('Nothing yet'|t('craft-analytics'), emptyMessage) }}
+            {% endif %}
+        </div>
+    </div>
+{% endmacro %}
+
+{% block report %}
+    {% import _self as tables %}
+
+    {{ tables.deviceTable(
+        'Device type'|t('craft-analytics'),
+        deviceTypes,
+        'Sessions appear once they have closed and the drain has run.'|t('craft-analytics')
+    ) }}
+
+    {{ tables.deviceTable(
+        'Browser'|t('craft-analytics'),
+        browsers,
+        'Sessions appear once they have closed and the drain has run.'|t('craft-analytics')
+    ) }}
+
+    {{ tables.deviceTable(
+        'Operating system'|t('craft-analytics'),
+        operatingSystems,
+        'Sessions appear once they have closed and the drain has run.'|t('craft-analytics')
+    ) }}
+
+    <p class="ca-footnote">
+        {{ 'Derived from the user-agent string and stored only as a browser name and major version — never a full version string, and never a device fingerprint.'|t('craft-analytics') }}
+    </p>
+{% endblock %}

@@ -26,3 +26,11 @@
 - Beacon endpoint at a configurable first-party path: anonymous, CSRF-exempt, rate-limited per visitor, bot- and GPC-filtered, always 204.
 - Automatic tracker injection (`injectScript`), full-page-cache detection and a CP warning when `trackingMode` is `server`.
 - CI job and test enforcing the 2 KB gzipped tracker budget (C3).
+- Control panel: dashboard with KPI tiles and a traffic chart, plus Pages, Sources, Devices and Real-time screens.
+- Real-time visitors, read entirely from the session cache — no database queries.
+- Entry editor sidebar stats with a sparkline, and a “Views (30d)” column on the entries index.
+- A dashboard widget for Craft's own dashboard.
+- CSV and JSON export for every report, carrying exact values and stating the uniques accuracy.
+- Granular permissions: view / view all sites / export / manage settings, enforced at the controller layer and scoped per site.
+- `craft.craftAnalytics` Twig variable.
+- `craft-analytics/seed/run` console command for generating realistic development data (dev mode only).

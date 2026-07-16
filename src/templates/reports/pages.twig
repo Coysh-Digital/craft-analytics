@@ -1,0 +1,49 @@
+{% extends 'craft-analytics/_layout.twig' %}
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% block report %}
+    <div class="ca-card">
+        <div class="ca-card-head">
+            <h2 class="ca-card-title">{{ 'Pages'|t('craft-analytics') }}</h2>
+            <span class="ca-muted">{{ '{count} pages'|t('craft-analytics', { count: pages|length }) }}</span>
+        </div>
+        <div class="ca-card-body ca-table-scroll">
+            {% if pages|length %}
+                {% set maxViews = max(pages|map(p => p.views)) %}
+                <table class="ca-table">
+                    <thead>
+                    <tr>
+                        <th>{{ 'Page'|t('craft-analytics') }}</th>
+                        <th class="ca-num">{{ 'Views'|t('craft-analytics') }}</th>
+                        <th class="ca-num">{{ 'Entrances'|t('craft-analytics') }}</th>
+                        <th class="ca-num">{{ 'Exits'|t('craft-analytics') }}</th>
+                        <th class="ca-num">{{ 'Bounce rate'|t('craft-analytics') }}</th>
+                        <th class="ca-num">{{ 'Avg. time'|t('craft-analytics') }}</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for page in pages %}
+                        <tr>
+                            {{ ca.barCell(page.path, page.views, maxViews, page.elementId ? cpUrl('entries/' ~ page.elementId) : null) }}
+                            <td class="ca-num">{{ page.views|number_format }}</td>
+                            <td class="ca-num ca-muted">{{ page.entrances|number_format }}</td>
+                            <td class="ca-num ca-muted">{{ page.exits|number_format }}</td>
+                            <td class="ca-num ca-muted">{{ page.entrances ? page.bounceRate|number_format(1) ~ '%' : '—' }}</td>
+                            <td class="ca-num ca-muted">{{ page.avgDwellMs ? ca.duration(page.avgDwellMs) : '—' }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                {{ ca.empty(
+                    'No pages for this period'|t('craft-analytics'),
+                    'Once the site has traffic and the drain has run, it appears here.'|t('craft-analytics')
+                ) }}
+            {% endif %}
+        </div>
+    </div>
+
+    <p class="ca-footnote">
+        {{ 'Time on page needs the beacon, so it is blank in server-only tracking mode. “__other__” is where values beyond the daily cardinality cap are folded — no views are lost.'|t('craft-analytics') }}
+    </p>
+{% endblock %}

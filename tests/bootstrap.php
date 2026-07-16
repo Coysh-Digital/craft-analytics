@@ -28,7 +28,17 @@ Craft::$app = new class {
 
     public function getI18n(): yii\i18n\I18N
     {
-        return $this->i18n ??= new yii\i18n\I18N();
+        // The plugin's own category has to be registered here; in a real app
+        // Craft does it from the plugin's translations directory.
+        return $this->i18n ??= new yii\i18n\I18N([
+            'translations' => [
+                'craft-analytics' => [
+                    'class' => yii\i18n\PhpMessageSource::class,
+                    'basePath' => dirname(__DIR__) . '/src/translations',
+                    'sourceLanguage' => 'en-US',
+                ],
+            ],
+        ]);
     }
 
     public function getConfig(): object
