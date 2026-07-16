@@ -678,6 +678,36 @@ class StatsService extends Component
     }
 
     /**
+     * The most-viewed elements, highest first.
+     *
+     * Rows with no element are skipped: a template-only route got views, but
+     * it is not a thing you can put in a "most read" list.
+     *
+     * @return array<int,int> elementId => views, in view order
+     */
+    public function topElements(int $siteId, DateRange $range, int $limit = 20): array
+    {
+        $rows = (new Query())
+            ->select(['elementId', 'views' => 'SUM([[views]])'])
+            ->from(Table::PAGES_ROLLUP)
+            ->where(['siteId' => $siteId])
+            ->andWhere(['not', ['elementId' => null]])
+            ->andWhere(['between', 'date', $range->from, $range->to])
+            ->groupBy('elementId')
+            ->orderBy(['views' => SORT_DESC])
+            ->limit($limit)
+            ->all($this->db());
+
+        $views = [];
+
+        foreach ($rows as $row) {
+            $views[(int)$row['elementId']] = (int)$row['views'];
+        }
+
+        return $views;
+    }
+
+    /**
      * Views per element for a set of elements — one query for a whole element
      * index page, rather than one per row.
      *
