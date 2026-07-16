@@ -3,6 +3,7 @@
 namespace coyshdigital\craftanalytics;
 
 use coyshdigital\craftanalytics\assets\CpAsset;
+use coyshdigital\craftanalytics\gql\AnalyticsQuery;
 use coyshdigital\craftanalytics\ingest\CaptureService;
 use coyshdigital\craftanalytics\ingest\NonceRegistry;
 use coyshdigital\craftanalytics\ingest\ScriptInjector;
@@ -49,11 +50,14 @@ use craft\events\DefineHtmlEvent;
 use craft\events\RebuildConfigEvent;
 use craft\events\RegisterComponentTypesEvent;
 use craft\events\RegisterElementTableAttributesEvent;
+use craft\events\RegisterGqlQueriesEvent;
+use craft\events\RegisterGqlSchemaComponentsEvent;
 use craft\events\RegisterUrlRulesEvent;
 use craft\events\RegisterUserPermissionsEvent;
 use craft\helpers\Html;
 use craft\services\Dashboard;
 use craft\services\Gc;
+use craft\services\Gql as GqlService;
 use craft\services\ProjectConfig;
 use craft\services\UserPermissions;
 use craft\web\Application as WebApplication;
@@ -625,6 +629,35 @@ class Plugin extends BasePlugin
         );
     }
 
+    /**
+     * The GraphQL queries, behind a schema scope of their own.
+     *
+     * Off unless a schema deliberately grants it: the numbers expose nobody,
+     * but they are the site's business rather than the internet's.
+     */
+    private function attachGql(): void
+    {
+        Event::on(
+            GqlService::class,
+            GqlService::EVENT_REGISTER_GQL_SCHEMA_COMPONENTS,
+            static function(RegisterGqlSchemaComponentsEvent $event) {
+                $event->queries[Craft::t('craft-analytics', 'Analytics')] = [
+                    AnalyticsQuery::SCOPE . ':read' => [
+                        'label' => Craft::t('craft-analytics', 'Read traffic reports'),
+                    ],
+                ];
+            },
+        );
+
+        Event::on(
+            GqlService::class,
+            GqlService::EVENT_REGISTER_GQL_QUERIES,
+            static function(RegisterGqlQueriesEvent $event) {
+                $event->queries = array_merge($event->queries, AnalyticsQuery::getQueries());
+            },
+        );
+    }
+
     private function attachEventHandlers(): void
     {
         $this->attachCapture();
@@ -635,6 +668,7 @@ class Plugin extends BasePlugin
         // if it isn't there.
         FormieIntegration::attach();
         CommerceIntegration::attach();
+        $this->attachGql();
 
         // Craft's GC is a convenience, not the guarantee — the console
         // command is what a site should schedule (see GcController).
