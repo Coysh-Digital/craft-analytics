@@ -28,8 +28,8 @@
                             <td class="ca-num">{{ page.views|number_format }}</td>
                             <td class="ca-num ca-muted">{{ page.entrances|number_format }}</td>
                             <td class="ca-num ca-muted">{{ page.exits|number_format }}</td>
-                            <td class="ca-num ca-muted">{{ page.entrances ? page.bounceRate|number_format(1) ~ '%' : '—' }}</td>
-                            <td class="ca-num ca-muted">{{ page.avgDwellMs ? ca.duration(page.avgDwellMs) : '—' }}</td>
+                            <td class="ca-num ca-muted">{{ page.entrances ? page.bounceRate|number_format(1) ~ '%' : '-' }}</td>
+                            <td class="ca-num ca-muted">{{ page.avgDwellMs ? ca.duration(page.avgDwellMs) : '-' }}</td>
                         </tr>
                     {% endfor %}
                     </tbody>
@@ -44,6 +44,6 @@
     </div>
 
     <p class="ca-footnote">
-        {{ 'Time on page needs the beacon, so it is blank in server-only tracking mode. “__other__” is where values beyond the daily cardinality cap are folded — no views are lost.'|t('craft-analytics') }}
+        {{ 'Time on page needs the beacon, so it is blank in server-only tracking mode. “__other__” is where values beyond the daily cardinality cap are folded - no views are lost.'|t('craft-analytics') }}
     </p>
 {% endblock %}

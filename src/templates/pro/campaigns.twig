@@ -35,8 +35,8 @@
                         {% for row in campaigns %}
                             <tr>
                                 {{ ca.barCell(row.source, row.sessions, maxSessions, null) }}
-                                <td class="ca-muted">{{ row.medium ?: '—' }}</td>
-                                <td class="ca-muted">{{ row.campaign ?: '—' }}</td>
+                                <td class="ca-muted">{{ row.medium ?: '-' }}</td>
+                                <td class="ca-muted">{{ row.campaign ?: '-' }}</td>
                                 <td class="ca-num">{{ row.sessions|number_format(row.sessions == row.sessions|round ? 0 : 1) }}</td>
                                 <td class="ca-num ca-muted">{{ row.bounceRate|number_format(1) }}%</td>
                             </tr>
@@ -53,9 +53,9 @@
         </div>
 
         <p class="ca-footnote">
-            {{ 'Attribution is within a session. Cross-session windows are not offered for anonymous visitors because the visitor salt rotates daily and destroys the link between visits — that is the privacy trade, and inventing an answer would be dishonest. Consented visitors keep a durable identifier and can be followed across sessions.'|t('craft-analytics') }}
+            {{ 'Attribution is within a session. Cross-session windows are not offered for anonymous visitors because the visitor salt rotates daily and destroys the link between visits - that is the privacy trade, and inventing an answer would be dishonest. Consented visitors keep a durable identifier and can be followed across sessions.'|t('craft-analytics') }}
             {% if model.value == 'linear' %}
-                {{ 'Linear attribution splits one session between its touches, so session counts can be fractional — the total still sums to the sessions you actually had.'|t('craft-analytics') }}
+                {{ 'Linear attribution splits one session between its touches, so session counts can be fractional - the total still sums to the sessions you actually had.'|t('craft-analytics') }}
             {% endif %}
         </p>
     {% endif %}

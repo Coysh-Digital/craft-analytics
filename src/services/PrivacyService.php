@@ -130,11 +130,11 @@ class PrivacyService extends Component
         $consentAvailable = $settings->enableConsent && $this->isPro();
 
         if ($consentAvailable) {
-            $warnings[] = Craft::t('craft-analytics', 'Consented tracking is enabled, so this site sets a first-party cookie for visitors who agree. That requires a consent mechanism and a privacy notice entry — the banner-free posture no longer applies.');
+            $warnings[] = Craft::t('craft-analytics', 'Consented tracking is enabled, so this site sets a first-party cookie for visitors who agree. That requires a consent mechanism and a privacy notice entry - the banner-free posture no longer applies.');
         }
 
         if ($settings->enableJourneys && $consentAvailable) {
-            $warnings[] = Craft::t('craft-analytics', 'The raw journeys layer is enabled. Individual page-by-page histories are stored for consented visitors — this is personal data, subject to access and erasure requests.');
+            $warnings[] = Craft::t('craft-analytics', 'The raw journeys layer is enabled. Individual page-by-page histories are stored for consented visitors - this is personal data, subject to access and erasure requests.');
         }
 
         if ($settings->associateUserId && $consentAvailable) {
@@ -176,12 +176,12 @@ class PrivacyService extends Component
         $consentAvailable = $settings->enableConsent && $this->isPro();
 
         return [
-            Craft::t('craft-analytics', 'IP addresses stored') => Craft::t('craft-analytics', 'Never — hashed in memory and discarded'),
+            Craft::t('craft-analytics', 'IP addresses stored') => Craft::t('craft-analytics', 'Never - hashed in memory and discarded'),
             Craft::t('craft-analytics', 'Cookies set') => $consentAvailable
                 ? Craft::t('craft-analytics', 'One, for consenting visitors only ({name})', ['name' => $settings->consentCookieName])
                 : Craft::t('craft-analytics', 'None'),
             Craft::t('craft-analytics', 'Device storage used') => Craft::t('craft-analytics', 'None'),
-            Craft::t('craft-analytics', 'Data leaves the site') => Craft::t('craft-analytics', 'Never — no third party receives anything'),
+            Craft::t('craft-analytics', 'Data leaves the site') => Craft::t('craft-analytics', 'Never - no third party receives anything'),
             Craft::t('craft-analytics', 'Visitor salt rotation') => Craft::t('craft-analytics', 'Every {hours} hours, destroying the previous salt', [
                 'hours' => round($settings->saltRotationInterval / 3600, 1),
             ]),

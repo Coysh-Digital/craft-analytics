@@ -14,7 +14,7 @@
             {{ ca.kpi('Pageviews'|t('craft-analytics'), totals.views, { delta: deltas.views }) }}
             {{ ca.kpi('Unique visitors'|t('craft-analytics'), totals.uniques, {
                 delta: deltas.uniques,
-                info: 'Estimated to within %s. Because the visitor salt rotates daily, a visitor returning on another day counts once per day — a deliberate privacy property.'|t('craft-analytics', [uniquesAccuracy]),
+                info: 'Estimated to within %s. Because the visitor salt rotates daily, a visitor returning on another day counts once per day - a deliberate privacy property.'|t('craft-analytics', [uniquesAccuracy]),
             }) }}
             {{ ca.kpi('Sessions'|t('craft-analytics'), totals.sessions, { delta: deltas.sessions }) }}
             {{ ca.kpi('Bounce rate'|t('craft-analytics'), totals.bounceRate, {
@@ -50,7 +50,7 @@
                         <tr>
                             {{ ca.barCell(page.path, page.views, maxViews, page.elementId ? cpUrl('entries/' ~ page.elementId) : null) }}
                             <td class="ca-num">{{ page.views|number_format }}</td>
-                            <td class="ca-num ca-muted">{{ page.avgDwellMs ? ca.duration(page.avgDwellMs) : '—' }}</td>
+                            <td class="ca-num ca-muted">{{ page.avgDwellMs ? ca.duration(page.avgDwellMs) : '-' }}</td>
                         </tr>
                     {% endfor %}
                     </tbody>

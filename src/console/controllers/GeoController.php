@@ -85,7 +85,7 @@ class GeoController extends Controller
 
         $this->stdout("Geolocation database\n", Console::FG_GREEN);
         $this->stdout('  path:  ' . $info['path'] . "\n");
-        $this->stdout('  type:  ' . ($info['type'] ?? 'unreadable — the file may be corrupt') . "\n");
+        $this->stdout('  type:  ' . ($info['type'] ?? 'unreadable - the file may be corrupt') . "\n");
         $this->stdout('  built: ' . ($info['buildDate'] ?? 'unknown') . "\n");
         $this->stdout('  size:  ' . self::formatBytes($info['sizeBytes']) . "\n");
 
@@ -205,10 +205,10 @@ class GeoController extends Controller
     private function printSources(): void
     {
         $this->stdout("Where to get one:\n\n");
-        $this->stdout("  DB-IP Lite (recommended) — free, CC BY 4.0, redistributable:\n");
+        $this->stdout("  DB-IP Lite (recommended) - free, CC BY 4.0, redistributable:\n");
         $this->stdout("    https://db-ip.com/db/download/ip-to-city-lite\n");
         $this->stdout("    Attribution to DB-IP is required, and the CP shows it for you.\n\n");
-        $this->stdout("  MaxMind GeoLite2 — free with an account, under MaxMind's own licence:\n");
+        $this->stdout("  MaxMind GeoLite2 - free with an account, under MaxMind's own licence:\n");
         $this->stdout("    https://dev.maxmind.com/geoip/geolite2-free-geolocation-data\n");
         $this->stdout("    We can read the file, but we can't ship it for you.\n\n");
         $this->stdout("Both are monthly releases. Re-run this command to update; nothing\n");

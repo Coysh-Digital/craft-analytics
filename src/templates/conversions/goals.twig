@@ -5,7 +5,7 @@
     {% if not isPro %}
         {% include 'craft-analytics/_partials/pro-gate.twig' with {
             title: 'Goals'|t('craft-analytics'),
-            description: 'Count what matters: a page reached, an event fired, an entry read, a session that lasted, a page read to the bottom — each with a value, so a report can say what the traffic was worth.'|t('craft-analytics')
+            description: 'Count what matters: a page reached, an event fired, an entry read, a session that lasted, a page read to the bottom - each with a value, so a report can say what the traffic was worth.'|t('craft-analytics')
         } only %}
     {% else %}
         {% set totalConversions = goals|length ? goals|reduce((sum, g) => sum + g.conversions, 0) : 0 %}
@@ -54,7 +54,7 @@
                                 <td class="ca-muted">{{ goal.type|t('craft-analytics') }}</td>
                                 <td class="ca-num">{{ goal.conversions|number_format }}</td>
                                 <td class="ca-num ca-muted">{{ goal.rate|number_format(2) }}%</td>
-                                <td class="ca-num ca-muted">{{ goal.value ? goal.value|currency : '—' }}</td>
+                                <td class="ca-num ca-muted">{{ goal.value ? goal.value|currency : '-' }}</td>
                             </tr>
                         {% endfor %}
                         </tbody>
@@ -62,7 +62,7 @@
                 {% else %}
                     {{ ca.empty(
                         'No goals yet'|t('craft-analytics'),
-                        'A goal names something worth counting — a page reached, an event fired, a session that lasted. Add one and it starts counting from the next visit.'|t('craft-analytics')
+                        'A goal names something worth counting - a page reached, an event fired, a session that lasted. Add one and it starts counting from the next visit.'|t('craft-analytics')
                     ) }}
                     {% if canManage %}
                         <p style="margin-top: 12px">
@@ -76,7 +76,7 @@
         </div>
 
         <p class="ca-footnote">
-            {{ 'A goal converts once per session, so the rate is conversions ÷ sessions — somebody who reloads the thank-you page three times converted once. Goals start counting when you add them; they are not applied retrospectively, because the pageviews they would have matched are already aggregated away.'|t('craft-analytics') }}
+            {{ 'A goal converts once per session, so the rate is conversions ÷ sessions - somebody who reloads the thank-you page three times converted once. Goals start counting when you add them; they are not applied retrospectively, because the pageviews they would have matched are already aggregated away.'|t('craft-analytics') }}
         </p>
     {% endif %}
 {% endblock %}

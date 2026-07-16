@@ -5,7 +5,7 @@
     {% if not isPro %}
         {% include 'craft-analytics/_partials/pro-gate.twig' with {
             title: 'Funnels'|t('craft-analytics'),
-            description: 'Put goals in order and see where people leave: how many landed, how many reached the basket, how many actually checked out — and the drop between each.'|t('craft-analytics')
+            description: 'Put goals in order and see where people leave: how many landed, how many reached the basket, how many actually checked out - and the drop between each.'|t('craft-analytics')
         } only %}
     {% elseif funnels|length == 0 %}
         <div class="ca-card">
@@ -46,7 +46,7 @@
                 sub: steps|length ? steps[steps|length - 1].name : ''
             }) }}
             {{ ca.kpi('Completion rate'|t('craft-analytics'), 0, {
-                raw: first ? (last / first * 100)|number_format(1) ~ '%' : '—',
+                raw: first ? (last / first * 100)|number_format(1) ~ '%' : '-',
                 sub: 'Of the sessions that reached step 1'|t('craft-analytics')
             }) }}
         </div>
@@ -108,7 +108,7 @@
                                 <td>{{ step.position }}. {{ step.name }}</td>
                                 <td class="ca-num">{{ step.sessions|number_format }}</td>
                                 <td class="ca-num">{{ step.ofFirst|number_format(1) }}%</td>
-                                <td class="ca-num">{{ loop.first ? '—' : step.dropOff|number_format }}</td>
+                                <td class="ca-num">{{ loop.first ? '-' : step.dropOff|number_format }}</td>
                             </tr>
                         {% endfor %}
                         </tbody>
@@ -123,7 +123,7 @@
         </div>
 
         <p class="ca-footnote">
-            {{ 'Funnels are measured within a session, and steps must happen in order — reaching step 3 before step 2 doesn’t count as step 3. There is no cross-session funnel: the visitor hash is destroyed when the salt rotates each day, so a purchase decided over three visits is three sessions, and this reports each of them honestly rather than stitching them together.'|t('craft-analytics') }}
+            {{ 'Funnels are measured within a session, and steps must happen in order - reaching step 3 before step 2 doesn’t count as step 3. There is no cross-session funnel: the visitor hash is destroyed when the salt rotates each day, so a purchase decided over three visits is three sessions, and this reports each of them honestly rather than stitching them together.'|t('craft-analytics') }}
         </p>
     {% endif %}
 {% endblock %}

@@ -33,7 +33,7 @@
                             <tr>
                                 {{ ca.barCell(row.name, row.count, maxCount, null) }}
                                 <td class="ca-num">{{ row.count|number_format }}</td>
-                                <td class="ca-num ca-muted">{{ row.value ? row.value|number_format(2) : '—' }}</td>
+                                <td class="ca-num ca-muted">{{ row.value ? row.value|number_format(2) : '-' }}</td>
                             </tr>
                         {% endfor %}
                         </tbody>
@@ -97,7 +97,7 @@
                                 <tr>
                                     {{ ca.barCell(row.term, row.count, maxSearch, null) }}
                                     <td class="ca-num">{{ row.count|number_format }}</td>
-                                    <td class="ca-num ca-muted">{{ row.zeroResults ?: '—' }}</td>
+                                    <td class="ca-num ca-muted">{{ row.zeroResults ?: '-' }}</td>
                                 </tr>
                             {% endfor %}
                             </tbody>
@@ -105,7 +105,7 @@
                     {% else %}
                         {{ ca.empty(
                             'No searches for this period'|t('craft-analytics'),
-                            'Searches are read from the URL of your search page — no JavaScript needed.'|t('craft-analytics')
+                            'Searches are read from the URL of your search page - no JavaScript needed.'|t('craft-analytics')
                         ) }}
                     {% endif %}
                 </div>

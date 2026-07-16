@@ -15,7 +15,7 @@
                     <div>
                         <div class="ca-posture-title">{{ 'No geolocation database installed'|t('craft-analytics') }}</div>
                         <p class="ca-posture-body">
-                            {{ 'Locations are resolved from a database on this server — nothing is ever sent to a lookup service. Install one, and nothing downloads on its own:'|t('craft-analytics') }}
+                            {{ 'Locations are resolved from a database on this server - nothing is ever sent to a lookup service. Install one, and nothing downloads on its own:'|t('craft-analytics') }}
                         </p>
                         <pre class="ca-code" style="margin-top: 10px">php craft craft-analytics/geo/install --url=&lt;db-ip lite url&gt;
 php craft craft-analytics/geo/status</pre>
@@ -50,7 +50,7 @@ php craft craft-analytics/geo/status</pre>
                             <tr>
                                 {{ ca.barCell(row.country, row.sessions, maxSessions, null) }}
                                 <td class="ca-num">{{ row.sessions|number_format }}</td>
-                                <td class="ca-num ca-muted">{{ total ? (row.sessions / total * 100)|number_format(1) ~ '%' : '—' }}</td>
+                                <td class="ca-num ca-muted">{{ total ? (row.sessions / total * 100)|number_format(1) ~ '%' : '-' }}</td>
                             </tr>
                         {% endfor %}
                         </tbody>
@@ -96,7 +96,7 @@ php craft craft-analytics/geo/status</pre>
 
     {% if isPro and database.installed %}
         <p class="ca-footnote">
-            {{ 'Resolved on this server from {type}, built {built}. The address is looked up in memory and discarded — it is never stored, logged, or sent anywhere.'|t('craft-analytics', {
+            {{ 'Resolved on this server from {type}, built {built}. The address is looked up in memory and discarded - it is never stored, logged, or sent anywhere.'|t('craft-analytics', {
                 type: database.type ?? 'a local database',
                 built: database.buildDate ?? 'unknown',
             }) }}

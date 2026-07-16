@@ -100,14 +100,14 @@
 
     <div class="readable" style="margin-top: 24px">
         <blockquote class="note">
-            <p>{{ 'A goal converts once per session — somebody who reloads the thank-you page three times converted once. Goals count from the moment you add them; they can’t be applied to past traffic, because the pageviews they would have matched have already been aggregated into rollups and the individual visits no longer exist.'|t('craft-analytics') }}</p>
+            <p>{{ 'A goal converts once per session - somebody who reloads the thank-you page three times converted once. Goals count from the moment you add them; they can’t be applied to past traffic, because the pageviews they would have matched have already been aggregated into rollups and the individual visits no longer exist.'|t('craft-analytics') }}</p>
         </blockquote>
     </div>
 {% endblock %}
 
 {% js %}
 // The target means something different for every type, so the hint changes
-// with it — the alternative is one vague instruction that fits none of them.
+// with it - the alternative is one vague instruction that fits none of them.
 (function() {
     var hints = {{ types|map(t => { value: t.value, hint: t.hint })|json_encode|raw }};
     var type = document.getElementById('type');

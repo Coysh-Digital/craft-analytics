@@ -49,6 +49,24 @@ class CaptureService extends Component
             return null;
         }
 
+        // A nonce is issued while the page is being rendered, so its absence
+        // means this page was *not* rendered by PHP on this request - it came
+        // out of a full-page cache. Blitz's default setup serves its cache
+        // from inside PHP (it calls send() and exits), which fires the same
+        // event a real render does, so without this check the view is counted
+        // twice: once here, and once by the beacon, whose nonce was baked into
+        // the cached HTML and claimed long ago by whoever generated it.
+        //
+        // Cached pages are left to the beacon, which is what already happens
+        // when a cache is served by nginx and PHP never runs at all. Doing the
+        // same in both cases means the numbers don't depend on how the cache
+        // happens to be wired up.
+        $nonce = Plugin::getInstance()->getScriptInjector()->getPendingNonce();
+
+        if ($nonce === null && $this->isCachedDelivery()) {
+            return null;
+        }
+
         $hit = $this->buildHit($request, $siteId);
 
         $event = new TrackEvent($hit);
@@ -64,13 +82,30 @@ class CaptureService extends Component
         // actually been counted: if it hadn't been, the beacon *should* count
         // it. Deliberately after the flush — this is a cache write, and the
         // visitor is not waiting for it (C1).
-        $nonce = Plugin::getInstance()->getScriptInjector()->getPendingNonce();
-
         if ($nonce !== null) {
             Plugin::getInstance()->getNonces()->record($nonce);
         }
 
         return $event->hit;
+    }
+
+    /**
+     * Whether this response came out of a full-page cache rather than being
+     * rendered now.
+     *
+     * Only meaningful when the tracker is injected by us and the beacon is
+     * available to pick the page up: with `injectScript` off there is no
+     * nonce to be missing, and in server-only mode there is no beacon to hand
+     * the pageview to, so in both cases the server has to count it itself -
+     * and a site running a cache in server-only mode is under-counting
+     * anyway, which the settings screen says plainly.
+     */
+    private function isCachedDelivery(): bool
+    {
+        $settings = $this->settings();
+
+        return $settings->injectScript
+            && $settings->trackingMode === Settings::TRACKING_MODE_HYBRID;
     }
 
     /**

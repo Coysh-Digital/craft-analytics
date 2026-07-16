@@ -23,7 +23,7 @@
                         <tr>
                             {{ ca.barCell(channel.channel, channel.sessions, maxChannel, null) }}
                             <td class="ca-num">{{ channel.sessions|number_format }}</td>
-                            <td class="ca-num ca-muted">{{ totalSessions ? (channel.sessions / totalSessions * 100)|number_format(1) ~ '%' : '—' }}</td>
+                            <td class="ca-num ca-muted">{{ totalSessions ? (channel.sessions / totalSessions * 100)|number_format(1) ~ '%' : '-' }}</td>
                         </tr>
                     {% endfor %}
                     </tbody>
@@ -31,7 +31,7 @@
             {% else %}
                 {{ ca.empty(
                     'No sessions for this period'|t('craft-analytics'),
-                    'Sessions appear once they have closed — after the inactivity window has passed and the drain has run.'|t('craft-analytics')
+                    'Sessions appear once they have closed - after the inactivity window has passed and the drain has run.'|t('craft-analytics')
                 ) }}
             {% endif %}
         </div>
@@ -68,7 +68,7 @@
             {% else %}
                 {{ ca.empty(
                     'No referrers for this period'|t('craft-analytics'),
-                    'Only the referrer’s host is ever stored — never the full URL, which can carry search terms.'|t('craft-analytics')
+                    'Only the referrer’s host is ever stored - never the full URL, which can carry search terms.'|t('craft-analytics')
                 ) }}
             {% endif %}
         </div>

@@ -58,10 +58,10 @@
                     </th>
                     <td>{{ goal.goalType().label()|t('craft-analytics') }}</td>
                     <td class="code">{{ goal.target }}</td>
-                    <td>{{ goal.value ? goal.value|currency : '—' }}</td>
+                    <td>{{ goal.value ? goal.value|currency : '-' }}</td>
                     <td class="light">
                         {%- if goal.siteId -%}
-                            {{ craft.app.sites.getSiteById(goal.siteId).name ?? '—' }}
+                            {{ craft.app.sites.getSiteById(goal.siteId).name ?? '-' }}
                         {%- else -%}
                             {{ 'All sites'|t('craft-analytics') }}
                         {%- endif -%}
@@ -72,7 +72,7 @@
                                role="button"
                                data-ca-delete="{{ actionUrl('craft-analytics/goals/delete') }}"
                                data-ca-uid="{{ goal.uid }}"
-                               data-ca-confirm="{{ 'Delete “{name}”? Its conversions are deleted with it — they only mean anything as that goal’s conversions.'|t('craft-analytics', { name: goal.name }) }}"></a>
+                               data-ca-confirm="{{ 'Delete “{name}”? Its conversions are deleted with it - they only mean anything as that goal’s conversions.'|t('craft-analytics', { name: goal.name }) }}"></a>
                         {% endif %}
                     </td>
                 </tr>
@@ -80,7 +80,7 @@
             </tbody>
         </table>
     {% else %}
-        <p class="light">{{ 'No goals yet. A goal names something worth counting — a page reached, an event fired, a session that lasted.'|t('craft-analytics') }}</p>
+        <p class="light">{{ 'No goals yet. A goal names something worth counting - a page reached, an event fired, a session that lasted.'|t('craft-analytics') }}</p>
     {% endif %}
 
     <hr>
@@ -110,7 +110,7 @@
                     <td class="light">{{ funnel.steps|join(' → ') }}</td>
                     <td class="light">
                         {%- if funnel.siteId -%}
-                            {{ craft.app.sites.getSiteById(funnel.siteId).name ?? '—' }}
+                            {{ craft.app.sites.getSiteById(funnel.siteId).name ?? '-' }}
                         {%- else -%}
                             {{ 'All sites'|t('craft-analytics') }}
                         {%- endif -%}

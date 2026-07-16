@@ -50,10 +50,10 @@
                                 <td class="ca-num">{{ section.views|number_format }}</td>
                                 <td class="ca-num ca-muted">{{ section.entries|number_format }}</td>
                                 <td class="ca-num ca-muted">
-                                    {{ section.entries ? (section.views / section.entries)|number_format(1) : '—' }}
+                                    {{ section.entries ? (section.views / section.entries)|number_format(1) : '-' }}
                                 </td>
                                 <td class="ca-num ca-muted">
-                                    {{ section.avgDwellMs ? ca.duration(section.avgDwellMs) : '—' }}
+                                    {{ section.avgDwellMs ? ca.duration(section.avgDwellMs) : '-' }}
                                 </td>
                             </tr>
                         {% endfor %}
@@ -62,7 +62,7 @@
                 {% else %}
                     {{ ca.empty(
                         'No section traffic for this period'|t('craft-analytics'),
-                        'This counts views of pages that resolved to an entry. Pages that aren’t entries — a template-only route, say — appear under Pages instead.'|t('craft-analytics')
+                        'This counts views of pages that resolved to an entry. Pages that aren’t entries - a template-only route, say - appear under Pages instead.'|t('craft-analytics')
                     ) }}
                 {% endif %}
             </div>
@@ -99,7 +99,7 @@
                                 <td class="ca-num">{{ type.views|number_format }}</td>
                                 <td class="ca-num ca-muted">{{ type.entries|number_format }}</td>
                                 <td class="ca-num ca-muted">
-                                    {{ type.entries ? (type.views / type.entries)|number_format(1) : '—' }}
+                                    {{ type.entries ? (type.views / type.entries)|number_format(1) : '-' }}
                                 </td>
                             </tr>
                         {% endfor %}
@@ -137,7 +137,7 @@
                                 <td class="ca-num">{{ author.views|number_format }}</td>
                                 <td class="ca-num ca-muted">{{ author.entries|number_format }}</td>
                                 <td class="ca-num ca-muted">
-                                    {{ author.entries ? (author.views / author.entries)|number_format(1) : '—' }}
+                                    {{ author.entries ? (author.views / author.entries)|number_format(1) : '-' }}
                                 </td>
                             </tr>
                         {% endfor %}
@@ -153,7 +153,7 @@
         </div>
 
         <p class="ca-footnote">
-            {{ 'Craft allows several authors per entry, and each gets the full view count rather than a share of it — so these views can add up to more than the site’s total where entries are co-authored.'|t('craft-analytics') }}
+            {{ 'Craft allows several authors per entry, and each gets the full view count rather than a share of it - so these views can add up to more than the site’s total where entries are co-authored.'|t('craft-analytics') }}
         </p>
     {% endif %}
 

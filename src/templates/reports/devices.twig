@@ -24,7 +24,7 @@
                         <tr>
                             {{ ca.barCell(row.label, row.sessions, maxSessions, null) }}
                             <td class="ca-num">{{ row.sessions|number_format }}</td>
-                            <td class="ca-num ca-muted">{{ total ? (row.sessions / total * 100)|number_format(1) ~ '%' : '—' }}</td>
+                            <td class="ca-num ca-muted">{{ total ? (row.sessions / total * 100)|number_format(1) ~ '%' : '-' }}</td>
                         </tr>
                     {% endfor %}
                     </tbody>
@@ -58,6 +58,6 @@
     ) }}
 
     <p class="ca-footnote">
-        {{ 'Derived from the user-agent string and stored only as a browser name and major version — never a full version string, and never a device fingerprint.'|t('craft-analytics') }}
+        {{ 'Derived from the user-agent string and stored only as a browser name and major version - never a full version string, and never a device fingerprint.'|t('craft-analytics') }}
     </p>
 {% endblock %}

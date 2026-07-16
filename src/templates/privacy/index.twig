@@ -22,7 +22,7 @@
                     </div>
                     <p class="ca-posture-body">
                         {% if posture.banner %}
-                            {{ 'Consented tracking is on, so visitors who agree get a first-party cookie and a durable identifier. That belongs in your privacy notice, and needs a lawful basis — consent.'|t('craft-analytics') }}
+                            {{ 'Consented tracking is on, so visitors who agree get a first-party cookie and a durable identifier. That belongs in your privacy notice, and needs a lawful basis - consent.'|t('craft-analytics') }}
                         {% else %}
                             {{ 'Analytics stores no cookie, no device storage and no IP address. The visitor salt rotates and the old one is destroyed, so the retained statistics are anonymous.'|t('craft-analytics') }}
                         {% endif %}
@@ -110,7 +110,7 @@
         </div>
         <div class="ca-card-body">
             <p class="ca-muted" style="margin-bottom: 12px">
-                {{ 'Aggregate statistics are anonymous data and are out of scope for access and erasure requests — there is no individual inside a counter or a probabilistic sketch to find or remove. A request touches only the consented journeys layer and the consent log.'|t('craft-analytics') }}
+                {{ 'Aggregate statistics are anonymous data and are out of scope for access and erasure requests - there is no individual inside a counter or a probabilistic sketch to find or remove. A request touches only the consented journeys layer and the consent log.'|t('craft-analytics') }}
             </p>
             <pre class="ca-code">php craft craft-analytics/privacy/export --visitor-id=&lt;id&gt;
 php craft craft-analytics/privacy/erase --visitor-id=&lt;id&gt;
