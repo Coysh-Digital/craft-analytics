@@ -2,13 +2,39 @@
 
 namespace coyshdigital\craftanalytics\controllers;
 
+use coyshdigital\craftanalytics\Plugin;
+use Craft;
 use yii\web\Response;
 
 /**
- * The detail screens: pages, sources and devices.
+ * The detail screens: pages, sources, devices and crawlers.
  */
 class ReportsController extends BaseCpController
 {
+    /**
+     * Crawler activity - what was kept out of every other screen.
+     */
+    public function actionCrawlers(): Response
+    {
+        $site = $this->currentSite();
+        $siteId = $this->siteId($site);
+        $range = $this->range();
+        $settings = Plugin::getInstance()->getSettings();
+
+        return $this->renderTemplate('craft-analytics/reports/crawlers.twig', array_merge(
+            $this->commonVariables($site, $range),
+            [
+                'title' => Craft::t('craft-analytics', 'Crawlers'),
+                'selectedSubnavItem' => 'crawlers',
+                'crawlers' => $this->stats()->crawlers($siteId, $range),
+                'requests' => $this->stats()->crawlerRequests($siteId, $range),
+                'humanViews' => $this->stats()->totals($siteId, $range)['views'],
+                'blocking' => $settings->blockCrawlers,
+                'tracking' => $settings->trackCrawlers,
+            ],
+        ));
+    }
+
     public function actionPages(): Response
     {
         $site = $this->currentSite();

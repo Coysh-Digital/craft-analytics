@@ -1,19 +1,23 @@
 {% import '_includes/forms.twig' as forms %}
 
+{% set isPro = craft.app.plugins.getPlugin('craft-analytics').is('pro') %}
+
 {% if plugin.isFullPageCachingLikely() and settings.trackingMode == 'server' %}
     <div class="readable">
         <blockquote class="note warning">
             <p>
-                {{ 'A full-page caching plugin is installed. Cached pages never reach PHP, so server-side tracking will silently under-count them — the numbers will look plausible and be wrong.'|t('craft-analytics') }}
+                {{ 'A full-page caching plugin is installed. Cached pages never reach PHP, so server-side tracking will silently under-count them - the numbers will look plausible and be wrong.'|t('craft-analytics') }}
                 <strong>{{ 'Switch to hybrid mode'|t('craft-analytics') }}</strong>{{ ': the beacon fills the gap automatically, with no cache configuration needed.'|t('craft-analytics') }}
             </p>
         </blockquote>
     </div>
 {% endif %}
 
+<h2>{{ 'How pageviews are captured'|t('craft-analytics') }}</h2>
+
 {{ forms.selectField({
     label: 'Tracking mode'|t('craft-analytics'),
-    instructions: 'Hybrid (recommended) captures server-side and uses the beacon to fill gaps from full-page caching and the back/forward cache, deduplicated by a one-time nonce.'|t('craft-analytics'),
+    instructions: 'There are two ways to notice a pageview: PHP can record it while building the page, or a small script in the browser can report it. Each misses something the other catches. See the table below.'|t('craft-analytics'),
     id: 'trackingMode',
     name: 'trackingMode',
     options: {
@@ -23,14 +27,49 @@
     },
     value: settings.trackingMode,
     errors: settings.getErrors('trackingMode'),
-    warning: settings.trackingMode == 'server'
-        ? 'Server-side only cannot measure time on page, and under-counts behind any full-page cache.'|t('craft-analytics')
-        : null,
 }) }}
+
+<div class="readable" style="margin: -8px 0 24px">
+    <table class="data fullwidth" style="font-size: 13px">
+        <thead>
+        <tr>
+            <th scope="col">{{ 'Mode'|t('craft-analytics') }}</th>
+            <th scope="col">{{ 'What it does'|t('craft-analytics') }}</th>
+            <th scope="col">{{ 'What it costs you'|t('craft-analytics') }}</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr{{ settings.trackingMode == 'hybrid' ? ' style="background: var(--gray-050)"' : '' }}>
+            <th scope="row" style="white-space: nowrap">
+                {{ 'Hybrid'|t('craft-analytics') }}
+                <div class="light">{{ 'Recommended'|t('craft-analytics') }}</div>
+            </th>
+            <td>{{ 'Both. PHP counts the view, and the tracker reports time on page and scroll depth. When a page is served from a cache and PHP never runs, the tracker notices nobody counted it and counts it itself.'|t('craft-analytics') }}</td>
+            <td>{{ 'A 1.2 KB script, and one small cache entry per view so the two can’t both count the same visit.'|t('craft-analytics') }}</td>
+        </tr>
+        <tr{{ settings.trackingMode == 'server' ? ' style="background: var(--gray-050)"' : '' }}>
+            <th scope="row" style="white-space: nowrap">{{ 'Server-side only'|t('craft-analytics') }}</th>
+            <td>{{ 'PHP counts the view. No JavaScript is added to the page at all, and visitors with a script blocker are still counted.'|t('craft-analytics') }}</td>
+            <td>
+                <strong>{{ 'Under-counts behind any cache'|t('craft-analytics') }}</strong>{{ ': a page served by Blitz, Cloudflare or Varnish never reaches PHP, so it is never counted.'|t('craft-analytics') }}
+                {{ 'Time on page, bounce refinement and scroll depth are impossible - nothing on the server knows when someone left.'|t('craft-analytics') }}
+            </td>
+        </tr>
+        <tr{{ settings.trackingMode == 'client' ? ' style="background: var(--gray-050)"' : '' }}>
+            <th scope="row" style="white-space: nowrap">{{ 'Client beacon only'|t('craft-analytics') }}</th>
+            <td>{{ 'The tracker reports everything. Caching is irrelevant - the script runs whether the HTML came from PHP or from a CDN in another country.'|t('craft-analytics') }}</td>
+            <td>{{ 'Misses anyone with JavaScript off or a blocker installed, which is a real if small share of people, and skews towards the technical end of your audience.'|t('craft-analytics') }}</td>
+        </tr>
+        </tbody>
+    </table>
+    <p class="light" style="font-size: 13px">
+        {{ 'If you are not sure, keep Hybrid. It is the only mode that is correct behind a cache and still counts people who block scripts.'|t('craft-analytics') }}
+    </p>
+</div>
 
 {{ forms.lightswitchField({
     label: 'Inject the tracker automatically'|t('craft-analytics'),
-    instructions: 'Adds the deferred, dependency-free tracker script before </body> on site pages. Turn off to place it yourself.'|t('craft-analytics'),
+    instructions: 'Adds the tracker before </body> on site pages. Turn this off only if you want to place the script yourself.'|t('craft-analytics'),
     id: 'injectScript',
     name: 'injectScript',
     on: settings.injectScript,
@@ -39,30 +78,75 @@
 
 {{ forms.textField({
     label: 'Beacon path'|t('craft-analytics'),
-    instructions: 'First-party site path the tracker posts to.'|t('craft-analytics'),
+    instructions: 'The path on your own domain that the tracker posts to. It is first-party on purpose: no request ever leaves your server, so ad blockers have nothing to block and no third party sees your visitors.'|t('craft-analytics'),
     id: 'beaconPath',
     name: 'beaconPath',
     value: settings.beaconPath,
     errors: settings.getErrors('beaconPath'),
 }) }}
 
+<hr>
+
+<h2>{{ 'How data is written'|t('craft-analytics') }}</h2>
+
 {{ forms.selectField({
     label: 'Write driver'|t('craft-analytics'),
-    instructions: 'How captured hits reach the database. “Direct” is only suitable for low-traffic sites.'|t('craft-analytics'),
+    instructions: 'A pageview has to get from the web request into the database. This is the route it takes. All the work happens after the page has been sent to the visitor, so none of these slow the page down - the difference is what happens under load.'|t('craft-analytics'),
     id: 'writeDriver',
     name: 'writeDriver',
     options: {
         spool: 'Spool (recommended)'|t('craft-analytics'),
-        queue: 'Dedicated queue'|t('craft-analytics'),
-        direct: 'Direct (low traffic only)'|t('craft-analytics'),
+        queue: 'Queue'|t('craft-analytics'),
+        direct: 'Direct (small sites only)'|t('craft-analytics'),
     },
     value: settings.writeDriver,
     errors: settings.getErrors('writeDriver'),
 }) }}
 
+<div class="readable" style="margin: -8px 0 24px">
+    <table class="data fullwidth" style="font-size: 13px">
+        <thead>
+        <tr>
+            <th scope="col">{{ 'Driver'|t('craft-analytics') }}</th>
+            <th scope="col">{{ 'What happens on a pageview'|t('craft-analytics') }}</th>
+            <th scope="col">{{ 'Use it when'|t('craft-analytics') }}</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr{{ settings.writeDriver == 'spool' ? ' style="background: var(--gray-050)"' : '' }}>
+            <th scope="row" style="white-space: nowrap">
+                {{ 'Spool'|t('craft-analytics') }}
+                <div class="light">{{ 'Recommended'|t('craft-analytics') }}</div>
+            </th>
+            <td>{{ 'One line is appended to a file - about 40 microseconds. A scheduled command reads the file every few minutes and folds it into the totals in one go.'|t('craft-analytics') }}</td>
+            <td>{{ 'Always, unless you have a specific reason not to. A thousand views become a handful of database writes instead of a thousand.'|t('craft-analytics') }}</td>
+        </tr>
+        <tr{{ settings.writeDriver == 'queue' ? ' style="background: var(--gray-050)"' : '' }}>
+            <th scope="row" style="white-space: nowrap">{{ 'Queue'|t('craft-analytics') }}</th>
+            <td>{{ 'The pageview is pushed onto Craft’s queue and a worker picks it up.'|t('craft-analytics') }}</td>
+            <td>{{ 'Your web servers have no shared writable disk - containers or a load-balanced setup where each machine’s spool file would be its own. Needs a queue worker that is actually running.'|t('craft-analytics') }}</td>
+        </tr>
+        <tr{{ settings.writeDriver == 'direct' ? ' style="background: var(--gray-050)"' : '' }}>
+            <th scope="row" style="white-space: nowrap">{{ 'Direct'|t('craft-analytics') }}</th>
+            <td>{{ 'The pageview is written to the database there and then, with no scheduled command to run.'|t('craft-analytics') }}</td>
+            <td>
+                <strong>{{ 'Small sites only.'|t('craft-analytics') }}</strong>
+                {{ 'It is the simplest to set up and the first thing to fall over: every view is a database write, and two views at the same instant can race. Fine for a brochure site, wrong for anything busy.'|t('craft-analytics') }}
+            </td>
+        </tr>
+        </tbody>
+    </table>
+    {% if settings.writeDriver in ['spool', 'queue'] %}
+        <p class="light" style="font-size: 13px">
+            {{ 'Both Spool and Queue need this on your cron, or the reports stay empty:'|t('craft-analytics') }}
+        </p>
+        <pre class="ca-code" style="font-size: 12px">*/5 * * * * php craft craft-analytics/drain/run</pre>
+    {% endif %}
+</div>
+
 {{ forms.textField({
     label: 'Session window'|t('craft-analytics'),
-    instructions: 'Seconds of inactivity before a session ends.'|t('craft-analytics'),
+    instructions: 'How long someone can be inactive before their next pageview counts as a new visit. 1800 seconds (30 minutes) is the industry norm, and matching it makes your numbers comparable to everyone else’s.'|t('craft-analytics'),
     id: 'sessionWindow',
     name: 'sessionWindow',
     type: 'number',
@@ -71,16 +155,79 @@
     errors: settings.getErrors('sessionWindow'),
 }) }}
 
+<hr>
+
+<h2>{{ 'Crawlers'|t('craft-analytics') }}</h2>
+
+{{ forms.lightswitchField({
+    label: 'Keep crawlers out of the reports'|t('craft-analytics'),
+    instructions: 'Search engines, monitoring services and scrapers are not visitors. With this off, a site with 400 real visitors and 3,000 bot requests reports 3,400, and every number on every screen is wrong in a way that looks entirely plausible.'|t('craft-analytics'),
+    id: 'blockCrawlers',
+    name: 'blockCrawlers',
+    on: settings.blockCrawlers,
+    errors: settings.getErrors('blockCrawlers'),
+    warning: not settings.blockCrawlers
+        ? 'Crawler traffic is currently being counted as if it were human.'|t('craft-analytics')
+        : null,
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Count crawlers separately'|t('craft-analytics'),
+    instructions: 'Records what was kept out, on its own screen, so that “my server logs say 4,000 requests and this says 400” has an answer. Costs one row per crawler per day - never a row per request.'|t('craft-analytics'),
+    id: 'trackCrawlers',
+    name: 'trackCrawlers',
+    on: settings.trackCrawlers,
+    errors: settings.getErrors('trackCrawlers'),
+}) }}
+
+<hr>
+
+<h2>{{ 'Retention'|t('craft-analytics') }}</h2>
+
+{{ forms.textField({
+    label: 'Keep aggregates for'|t('craft-analytics'),
+    instructions: 'Months of history to keep before the totals are deleted. These are aggregates - counts per page per day - and contain nothing about any individual, so keeping them is cheap and low-risk. 26 months is the usual choice: it lets you compare this month against the same month last year, which 12 months does not. This is also the hard maximum.'|t('craft-analytics'),
+    id: 'rollupRetentionMonths',
+    name: 'rollupRetentionMonths',
+    type: 'number',
+    min: 1,
+    max: 26,
+    size: 4,
+    value: settings.rollupRetentionMonths,
+    errors: settings.getErrors('rollupRetentionMonths'),
+}) }}
+
+{{ forms.textField({
+    label: 'Keep hourly detail for'|t('craft-analytics'),
+    instructions: 'Days before hourly rows are folded into daily ones. Nothing is lost when they are - the totals are identical, you just stop being able to ask what happened at 3pm on a Tuesday last March.'|t('craft-analytics'),
+    id: 'hourlyWindowDays',
+    name: 'hourlyWindowDays',
+    type: 'number',
+    min: 1,
+    size: 4,
+    value: settings.hourlyWindowDays,
+    errors: settings.getErrors('hourlyWindowDays'),
+}) }}
+
+<p class="light">
+    {{ 'Retention is enforced by the same scheduled command that compacts hourly rows:'|t('craft-analytics') }}
+</p>
+<pre class="ca-code" style="font-size: 12px">0 4 * * * php craft craft-analytics/gc/run</pre>
+
+<hr>
+
+<h2>{{ 'Privacy'|t('craft-analytics') }}</h2>
+
 {{ forms.lightswitchField({
     label: 'Honour Global Privacy Control'|t('craft-analytics'),
-    instructions: 'Visitors sending Sec-GPC: 1 are never tracked beyond the anonymous tier.'|t('craft-analytics'),
+    instructions: 'Visitors whose browser sends Sec-GPC: 1 have asked, in a legally recognised way, not to be tracked. With this on they are not counted at all, and nothing a consent tool says can override it.'|t('craft-analytics'),
     id: 'honourGpc',
     name: 'honourGpc',
     on: settings.honourGpc,
     errors: settings.getErrors('honourGpc'),
 }) }}
 
-{% if craft.app.plugins.getPlugin('craft-analytics').is('pro') %}
+{% if isPro %}
     <hr>
 
     <h2>{{ 'Goals & funnels'|t('craft-analytics') }}</h2>
@@ -94,8 +241,56 @@
             {{ 'Manage goals & funnels'|t('craft-analytics') }}
         </a>
     </p>
+
+    <hr>
+
+    <h2>{{ 'Emailed summary'|t('craft-analytics') }}</h2>
+
+    {{ forms.lightswitchField({
+        label: 'Send a summary by email'|t('craft-analytics'),
+        instructions: 'Sent with your own mail settings, from your own server. No third-party email service is involved and there is no tracking pixel in it.'|t('craft-analytics'),
+        id: 'enableScheduledReports',
+        name: 'enableScheduledReports',
+        on: settings.enableScheduledReports,
+        errors: settings.getErrors('enableScheduledReports'),
+        toggle: 'report-settings',
+    }) }}
+
+    <div id="report-settings" class="{{ settings.enableScheduledReports ? '' : 'hidden' }}">
+        {{ forms.editableTableField({
+            label: 'Send it to'|t('craft-analytics'),
+            instructions: 'One address per row. An $ENV_VAR works here, so staging and production can differ.'|t('craft-analytics'),
+            id: 'reportRecipients',
+            name: 'reportRecipients',
+            cols: {
+                email: { type: 'singleline', heading: 'Email address'|t('craft-analytics'), placeholder: 'you@example.com' },
+            },
+            rows: settings.reportRecipients|map(r => { email: r }),
+            errors: settings.getErrors('reportRecipients'),
+            addRowLabel: 'Add a recipient'|t('craft-analytics'),
+        }) }}
+
+        {{ forms.selectField({
+            label: 'Covering'|t('craft-analytics'),
+            instructions: 'The period each email reports on. How often it is sent is up to your cron, below.'|t('craft-analytics'),
+            id: 'reportPeriod',
+            name: 'reportPeriod',
+            options: reportPeriods,
+            value: settings.reportPeriod,
+            errors: settings.getErrors('reportPeriod'),
+        }) }}
+
+        <p class="light">
+            {{ 'Add this to your cron - weekly on Monday morning, in this example. Change the schedule to suit; the plugin deliberately has no scheduler of its own.'|t('craft-analytics') }}
+        </p>
+        <pre class="ca-code" style="font-size: 12px">0 8 * * 1 php craft craft-analytics/report/send --period={{ settings.reportPeriod }}</pre>
+        <p class="light">
+            {{ 'To see what it would say without sending anything:'|t('craft-analytics') }}
+        </p>
+        <pre class="ca-code" style="font-size: 12px">php craft craft-analytics/report/send --dry-run</pre>
+    </div>
 {% endif %}
 
-<p class="light">
-    {{ 'All settings can be overridden per environment in config/craft-analytics.php.'|t('craft-analytics') }}
+<p class="light" style="margin-top: 24px">
+    {{ 'Every setting here can be overridden per environment in config/craft-analytics.php, which is the better place for anything that should differ between staging and production.'|t('craft-analytics') }}
 </p>

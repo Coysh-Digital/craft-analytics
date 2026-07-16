@@ -6,6 +6,8 @@ use coyshdigital\craftanalytics\assets\CpAsset;
 use coyshdigital\craftanalytics\ingest\CaptureService;
 use coyshdigital\craftanalytics\ingest\NonceRegistry;
 use coyshdigital\craftanalytics\ingest\ScriptInjector;
+use coyshdigital\craftanalytics\integrations\CommerceIntegration;
+use coyshdigital\craftanalytics\integrations\FormieIntegration;
 use coyshdigital\craftanalytics\models\DateRange;
 use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\rollup\DbRollupSink;
@@ -24,6 +26,7 @@ use coyshdigital\craftanalytics\services\GoalsService;
 use coyshdigital\craftanalytics\services\IdentityService;
 use coyshdigital\craftanalytics\services\PrivacyDocumentService;
 use coyshdigital\craftanalytics\services\PrivacyService;
+use coyshdigital\craftanalytics\services\ReportMailer;
 use coyshdigital\craftanalytics\services\SaltService;
 use coyshdigital\craftanalytics\services\StatsService;
 use coyshdigital\craftanalytics\session\SessionStore;
@@ -130,6 +133,7 @@ class Plugin extends BasePlugin
                 'funnels' => FunnelsService::class,
                 'contentStats' => ContentStatsService::class,
                 'conversionStats' => ConversionStatsService::class,
+                'reportMailer' => ReportMailer::class,
             ],
         ];
     }
@@ -253,6 +257,12 @@ class Plugin extends BasePlugin
         return $this->get('conversionStats');
     }
 
+    public function getReportMailer(): ReportMailer
+    {
+        /** @var ReportMailer */
+        return $this->get('reportMailer');
+    }
+
     /**
      * The configured unique-visitor counter.
      *
@@ -347,6 +357,7 @@ class Plugin extends BasePlugin
             'events' => ['label' => Craft::t('craft-analytics', 'Events'), 'url' => 'craft-analytics/events'],
             'goals' => ['label' => Craft::t('craft-analytics', 'Goals'), 'url' => 'craft-analytics/goals'],
             'funnels' => ['label' => Craft::t('craft-analytics', 'Funnels'), 'url' => 'craft-analytics/funnels'],
+            'crawlers' => ['label' => Craft::t('craft-analytics', 'Crawlers'), 'url' => 'craft-analytics/crawlers'],
             'privacy' => ['label' => Craft::t('craft-analytics', 'Privacy'), 'url' => 'craft-analytics/privacy'],
         ];
 
@@ -363,6 +374,7 @@ class Plugin extends BasePlugin
         return Craft::$app->getView()->renderTemplate('craft-analytics/_settings.twig', [
             'plugin' => $this,
             'settings' => $this->getSettings(),
+            'reportPeriods' => DateRange::presets(),
         ]);
     }
 
@@ -405,6 +417,16 @@ class Plugin extends BasePlugin
                 // Cheap enough to run before the flush; anything heavier
                 // would be paid for by the visitor.
                 if (!$this->getCapture()->isTrackable($request, $response)) {
+                    self::closeConnection();
+
+                    // Excluded from the reports, but counted separately so
+                    // that "where did my traffic go" has an answer.
+                    try {
+                        $this->getCapture()->captureCrawler($request, $response);
+                    } catch (\Throwable $e) {
+                        Craft::warning('craft-analytics crawler capture failed: ' . $e->getMessage(), __METHOD__);
+                    }
+
                     return;
                 }
 
@@ -609,6 +631,11 @@ class Plugin extends BasePlugin
         $this->attachBeacon();
         $this->attachProjectConfig();
 
+        // Noticed, not required: both check for their plugin and do nothing
+        // if it isn't there.
+        FormieIntegration::attach();
+        CommerceIntegration::attach();
+
         // Craft's GC is a convenience, not the guarantee — the console
         // command is what a site should schedule (see GcController).
         Event::on(
@@ -629,6 +656,7 @@ class Plugin extends BasePlugin
                 $event->rules['craft-analytics/pages'] = 'craft-analytics/reports/pages';
                 $event->rules['craft-analytics/sources'] = 'craft-analytics/reports/sources';
                 $event->rules['craft-analytics/devices'] = 'craft-analytics/reports/devices';
+                $event->rules['craft-analytics/crawlers'] = 'craft-analytics/reports/crawlers';
                 $event->rules['craft-analytics/privacy'] = 'craft-analytics/privacy/index';
                 $event->rules['craft-analytics/campaigns'] = 'craft-analytics/pro-reports/campaigns';
                 $event->rules['craft-analytics/geo'] = 'craft-analytics/pro-reports/geo';

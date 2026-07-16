@@ -25,6 +25,7 @@ enum DimensionType: int
     case OutboundHost = 12;
     case OutboundUrl = 13;
     case Region = 14;
+    case Crawler = 15;
 
     /**
      * Reserved dimension value that per-(site, day, type) cardinality-capped

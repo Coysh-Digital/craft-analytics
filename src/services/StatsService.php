@@ -577,6 +577,46 @@ class StatsService extends Component
     }
 
     /**
+     * Crawler activity for the range.
+     *
+     * These requests are *not* in any other number on any other screen: they
+     * are here so that the gap between your server logs and your reports has
+     * an explanation.
+     *
+     * @return array<int,array{name: string, requests: int}>
+     */
+    public function crawlers(int $siteId, DateRange $range, int $limit = 100): array
+    {
+        $rows = (new Query())
+            ->select(['name' => '[[d]].[[value]]', 'requests' => 'SUM([[c]].[[requests]])'])
+            ->from(['c' => Table::CRAWLERS_ROLLUP])
+            ->innerJoin(['d' => Table::DIMENSIONS], '[[d]].[[id]] = [[c]].[[crawlerDimId]]')
+            ->where(['[[c]].[[siteId]]' => $siteId])
+            ->andWhere(['between', '[[c]].[[date]]', $range->from, $range->to])
+            ->groupBy(['[[d]].[[value]]'])
+            ->orderBy(['requests' => SORT_DESC])
+            ->limit($limit)
+            ->all($this->db());
+
+        return array_map(static fn(array $row): array => [
+            'name' => (string)$row['name'],
+            'requests' => (int)$row['requests'],
+        ], $rows);
+    }
+
+    /**
+     * Total crawler requests kept out of the reports for the range.
+     */
+    public function crawlerRequests(int $siteId, DateRange $range): int
+    {
+        return (int)(new Query())
+            ->from(Table::CRAWLERS_ROLLUP)
+            ->where(['siteId' => $siteId])
+            ->andWhere(['between', 'date', $range->from, $range->to])
+            ->sum('[[requests]]', $this->db());
+    }
+
+    /**
      * Visitors active right now.
      *
      * A read over the session hot layer — no database query at all, which is

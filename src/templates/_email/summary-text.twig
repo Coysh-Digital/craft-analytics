@@ -1,0 +1,42 @@
+{%- spaceless -%}
+{% macro pct(value) %}{% if value is null %}n/a{% else %}{{ value > 0 ? '+' }}{{ value|number_format(1) }}%{% endif %}{% endmacro %}
+{%- endspaceless -%}
+{% import _self as f %}
+{{ site.name }} - {{ range.label }}
+{{ '='|repeat((site.name ~ ' - ' ~ range.label)|length) }}
+
+{{ range.from }} to {{ range.to }}
+
+Views ............ {{ totals.views|number_format }} ({{ f.pct(deltas.views) }} vs previous)
+Unique visitors .. {{ totals.uniques|number_format }} ({{ f.pct(deltas.uniques) }} vs previous)
+Sessions ......... {{ totals.sessions|number_format }} ({{ f.pct(deltas.sessions) }} vs previous)
+Bounce rate ...... {{ totals.bounceRate|number_format(1) }}%
+
+{% if pages|length %}
+TOP PAGES
+{% for page in pages %}
+{{ loop.index }}. {{ page.path }} - {{ page.views|number_format }} views
+{% endfor %}
+{% endif %}
+{% if sources|length %}
+
+TOP SOURCES
+{% for source in sources %}
+{{ loop.index }}. {{ source.host ?: source.channel }} - {{ source.sessions|number_format }} sessions
+{% endfor %}
+{% endif %}
+{% if goals|length %}
+
+GOALS
+{% for goal in goals %}
+{{ goal.name }} - {{ goal.conversions|number_format }} conversions ({{ goal.rate|number_format(2) }}%){% if goal.value %} - {{ goal.value|currency }}{% endif %}
+
+{% endfor %}
+{% endif %}
+
+Unique visitor counts are on a daily-unique basis: someone visiting on three
+days counts three times. That is a deliberate privacy property, not an error -
+the plugin destroys the link between a visitor's days by rotating its hashing
+salt every 24 hours.
+
+Full reports: {{ url('craft-analytics') }}

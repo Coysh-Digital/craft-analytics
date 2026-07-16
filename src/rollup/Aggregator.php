@@ -34,6 +34,15 @@ class Aggregator
     {
         [$date, $hour] = $this->dateAndHour($hit->timestamp);
 
+        // Crawlers are counted apart from everything else and never touch a
+        // page, session or unique-visitor figure - the whole point of
+        // recording them is that they are not people.
+        if ($hit->kind === Hit::KIND_CRAWLER) {
+            $this->interactions->addCrawler($hit, $date);
+
+            return;
+        }
+
         // A Pro interaction is not a pageview and must never be counted as
         // one: an outbound click is something that happened *on* a page.
         if (!$hit->isPageview()) {

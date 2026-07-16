@@ -24,6 +24,33 @@ final class InteractionBuckets
     /** @var array<string,array{siteId: int, date: string, term: string, count: int, zeroResults: int}> */
     public array $searches = [];
 
+    /** @var array<string,array{siteId: int, date: string, name: string, requests: int}> */
+    public array $crawlers = [];
+
+    /**
+     * A crawler's requests for a day. Daily grain and no path: the question
+     * is "is Googlebot here and how hard", not which URLs it liked.
+     */
+    public function addCrawler(Hit $hit, string $date): void
+    {
+        $name = $hit->eventName;
+
+        if ($name === null || $name === '') {
+            return;
+        }
+
+        $key = $hit->siteId . '|' . $date . '|' . $name;
+
+        $this->crawlers[$key] ??= [
+            'siteId' => $hit->siteId,
+            'date' => $date,
+            'name' => $name,
+            'requests' => 0,
+        ];
+
+        $this->crawlers[$key]['requests']++;
+    }
+
     public function addEvent(Hit $hit, string $date, int $hour): void
     {
         if ($hit->eventName === null || $hit->eventName === '') {
@@ -108,6 +135,10 @@ final class InteractionBuckets
 
     public function isEmpty(): bool
     {
-        return $this->events === [] && $this->scroll === [] && $this->outbound === [] && $this->searches === [];
+        return $this->events === []
+            && $this->scroll === []
+            && $this->outbound === []
+            && $this->searches === []
+            && $this->crawlers === [];
     }
 }

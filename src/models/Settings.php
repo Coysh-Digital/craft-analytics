@@ -252,6 +252,86 @@ class Settings extends Model
     public string $siteSearchParam = 'q';
 
     /**
+     * Keep crawlers out of the reports.
+     *
+     * On by default, and it is what you want: a site with 400 real visitors
+     * and 3,000 bot requests reports 3,400 without this, and every number on
+     * every screen is then wrong in a way that looks plausible.
+     *
+     * Turning it off does not turn the detection off - it only stops the
+     * detection from excluding anything, so bot traffic is counted as if it
+     * were human. That is occasionally useful when debugging why traffic
+     * looks low, and is a bad idea the rest of the time.
+     */
+    public bool $blockCrawlers = true;
+
+    /**
+     * Count the crawler requests that were kept out, so "where did my traffic
+     * go" has an answer.
+     *
+     * Costs one small rollup row per crawler per day - the same
+     * cardinality x time shape as everything else, and never a row per hit.
+     */
+    public bool $trackCrawlers = true;
+
+    /** Email a periodic summary from the site's own mailer (Pro). */
+    public bool $enableScheduledReports = false;
+
+    /**
+     * Who the summary goes to. Each entry may be an env var, so production
+     * and staging can differ without a project config change.
+     *
+     * @var string[]
+     */
+    public array $reportRecipients = [];
+
+    /**
+     * The period each summary covers: any DateRange preset. The *schedule* is
+     * the operator's cron, not a setting - a plugin with its own scheduler is
+     * a plugin with a second, worse cron.
+     */
+    public string $reportPeriod = '7d';
+
+    /**
+     * Normalises settings on the way in.
+     *
+     * The CP's editable table posts recipients as `[['email' => '…'], …]`
+     * while a config file writes a plain list of addresses. Both are the same
+     * setting, so both are flattened to the same shape here rather than every
+     * reader having to know which one it is looking at.
+     *
+     * @param array<string,mixed> $values
+     */
+    public function setAttributes($values, $safeOnly = true): void
+    {
+        if (isset($values['reportRecipients']) && is_array($values['reportRecipients'])) {
+            $values['reportRecipients'] = self::flattenRecipients($values['reportRecipients']);
+        }
+
+        parent::setAttributes($values, $safeOnly);
+    }
+
+    /**
+     * @param array<int|string,mixed> $rows
+     * @return string[]
+     */
+    private static function flattenRecipients(array $rows): array
+    {
+        $recipients = [];
+
+        foreach ($rows as $row) {
+            $value = is_array($row) ? ($row['email'] ?? '') : $row;
+            $value = trim((string)$value);
+
+            if ($value !== '') {
+                $recipients[] = $value;
+            }
+        }
+
+        return $recipients;
+    }
+
+    /**
      * @return array<int,array<int|string,mixed>>
      */
     protected function defineRules(): array
@@ -333,7 +413,41 @@ class Settings extends Model
             [['attributionModel'], 'in', 'range' => ['last-click', 'first-click', 'linear']],
             [['siteSearchPath', 'siteSearchParam'], 'string', 'max' => 128],
             [['downloadExtensions'], 'each', 'rule' => ['string']],
+
+            // Crawlers
+            [['blockCrawlers', 'trackCrawlers'], 'boolean'],
+
+            // Scheduled reports
+            [['enableScheduledReports'], 'boolean'],
+            [['reportPeriod'], 'in', 'range' => array_keys(DateRange::presets())],
+            [['reportRecipients'], 'each', 'rule' => ['string']],
+            [['reportRecipients'], 'validateRecipients'],
         ];
+    }
+
+    /**
+     * Checks the report recipients look like addresses.
+     *
+     * Env vars are left alone: their value belongs to the environment, and
+     * this may well be running somewhere the real address isn't set.
+     */
+    public function validateRecipients(string $attribute): void
+    {
+        foreach ($this->reportRecipients as $recipient) {
+            $recipient = trim((string)$recipient);
+
+            if ($recipient === '' || str_starts_with($recipient, '$')) {
+                continue;
+            }
+
+            if (!filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+                $this->addError($attribute, Craft::t(
+                    'craft-analytics',
+                    '“{value}” is not an email address.',
+                    ['value' => $recipient],
+                ));
+            }
+        }
     }
 
     /**

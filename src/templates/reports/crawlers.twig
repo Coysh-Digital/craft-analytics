@@ -1,0 +1,83 @@
+{% extends 'craft-analytics/_layout.twig' %}
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% block report %}
+    {% if not tracking %}
+        <div class="ca-card">
+            <div class="ca-card-body">
+                {{ ca.empty(
+                    'Crawler counting is turned off'|t('craft-analytics'),
+                    'Turn on “Count crawlers separately” in the settings and this screen fills up from the next drain onwards.'|t('craft-analytics')
+                ) }}
+            </div>
+        </div>
+    {% else %}
+        <div class="ca-kpis">
+            {{ ca.kpi('Crawler requests'|t('craft-analytics'), requests, {
+                sub: blocking
+                    ? 'Kept out of every other screen'|t('craft-analytics')
+                    : 'Currently also counted as real traffic'|t('craft-analytics')
+            }) }}
+            {{ ca.kpi('Human pageviews'|t('craft-analytics'), humanViews, {
+                sub: 'What the rest of the reports are about'|t('craft-analytics')
+            }) }}
+            {{ ca.kpi('Crawlers seen'|t('craft-analytics'), crawlers|length, {
+                raw: crawlers|length,
+                sub: 'Distinct bots in this period'|t('craft-analytics')
+            }) }}
+        </div>
+
+        {% if not blocking %}
+            <div class="ca-card">
+                <div class="ca-card-body">
+                    <div class="ca-warning">
+                        <span class="ca-badge">{{ 'Warning'|t('craft-analytics') }}</span>
+                        <p>
+                            {{ 'Crawlers are not being kept out of the reports, so the requests counted here are also inside every other number on every other screen. Unless you are debugging something specific, turn “Keep crawlers out of the reports” back on.'|t('craft-analytics') }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="ca-card">
+            <div class="ca-card-head">
+                <h2 class="ca-card-title">{{ 'Crawlers'|t('craft-analytics') }}</h2>
+            </div>
+            <div class="ca-card-body ca-table-scroll">
+                {% if crawlers|length %}
+                    {% set maxRequests = max(crawlers|map(c => c.requests)) %}
+                    <table class="ca-table">
+                        <thead>
+                        <tr>
+                            <th>{{ 'Crawler'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Requests'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Share'|t('craft-analytics') }}</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for crawler in crawlers %}
+                            <tr>
+                                {{ ca.barCell(crawler.name, crawler.requests, maxRequests) }}
+                                <td class="ca-num">{{ crawler.requests|number_format }}</td>
+                                <td class="ca-num ca-muted">
+                                    {{ requests ? (crawler.requests / requests * 100)|number_format(1) ~ '%' : '-' }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    {{ ca.empty(
+                        'No crawlers seen in this period'|t('craft-analytics'),
+                        'Either nothing has crawled the site, or the drain has not run since it did.'|t('craft-analytics')
+                    ) }}
+                {% endif %}
+            </div>
+        </div>
+
+        <p class="ca-footnote">
+            {{ 'This screen exists so that “my server logs say 4,000 requests and my analytics says 400” has an answer. These requests are not people and are not counted anywhere else. Crawler names come from the part of the user agent that identified it as a bot, which keeps the list short and avoids storing whole user-agent strings.'|t('craft-analytics') }}
+        </p>
+    {% endif %}
+{% endblock %}

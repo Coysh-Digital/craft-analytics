@@ -79,6 +79,12 @@ final class Hit
     public const KIND_OUTBOUND = 'outbound';
     public const KIND_DOWNLOAD = 'download';
 
+    /**
+     * A request from a crawler, counted only so that "where did my traffic
+     * go" has an answer. Never a pageview, and never mixed into one.
+     */
+    public const KIND_CRAWLER = 'crawler';
+
     /** Whether this is a pageview rather than a Pro interaction. */
     public function isPageview(): bool
     {

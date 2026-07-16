@@ -109,10 +109,101 @@ class CaptureService extends Component
             return false;
         }
 
-        return !$this->bots()->isBot(
+        if ($this->isCrawler($request)) {
+            // Crawlers are never mixed into the reports (`blockCrawlers`).
+            // Turning that off does not turn the *detection* off - it stops
+            // the detection excluding anything, which is occasionally useful
+            // for debugging and a bad idea the rest of the time.
+            return !$this->settings()->blockCrawlers;
+        }
+
+        return true;
+    }
+
+    /**
+     * Whether this request is a crawler rather than a person.
+     */
+    public function isCrawler(Request $request): bool
+    {
+        return $this->bots()->isBot(
             (string)$request->getUserAgent(),
             $this->lowercaseHeaders($request),
         );
+    }
+
+    /**
+     * Counts a crawler request that was kept out of the reports.
+     *
+     * Recorded so that "my server logs say 4,000 requests and this says 400"
+     * has an answer on the screen instead of costing somebody an afternoon.
+     * It rides the same spool and drain as everything else, so it is one
+     * append post-flush and one rollup row per crawler per day - never a row
+     * per request.
+     */
+    public function captureCrawler(Request $request, Response $response): bool
+    {
+        $settings = $this->settings();
+
+        if (!$settings->trackCrawlers || !$settings->blockCrawlers) {
+            return false;
+        }
+
+        // Only real page requests, judged by the same rules a human's would
+        // be, minus the bot check itself.
+        if (!$this->isPageRequest($request, $response) || !$this->isCrawler($request)) {
+            return false;
+        }
+
+        $siteId = Craft::$app->getSites()->getCurrentSite()->id;
+
+        if ($siteId === null) {
+            return false;
+        }
+
+        $name = $this->bots()->crawlerName((string)$request->getUserAgent());
+
+        Plugin::getInstance()->getWriter()->write(new Hit(
+            siteId: $siteId,
+            path: $this->normalizePath($request->getPathInfo(), $request->getQueryString()),
+            // A crawler has no visitor hash and gets none: it is not a person,
+            // so there is nothing to pseudonymise. The name is all that is
+            // kept, and the address is never touched (C5).
+            visitorHash: self::CRAWLER_HASH,
+            sessionKey: self::CRAWLER_HASH,
+            timestamp: time(),
+            countView: false,
+            kind: Hit::KIND_CRAWLER,
+            eventName: $name,
+        ));
+
+        return true;
+    }
+
+    /**
+     * A placeholder where a visitor hash would go.
+     *
+     * The drain rejects hits with an empty visitorHash as malformed, and a
+     * crawler has no visitor to hash - so it gets a constant that is
+     * obviously not a hash of anything.
+     */
+    public const CRAWLER_HASH = 'crawler000000000';
+
+    /**
+     * The request/response checks that apply to anyone, crawler or not.
+     */
+    private function isPageRequest(Request $request, Response $response): bool
+    {
+        return !$request->getIsConsoleRequest()
+            && $request->getIsSiteRequest()
+            && !$request->getIsCpRequest()
+            && $request->getIsGet()
+            && !$request->getIsActionRequest()
+            && !$request->getIsPreview()
+            && !$request->getIsLivePreview()
+            && $request->getToken() === null
+            && $response->getStatusCode() === 200
+            && self::isHtml($response)
+            && !$this->isExcludedPath('/' . $request->getPathInfo());
     }
 
     /**
@@ -176,6 +267,104 @@ class CaptureService extends Component
         ksort($params);
 
         return $path . '?' . http_build_query($params);
+    }
+
+    /**
+     * Records an event from server-side code — a Formie submission, a
+     * Commerce order, or anything a site's own module wants counted.
+     *
+     * This is the one entry point that does not require a trackable *page*
+     * request: the interesting events (a form posting, an order completing)
+     * happen on POSTs and redirects, which are deliberately never pageviews.
+     * The privacy rules are unchanged — the address is hashed in memory and
+     * dropped, and nothing per-visitor is stored (C5, C6).
+     *
+     * Returns false when nothing was recorded, which is the normal answer on
+     * Lite, with events disabled, or for a visitor sending GPC.
+     */
+    public function trackEvent(
+        string $name,
+        ?float $value = null,
+        ?string $path = null,
+        ?int $elementId = null,
+    ): bool {
+        $request = Craft::$app->getRequest();
+
+        if ($request->getIsConsoleRequest() || !$request instanceof Request) {
+            return false;
+        }
+
+        $settings = $this->settings();
+
+        if (!Plugin::getInstance()->is(Plugin::EDITION_PRO) || !$settings->enableEvents) {
+            return false;
+        }
+
+        // A visitor who has asked not to be tracked is not tracked, whatever
+        // the site's own code asks for.
+        if ($this->respectsPrivacySignal($request)) {
+            return false;
+        }
+
+        if ($this->bots()->isBot((string)$request->getUserAgent(), $this->lowercaseHeaders($request))) {
+            return false;
+        }
+
+        $siteId = Craft::$app->getSites()->getCurrentSite()->id;
+
+        if ($siteId === null) {
+            return false;
+        }
+
+        $hit = $this->buildHit($request, $siteId);
+
+        $hit = new Hit(
+            siteId: $hit->siteId,
+            // The page the visitor was on, not the action URL they posted to.
+            path: $path !== null ? $this->normalizePath(...self::splitPath($path)) : $hit->path,
+            visitorHash: $hit->visitorHash,
+            sessionKey: $hit->sessionKey,
+            timestamp: $hit->timestamp,
+            elementId: $elementId ?? $hit->elementId,
+            referrer: $hit->referrer,
+            userAgent: $hit->userAgent,
+            acceptLanguage: $hit->acceptLanguage,
+            // An event is not a pageview and must never be counted as one.
+            countView: false,
+            visitorId: $hit->visitorId,
+            userId: $hit->userId,
+            campaign: $hit->campaign,
+            countryCode: $hit->countryCode,
+            region: $hit->region,
+            kind: Hit::KIND_EVENT,
+            eventName: $name,
+            eventValue: $value,
+        );
+
+        $event = new TrackEvent($hit);
+        $this->trigger(self::EVENT_BEFORE_TRACK, $event);
+
+        if (!$event->isValid) {
+            return false;
+        }
+
+        Plugin::getInstance()->getWriter()->write($event->hit);
+
+        return true;
+    }
+
+    /**
+     * Splits a stored path-and-query so it gets the same normalisation a real
+     * request's would — otherwise an event's path lands on a different row
+     * from the pageview it belongs to.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private static function splitPath(string $path): array
+    {
+        $parts = explode('?', ltrim($path, '/'), 2);
+
+        return [$parts[0], $parts[1] ?? ''];
     }
 
     private function buildHit(Request $request, int $siteId): Hit

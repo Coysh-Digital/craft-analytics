@@ -65,6 +65,40 @@ class BotFilter extends Component
         return !isset($headers['accept-language']) || $headers['accept-language'] === '';
     }
 
+    /**
+     * What to call this crawler in the report.
+     *
+     * CrawlerDetect gives back the matched fragment of the user agent, which
+     * is close enough to a name ("Googlebot", "bingbot") and, importantly, is
+     * bounded: the alternative is storing whole user-agent strings, which is
+     * unbounded cardinality and mild fingerprinting for no gain.
+     */
+    public function crawlerName(string $userAgent): string
+    {
+        if ($userAgent === '') {
+            return 'Unknown';
+        }
+
+        $this->detector()->isCrawler($userAgent);
+        $matched = trim((string)$this->detector()->getMatches());
+
+        if ($matched !== '') {
+            return ucfirst(substr($matched, 0, 100));
+        }
+
+        $ua = strtolower($userAgent);
+
+        foreach (self::AUTOMATION_MARKERS as $marker) {
+            if (str_contains($ua, $marker)) {
+                return ucfirst($marker);
+            }
+        }
+
+        // Reached by the heuristics rather than the pattern list - typically
+        // a script with no Accept-Language.
+        return 'Unrecognised automation';
+    }
+
     private function detector(): CrawlerDetect
     {
         return $this->detector ??= new CrawlerDetect();

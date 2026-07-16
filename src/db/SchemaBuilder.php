@@ -227,6 +227,27 @@ final class SchemaBuilder
     }
 
     /**
+     * Crawler activity.
+     *
+     * One row per crawler per day, and only when `trackCrawlers` is on. This
+     * is not analytics about people - it is the answer to "why is my traffic
+     * lower than my server logs say", which is otherwise a day of confusion.
+     * Same cardinality x time shape as every other rollup: a crawler making a
+     * million requests still adds one row a day.
+     */
+    public static function createCrawlerTable(Migration $m): void
+    {
+        $m->createTable(Table::CRAWLERS_ROLLUP, [
+            'id' => $m->primaryKey(),
+            'siteId' => $m->integer()->notNull(),
+            'date' => $m->date()->notNull(),
+            'crawlerDimId' => $m->integer()->notNull(),
+            'requests' => $m->integer()->notNull()->defaultValue(0),
+        ]);
+        $m->createIndex(null, Table::CRAWLERS_ROLLUP, ['siteId', 'date', 'crawlerDimId'], true);
+    }
+
+    /**
      * Goals and funnels (Pro).
      *
      * The definition tables are the readable, joinable mirror of project
@@ -370,6 +391,7 @@ final class SchemaBuilder
     public static function allTables(): array
     {
         return [
+            Table::CRAWLERS_ROLLUP,
             Table::FUNNEL_STEP_ROLLUP,
             Table::FUNNEL_STEPS,
             Table::FUNNELS,

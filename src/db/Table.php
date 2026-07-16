@@ -32,6 +32,7 @@ final class Table
     public const SCROLL_ROLLUP = '{{%craftanalytics_scrollrollup}}';
     public const SEARCH_ROLLUP = '{{%craftanalytics_searchrollup}}';
     public const OUTBOUND_ROLLUP = '{{%craftanalytics_outboundrollup}}';
+    public const CRAWLERS_ROLLUP = '{{%craftanalytics_crawlersrollup}}';
 
     /**
      * Pro goals and funnels. The definitions mirror project config; the

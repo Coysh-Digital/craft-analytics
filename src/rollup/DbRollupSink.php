@@ -46,7 +46,32 @@ class DbRollupSink extends Component implements RollupSinkInterface
         }
 
         if ($interactions !== null && !$interactions->isEmpty()) {
+            // Crawler counts are not a Pro feature: knowing what was excluded
+            // from your own numbers is not a premium concern.
+            $this->writeCrawlers($interactions);
             $this->pro()->writeInteractions($interactions);
+        }
+    }
+
+    /**
+     * One row per crawler per day. Capped like any other dimension, so a
+     * flood of one-off scrapers cannot grow the table without bound.
+     */
+    private function writeCrawlers(InteractionBuckets $interactions): void
+    {
+        foreach ($interactions->crawlers as $crawler) {
+            Upsert::counters($this->db(), Table::CRAWLERS_ROLLUP, [
+                'siteId' => $crawler['siteId'],
+                'date' => $crawler['date'],
+                'crawlerDimId' => $this->capper()->resolve(
+                    $crawler['siteId'],
+                    $crawler['date'],
+                    DimensionType::Crawler,
+                    $crawler['name'],
+                ),
+            ], [
+                'requests' => $crawler['requests'],
+            ]);
         }
     }
 
