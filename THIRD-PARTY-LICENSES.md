@@ -16,6 +16,22 @@ Planned (Pro, later phases — record before first use):
 | maxmind-db/reader (pure-PHP MMDB reader) | Apache-2.0 | Reading local GeoIP databases |
 | DB-IP Lite country/city database | CC BY 4.0 (attribution required, shown in CP + docs) | Local geo resolution; IP discarded in memory |
 
+Dev-only (never shipped to a production site):
+
+| Package | Licence | Used for |
+|---|---|---|
+| yiisoft/yii2-redis | BSD-3-Clause | Exercising the Redis unique-counter driver in tests |
+| pestphp/pest, craftcms/phpstan, craftcms/ecs | MIT | Test and static-analysis tooling |
+
+## Copyleft in the dependency tree (not ours)
+
+`composer licenses --no-dev` surfaces two copyleft packages:
+`enshrined/svg-sanitize` (GPL-2.0-or-later) and `ezyang/htmlpurifier`
+(LGPL-2.1-or-later). **Both are transitive dependencies of `craftcms/cms`
+itself**, present in every Craft installation whether or not this plugin is
+installed. This plugin neither requires them, links against them, nor copies
+from them, and adds no copyleft dependency of its own.
+
 Full licence texts ship in `vendor/` via Composer. Any verbatim-copied code
 (as opposed to a Composer dependency) must additionally preserve its original
 copyright header in-file and be listed here.

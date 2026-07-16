@@ -1,5 +1,6 @@
 <?php
 
+use coyshdigital\craftanalytics\db\SchemaBuilder;
 use coyshdigital\craftanalytics\db\Table;
 use coyshdigital\craftanalytics\migrations\Install;
 use coyshdigital\craftanalytics\tests\TestDb;
@@ -12,7 +13,7 @@ beforeEach(function() {
 
 test('install migration round-trips cleanly', function() {
     $db = TestDb::connection();
-    TestDb::dropTables([Table::DRAIN_LOG, Table::SALTS, Table::DIMENSIONS]);
+    TestDb::dropTables(SchemaBuilder::allTables());
 
     $migration = new Install(['db' => $db]);
 

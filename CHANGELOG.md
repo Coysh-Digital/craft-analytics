@@ -13,3 +13,10 @@
 - `craft-analytics/drain/run` console command (with `--watch`), crash-safe and idempotent.
 - `craft-analytics/salt/rotate` console command.
 - Benchmark harness proving the TTFB and capture-cost claims.
+- Rollup tables (pages, sessions, sources, devices) — the only persistent analytics storage in Lite.
+- Original pure-PHP HyperLogLog with sparse→dense representation, written from the published papers; sketches merge, so date ranges union rather than sum.
+- `UniqueCounterInterface` with `redis` (native `PFADD`/`PFMERGE`), `hll` (portable sketch-on-row) and `exact` (membership table) drivers, auto-detecting Redis.
+- Referrer channel classification (direct/search/social/referral/campaign/internal) with a `registerChannelRules` extension point.
+- Browser, OS and device-type parsing for the devices rollup.
+- Per-(site, date, type) cardinality capping with an `__other__` overflow dimension.
+- Hourly→daily compaction (lossless, merges sketches) and retention/GC, via `craft-analytics/gc/run` and Craft's GC.

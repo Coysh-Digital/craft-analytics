@@ -2,6 +2,7 @@
 
 namespace coyshdigital\craftanalytics\models;
 
+use coyshdigital\craftanalytics\uniques\Hll;
 use craft\base\Model;
 
 /**
@@ -42,6 +43,13 @@ class Settings extends Model
      * otherwise the portable HyperLogLog sketches.
      */
     public string $uniqueCounterDriver = self::UNIQUES_DRIVER_AUTO;
+
+    /**
+     * HyperLogLog precision for the portable driver. Each step up doubles
+     * sketch size and cuts error by ~30%: p=12 is 4 KB/±1.6%, p=14 is
+     * 16 KB/±0.8%.
+     */
+    public int $hllPrecision = 12;
 
     /**
      * Glob patterns of site paths that are never tracked.
@@ -109,6 +117,7 @@ class Settings extends Model
                 self::UNIQUES_DRIVER_HLL,
                 self::UNIQUES_DRIVER_EXACT,
             ]],
+            [['hllPrecision'], 'integer', 'min' => Hll::MIN_PRECISION, 'max' => Hll::MAX_PRECISION],
             [['sessionWindow'], 'integer', 'min' => 60, 'max' => 14400],
             [['saltRotationInterval'], 'integer', 'min' => 3600],
             [['saltRotationHour'], 'integer', 'min' => 0, 'max' => 23],

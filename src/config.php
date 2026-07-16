@@ -21,6 +21,10 @@ return [
         // 'auto' (default: Redis if available, else HLL), 'redis', 'hll', 'exact'
         'uniqueCounterDriver' => 'auto',
 
+        // HyperLogLog precision for the 'hll' driver (11-14).
+        // 12 = 4KB dense / ±1.6%; 14 = 16KB / ±0.8%. Sparse sketches cost far less.
+        'hllPrecision' => 12,
+
         // Site paths never tracked (glob patterns), and query params stripped
         // from tracked URIs
         'excludePaths' => [],

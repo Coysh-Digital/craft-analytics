@@ -35,7 +35,12 @@ Or via the Craft Plugin Store in the control panel.
    The drain is safe to interrupt at any point: batches are claimed by rename
    and committed exactly once, so killing it mid-run never double-counts or
    loses data.
-3. Verify the wiring:
+3. Schedule compaction and retention — Craft's own GC is a convenience, not a
+   guarantee:
+   ```cron
+   0 4 * * * /usr/bin/php /path/to/craft craft-analytics/gc/run
+   ```
+4. Verify the wiring:
    ```bash
    php craft craft-analytics/info
    ```

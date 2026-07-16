@@ -1,5 +1,6 @@
 <?php
 
+use coyshdigital\craftanalytics\db\SchemaBuilder;
 use coyshdigital\craftanalytics\db\Table;
 use coyshdigital\craftanalytics\ingest\Hit;
 use coyshdigital\craftanalytics\migrations\Install;
@@ -18,7 +19,7 @@ beforeEach(function() {
     }
 
     $db = TestDb::connection();
-    TestDb::dropTables([Table::DRAIN_LOG, Table::SALTS, Table::DIMENSIONS]);
+    TestDb::dropTables(SchemaBuilder::allTables());
     (new Install(['db' => $db]))->up();
 
     $this->spoolDir = sys_get_temp_dir() . '/ca-spool-' . bin2hex(random_bytes(6));

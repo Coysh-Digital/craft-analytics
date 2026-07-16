@@ -1,5 +1,6 @@
 <?php
 
+use coyshdigital\craftanalytics\db\SchemaBuilder;
 use coyshdigital\craftanalytics\db\Table;
 use coyshdigital\craftanalytics\migrations\Install;
 use coyshdigital\craftanalytics\models\Settings;
@@ -14,7 +15,7 @@ beforeEach(function() {
     }
 
     $db = TestDb::connection();
-    TestDb::dropTables([Table::DRAIN_LOG, Table::SALTS, Table::DIMENSIONS]);
+    TestDb::dropTables(SchemaBuilder::allTables());
     (new Install(['db' => $db]))->up();
 });
 

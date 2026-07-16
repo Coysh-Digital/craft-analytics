@@ -4,13 +4,20 @@ namespace coyshdigital\craftanalytics;
 
 use coyshdigital\craftanalytics\ingest\CaptureService;
 use coyshdigital\craftanalytics\models\Settings;
-use coyshdigital\craftanalytics\rollup\NullRollupSink;
+use coyshdigital\craftanalytics\rollup\DbRollupSink;
 use coyshdigital\craftanalytics\rollup\RollupSinkInterface;
 use coyshdigital\craftanalytics\services\BotFilter;
+use coyshdigital\craftanalytics\services\ChannelClassifier;
+use coyshdigital\craftanalytics\services\DeviceParser;
 use coyshdigital\craftanalytics\services\DimensionsService;
+use coyshdigital\craftanalytics\services\GcService;
 use coyshdigital\craftanalytics\services\IdentityService;
 use coyshdigital\craftanalytics\services\SaltService;
 use coyshdigital\craftanalytics\session\SessionStore;
+use coyshdigital\craftanalytics\uniques\ExactUniqueCounter;
+use coyshdigital\craftanalytics\uniques\HllUniqueCounter;
+use coyshdigital\craftanalytics\uniques\RedisUniqueCounter;
+use coyshdigital\craftanalytics\uniques\UniqueCounterInterface;
 use coyshdigital\craftanalytics\write\DirectWriter;
 use coyshdigital\craftanalytics\write\QueueWriter;
 use coyshdigital\craftanalytics\write\SpoolWriter;
@@ -20,6 +27,7 @@ use craft\base\Model;
 use craft\base\Plugin as BasePlugin;
 use craft\events\RegisterUrlRulesEvent;
 use craft\events\RegisterUserPermissionsEvent;
+use craft\services\Gc;
 use craft\services\UserPermissions;
 use craft\web\Application as WebApplication;
 use craft\web\Request as WebRequest;
@@ -38,6 +46,8 @@ use yii\base\Event;
  * @property-read BotFilter $bots
  * @property-read SessionStore $sessions
  * @property-read CaptureService $capture
+ * @property-read ChannelClassifier $channels
+ * @property-read DeviceParser $deviceParser
  */
 class Plugin extends BasePlugin
 {
@@ -48,11 +58,12 @@ class Plugin extends BasePlugin
     public const PERMISSION_EXPORT = 'craftAnalytics:export';
     public const PERMISSION_MANAGE_SETTINGS = 'craftAnalytics:manageSettings';
 
-    public string $schemaVersion = '1.0.0';
+    public string $schemaVersion = '1.1.0';
     public bool $hasCpSettings = true;
     public bool $hasCpSection = true;
 
     private ?WriterInterface $writer = null;
+    private ?UniqueCounterInterface $uniqueCounter = null;
 
     public static function editions(): array
     {
@@ -75,7 +86,9 @@ class Plugin extends BasePlugin
                 'bots' => BotFilter::class,
                 'sessions' => SessionStore::class,
                 'capture' => CaptureService::class,
-                'rollupSink' => NullRollupSink::class,
+                'channels' => ChannelClassifier::class,
+                'deviceParser' => DeviceParser::class,
+                'rollupSink' => DbRollupSink::class,
             ],
         ];
     }
@@ -122,14 +135,44 @@ class Plugin extends BasePlugin
         return $this->get('capture');
     }
 
+    public function getChannels(): ChannelClassifier
+    {
+        /** @var ChannelClassifier */
+        return $this->get('channels');
+    }
+
+    public function getDeviceParser(): DeviceParser
+    {
+        /** @var DeviceParser */
+        return $this->get('deviceParser');
+    }
+
     /**
-     * Where drained batches land. Phase 2 ships the null sink; phase 3
-     * swaps in the rollup-table implementation.
+     * Where drained batches land.
      */
     public function getRollupSink(): RollupSinkInterface
     {
         /** @var RollupSinkInterface */
         return $this->get('rollupSink');
+    }
+
+    /**
+     * The configured unique-visitor counter.
+     *
+     * `auto` prefers Redis when the site already has it (native, mergeable,
+     * effectively free) and otherwise falls back to the portable sketch —
+     * which needs no infrastructure and costs ±1.6%.
+     */
+    public function getUniqueCounter(): UniqueCounterInterface
+    {
+        return $this->uniqueCounter ??= match ($this->getSettings()->uniqueCounterDriver) {
+            Settings::UNIQUES_DRIVER_REDIS => new RedisUniqueCounter(),
+            Settings::UNIQUES_DRIVER_EXACT => new ExactUniqueCounter(),
+            Settings::UNIQUES_DRIVER_HLL => new HllUniqueCounter(),
+            default => RedisUniqueCounter::isAvailable()
+                ? new RedisUniqueCounter()
+                : new HllUniqueCounter(),
+        };
     }
 
     /**
@@ -249,6 +292,16 @@ class Plugin extends BasePlugin
     private function attachEventHandlers(): void
     {
         $this->attachCapture();
+
+        // Craft's GC is a convenience, not the guarantee — the console
+        // command is what a site should schedule (see GcController).
+        Event::on(
+            Gc::class,
+            Gc::EVENT_RUN,
+            static function() {
+                (new GcService())->run();
+            },
+        );
 
         Event::on(
             UrlManager::class,

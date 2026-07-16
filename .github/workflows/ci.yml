@@ -51,6 +51,12 @@ jobs:
         options: >-
           --health-cmd="mysqladmin ping -proot"
           --health-interval=10s --health-timeout=5s --health-retries=5
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s --health-timeout=5s --health-retries=5
       postgres:
         image: postgres:15
         env:
@@ -67,6 +73,8 @@ jobs:
       CRAFT_ANALYTICS_TEST_DB_USER: root
       CRAFT_ANALYTICS_TEST_DB_PASSWORD: root
       CRAFT_ANALYTICS_TEST_PGSQL_USER: postgres
+      CRAFT_ANALYTICS_TEST_REDIS_HOST: 127.0.0.1
+      CRAFT_ANALYTICS_TEST_REDIS_PORT: 6379
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
