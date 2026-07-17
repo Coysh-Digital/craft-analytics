@@ -1,0 +1,48 @@
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% if realtime.active|length %}
+    <table class="ca-table">
+        <thead>
+        <tr>
+            <th>{{ 'On this page now'|t('craft-analytics') }}</th>
+            <th class="ca-num">{{ 'Pages'|t('craft-analytics') }}</th>
+            <th class="ca-num">{{ 'On site'|t('craft-analytics') }}</th>
+            <th class="ca-num">{{ 'Last seen'|t('craft-analytics') }}</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for visitor in realtime.active %}
+            <tr>
+                <td>
+                    {{ visitor.lastPath }}
+                    {% if visitor.pageviews > 1 %}
+                        <div class="ca-muted" style="font-size: 12px">
+                            {{ 'came in on {path}'|t('craft-analytics', { path: visitor.entryPath }) }}
+                        </div>
+                    {% endif %}
+                </td>
+                <td class="ca-num">
+                    {{ visitor.pageviews|number_format }}
+                    {% if visitor.isNew %}
+                        <span class="ca-muted" style="font-size: 12px">{{ 'just arrived'|t('craft-analytics') }}</span>
+                    {% endif %}
+                </td>
+                <td class="ca-num ca-muted">{{ visitor.durationMs ? ca.duration(visitor.durationMs) : '-' }}</td>
+                <td class="ca-num ca-muted">
+                    {{- visitor.secondsAgo < 10
+                        ? 'now'|t('craft-analytics')
+                        : ca.duration(visitor.secondsAgo * 1000) ~ ' ' ~ 'ago'|t('craft-analytics') -}}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    {% if realtime.truncated %}
+        <p class="ca-footnote">
+            {{ '{count} more not shown.'|t('craft-analytics', { count: realtime.truncated|number_format }) }}
+        </p>
+    {% endif %}
+{% else %}
+    <p class="ca-muted">{{ 'Nobody is on the site right now.'|t('craft-analytics') }}</p>
+{% endif %}

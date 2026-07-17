@@ -8,20 +8,44 @@
             <span class="ca-live"><i class="ca-live-dot"></i>{{ 'Live'|t('craft-analytics') }}</span>
         </div>
         <div class="ca-card-body">
-            {# A single current value is a hero figure, not a one-bar chart. #}
-            <div class="ca-hero" id="ca-live-count">{{ realtime.visitors|number_format }}</div>
-            <p class="ca-kpi-sub">
-                {{ '{n,plural,=1{visitor} other{visitors}} active in the last {mins} minutes'|t('craft-analytics', {
-                    n: realtime.visitors,
-                    mins: (sessionWindow / 60)|round,
+            <div class="ca-kpis">
+                {# A single current value is a hero figure, not a one-bar chart. #}
+                <div class="ca-kpi">
+                    <div class="ca-kpi-label">{{ 'Visitors'|t('craft-analytics') }}</div>
+                    <div class="ca-hero" id="ca-live-count">{{ realtime.visitors|number_format }}</div>
+                    <div class="ca-kpi-sub">
+                        {{ 'active in the last {mins} minutes'|t('craft-analytics', {
+                            mins: (sessionWindow / 60)|round,
+                        }) }}
+                    </div>
+                </div>
+
+                {{ ca.kpi('Pages viewed'|t('craft-analytics'), realtime.pageviews, {
+                    sub: 'Across the visits open right now'|t('craft-analytics')
                 }) }}
-            </p>
+
+                {{ ca.kpi('Pages per visitor'|t('craft-analytics'), 0, {
+                    raw: realtime.visitors ? realtime.pagesPerVisitor|number_format(1) : '-',
+                    sub: 'So far this visit, not for the day'|t('craft-analytics')
+                }) }}
+            </div>
+        </div>
+    </div>
+
+    <div class="ca-card">
+        <div class="ca-card-head">
+            <h2 class="ca-card-title">{{ 'Visitors right now'|t('craft-analytics') }}</h2>
+            <span class="ca-muted">{{ 'One row per visit'|t('craft-analytics') }}</span>
+        </div>
+        <div class="ca-card-body ca-table-scroll" id="ca-live-visitors">
+            {% include 'craft-analytics/_partials/realtime-visitors.twig' %}
         </div>
     </div>
 
     <div class="ca-card">
         <div class="ca-card-head">
             <h2 class="ca-card-title">{{ 'Active pages'|t('craft-analytics') }}</h2>
+            <span class="ca-muted">{{ 'Where they are, grouped'|t('craft-analytics') }}</span>
         </div>
         <div class="ca-card-body ca-table-scroll" id="ca-live-pages">
             {% include 'craft-analytics/_partials/realtime-pages.twig' %}
@@ -31,15 +55,94 @@
     <p class="ca-footnote">
         {{ 'Read entirely from the session cache - this screen costs no database queries. Sessions live only in the cache and are deleted once folded into the rollups.'|t('craft-analytics') }}
     </p>
+
+    <p class="ca-footnote">
+        {{ 'A row is a visit, not a person, and there is nothing here that identifies anyone: no address, no name, no identifier that outlives the visit. Somebody who leaves and comes back tomorrow is a new row with no way to know it was them - that is the same salt rotation that means you need no cookie banner.'|t('craft-analytics') }}
+    </p>
 {% endblock %}
 
 {% js %}
 (function () {
     var count = document.getElementById('ca-live-count');
     var pages = document.getElementById('ca-live-pages');
+    var visitors = document.getElementById('ca-live-visitors');
     if (!count) return;
 
     var url = {{ url('craft-analytics/realtime-data', currentParams)|json_encode|raw }};
+    var strings = {{ {
+        page: 'Page'|t('craft-analytics'),
+        visitors: 'Visitors'|t('craft-analytics'),
+        onPage: 'On this page now'|t('craft-analytics'),
+        pages: 'Pages'|t('craft-analytics'),
+        onSite: 'On site'|t('craft-analytics'),
+        lastSeen: 'Last seen'|t('craft-analytics'),
+        nobody: 'Nobody is on the site right now.'|t('craft-analytics'),
+        now: 'now'|t('craft-analytics'),
+        ago: 'ago'|t('craft-analytics'),
+        arrived: 'just arrived'|t('craft-analytics'),
+        cameInOn: 'came in on'|t('craft-analytics'),
+    }|json_encode|raw }};
+
+    function escapeHtml(value) {
+        return String(value).replace(/[<>&"]/g, function (c) {
+            return { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c];
+        });
+    }
+
+    // Mirrors the macro, so the polled markup reads the same as the rendered
+    // markup rather than drifting into its own dialect.
+    function duration(ms) {
+        var s = Math.round(ms / 1000);
+        if (s >= 3600) return Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
+        if (s >= 60) return Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+        return s + 's';
+    }
+
+    function renderPages(data) {
+        if (!pages) return;
+
+        if (!data.pages.length) {
+            pages.innerHTML = '<p class="ca-muted">' + strings.nobody + '</p>';
+            return;
+        }
+
+        var max = data.pages[0].visitors;
+        var rows = data.pages.map(function (page) {
+            var width = max > 0 ? (page.visitors / max * 100).toFixed(1) : 0;
+            return '<tr><td class="ca-bar-cell"><div class="ca-bar-fill" style="width:' + width +
+                '%"></div><span class="ca-bar-label">' + escapeHtml(page.path) + '</span></td>' +
+                '<td class="ca-num">' + page.visitors.toLocaleString() + '</td></tr>';
+        }).join('');
+
+        pages.innerHTML = '<table class="ca-table"><thead><tr><th>' + strings.page + '</th>' +
+            '<th class="ca-num">' + strings.visitors + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    }
+
+    function renderVisitors(data) {
+        if (!visitors) return;
+
+        if (!data.active.length) {
+            visitors.innerHTML = '<p class="ca-muted">' + strings.nobody + '</p>';
+            return;
+        }
+
+        var rows = data.active.map(function (v) {
+            var entry = v.pageviews > 1
+                ? '<div class="ca-muted" style="font-size:12px">' + strings.cameInOn + ' ' + escapeHtml(v.entryPath) + '</div>'
+                : '';
+            var isNew = v.isNew ? ' <span class="ca-muted" style="font-size:12px">' + strings.arrived + '</span>' : '';
+            var seen = v.secondsAgo < 10 ? strings.now : duration(v.secondsAgo * 1000) + ' ' + strings.ago;
+
+            return '<tr><td>' + escapeHtml(v.lastPath) + entry + '</td>' +
+                '<td class="ca-num">' + v.pageviews.toLocaleString() + isNew + '</td>' +
+                '<td class="ca-num ca-muted">' + (v.durationMs ? duration(v.durationMs) : '-') + '</td>' +
+                '<td class="ca-num ca-muted">' + seen + '</td></tr>';
+        }).join('');
+
+        visitors.innerHTML = '<table class="ca-table"><thead><tr><th>' + strings.onPage + '</th>' +
+            '<th class="ca-num">' + strings.pages + '</th><th class="ca-num">' + strings.onSite + '</th>' +
+            '<th class="ca-num">' + strings.lastSeen + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    }
 
     function refresh() {
         fetch(url, { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
@@ -47,27 +150,8 @@
             .then(function (data) {
                 if (!data) return;
                 count.textContent = data.visitors.toLocaleString();
-                if (!pages) return;
-
-                if (!data.pages.length) {
-                    pages.innerHTML = '<p class="ca-muted">{{ 'Nobody is on the site right now.'|t('craft-analytics') }}</p>';
-                    return;
-                }
-
-                var max = data.pages[0].visitors;
-                var rows = data.pages.map(function (page) {
-                    var width = max > 0 ? (page.visitors / max * 100).toFixed(1) : 0;
-                    var path = page.path.replace(/[<>&"]/g, function (c) {
-                        return { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c];
-                    });
-                    return '<tr><td class="ca-bar-cell"><div class="ca-bar-fill" style="width:' + width +
-                        '%"></div><span class="ca-bar-label">' + path + '</span></td>' +
-                        '<td class="ca-num">' + page.visitors.toLocaleString() + '</td></tr>';
-                }).join('');
-
-                pages.innerHTML = '<table class="ca-table"><thead><tr><th>{{ 'Page'|t('craft-analytics') }}</th>' +
-                    '<th class="ca-num">{{ 'Visitors'|t('craft-analytics') }}</th></tr></thead><tbody>' +
-                    rows + '</tbody></table>';
+                renderPages(data);
+                renderVisitors(data);
             })
             .catch(function () { /* a failed poll is not worth an error */ });
     }

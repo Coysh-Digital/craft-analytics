@@ -7,6 +7,7 @@ use coyshdigital\craftanalytics\enums\Channel;
 use coyshdigital\craftanalytics\enums\DeviceType;
 use coyshdigital\craftanalytics\models\DateRange;
 use coyshdigital\craftanalytics\Plugin;
+use coyshdigital\craftanalytics\session\Session;
 use coyshdigital\craftanalytics\uniques\UniqueCounterInterface;
 use coyshdigital\craftanalytics\uniques\UniqueScope;
 use Craft;
@@ -630,26 +631,58 @@ class StatsService extends Component
      * A read over the session hot layer — no database query at all, which is
      * a pleasant side-effect of keeping sessions in the cache (§6.2).
      *
-     * @return array{visitors: int, pages: array<int,array{path: string, visitors: int}>}
+     * @return array{visitors: int, pageviews: int, pagesPerVisitor: float, pages: array<int,array{path: string, visitors: int}>, active: array<int,array<string,mixed>>, truncated: int}
      */
-    public function realtime(int $siteId, ?int $now = null): array
+    public function realtime(int $siteId, ?int $now = null, int $limit = 50): array
     {
         $now ??= time();
         $sessions = Plugin::getInstance()->getSessions()->activeSessions($siteId, $now);
 
         $byPath = [];
+        $pageviews = 0;
+
         foreach ($sessions as $session) {
             $byPath[$session->lastPath] = ($byPath[$session->lastPath] ?? 0) + 1;
+            $pageviews += $session->pageviews;
         }
 
         arsort($byPath);
 
         $pages = [];
+
         foreach (array_slice($byPath, 0, 10, true) as $path => $visitors) {
             $pages[] = ['path' => (string)$path, 'visitors' => $visitors];
         }
 
-        return ['visitors' => count($sessions), 'pages' => $pages];
+        // Most recently seen first: the person who just clicked something is
+        // the one you are watching for.
+        usort($sessions, static fn(Session $a, Session $b): int => $b->lastSeenAt <=> $a->lastSeenAt);
+
+        $visitors = [];
+
+        foreach (array_slice($sessions, 0, $limit) as $session) {
+            $visitors[] = [
+                'lastPath' => $session->lastPath,
+                'entryPath' => $session->entryPath,
+                'pageviews' => $session->pageviews,
+                'durationMs' => $session->durationMs(),
+                'secondsAgo' => max(0, $now - $session->lastSeenAt),
+                'referrer' => $session->referrer,
+                'countryCode' => $session->countryCode,
+                'isNew' => $session->pageviews <= 1,
+            ];
+        }
+
+        return [
+            'visitors' => count($sessions),
+            'pageviews' => $pageviews,
+            'pagesPerVisitor' => $sessions !== [] ? $pageviews / count($sessions) : 0.0,
+            'pages' => $pages,
+            // One row per active visit, capped: a busy site can have thousands
+            // of open sessions and nobody reads the four-thousandth.
+            'active' => $visitors,
+            'truncated' => max(0, count($sessions) - $limit),
+        ];
     }
 
     /**
