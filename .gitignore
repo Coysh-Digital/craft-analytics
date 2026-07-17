@@ -4,9 +4,14 @@
 /.phpunit.result.cache
 /.phpunit.cache
 /.pest
-# dev/ is a throwaway ddev Craft harness — only the docs and setup script are tracked
+# dev/ is a throwaway ddev Craft harness. Only the pieces needed to rebuild it
+# are tracked: the setup script, and the module that builds the demo content
+# the analytics reports are seeded against.
 /dev/*
 !/dev/README.md
 !/dev/setup.sh
+!/dev/app/
+/dev/app/*
+!/dev/app/modules/
 .DS_Store
 *.local.php

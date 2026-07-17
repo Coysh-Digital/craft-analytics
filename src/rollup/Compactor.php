@@ -104,9 +104,12 @@ class Compactor extends Component
             $merged = [];
             /** @var array<string,list<string|null>> $sketches */
             $sketches = [];
+            /** @var array<string,array<int,array<string,mixed>>> $grouped */
+            $grouped = [];
 
             foreach ($rows as $row) {
                 $key = implode('|', array_map(static fn($c) => (string)$row[$c], $groupColumns));
+                $grouped[$key][] = $row;
 
                 if (!isset($merged[$key])) {
                     $merged[$key] = array_intersect_key($row, array_flip($groupColumns));
@@ -136,6 +139,10 @@ class Compactor extends Component
 
             foreach ($merged as $key => $row) {
                 $row['hour'] = self::DAILY_HOUR;
+
+                if ($table === Table::PAGES_ROLLUP) {
+                    $row['elementId'] = self::elementIdFor($grouped[$key]);
+                }
 
                 if ($hasSketch) {
                     $sketch = Hll::mergeAll($sketches[$key], $this->settings()->hllPrecision);
@@ -175,18 +182,50 @@ class Compactor extends Component
     }
 
     /**
-     * Columns identifying a row within a (site, date) — everything except the
-     * hour, the counters and the sketch.
+     * The columns a day's rows are merged on.
+     *
+     * These must be exactly the table's unique key minus `hour`, or the
+     * compacted rows collide with each other on insert. `elementId` is
+     * deliberately *not* here even though pages_rollup has one: the unique key
+     * is (siteId, date, hour, pathDimId), so grouping by element as well
+     * produces two rows that the index says are one, and the whole GC run dies
+     * on a duplicate-key error.
+     *
+     * That is not hypothetical. One path can hold rows with different
+     * elementIds - an entry deleted and recreated, or a URI that resolved to
+     * an element on Monday and to a template-only route on Tuesday - and the
+     * hourly writer already folds those onto one row per hour. Compaction has
+     * to fold them the same way. See elementIdFor().
      *
      * @return string[]
      */
     private static function groupColumns(string $table): array
     {
         return match ($table) {
-            Table::PAGES_ROLLUP => ['siteId', 'date', 'pathDimId', 'elementId'],
+            Table::PAGES_ROLLUP => ['siteId', 'date', 'pathDimId'],
             Table::SOURCES_ROLLUP => ['siteId', 'date', 'channel', 'refHostDimId'],
             default => ['siteId', 'date'],
         };
+    }
+
+    /**
+     * The element a compacted page row belongs to.
+     *
+     * First non-null wins: a path that resolved to an entry is more useful
+     * than one that didn't, and a row that knows its element can be joined to
+     * the Content reports.
+     *
+     * @param array<int,array<string,mixed>> $rows the hourly rows being merged
+     */
+    private static function elementIdFor(array $rows): ?int
+    {
+        foreach ($rows as $row) {
+            if (($row['elementId'] ?? null) !== null) {
+                return (int)$row['elementId'];
+            }
+        }
+
+        return null;
     }
 
     /**

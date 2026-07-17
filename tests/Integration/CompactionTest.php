@@ -27,8 +27,14 @@ beforeEach(function() {
  * Writes an hourly page row with a sketch of $visitors distinct people,
  * drawn from a shared pool so overlap between hours is realistic.
  */
-function writeHourlyPage(string $date, int $hour, int $views, array $visitorIds, int $pathDimId = 1): void
-{
+function writeHourlyPage(
+    string $date,
+    int $hour,
+    int $views,
+    array $visitorIds,
+    int $pathDimId = 1,
+    ?int $elementId = null,
+): void {
     $sketch = new Hll(12);
     foreach ($visitorIds as $id) {
         $sketch->add(substr(hash('sha256', "visitor:$id"), 0, 16));
@@ -39,6 +45,7 @@ function writeHourlyPage(string $date, int $hour, int $views, array $visitorIds,
         'date' => $date,
         'hour' => $hour,
         'pathDimId' => $pathDimId,
+        'elementId' => $elementId,
         'views' => $views,
         'uniques' => new yii\db\PdoValue($sketch->serialize(), PDO::PARAM_LOB),
         'entrances' => 1,
@@ -270,4 +277,43 @@ test('GC drops unique membership rows once their salt is gone', function() {
     // they can never be matched to anything again.
     expect($result['expiredMembers'])->toBe(1)
         ->and((new Query())->from(Table::UNIQUE_MEMBERS)->count('*', $db))->toEqual(1);
+});
+
+test('one path with two different elements compacts to one row', function() {
+    // The unique key is (siteId, date, hour, pathDimId) - no elementId. So
+    // grouping by element as well produced two rows the index says are one,
+    // and the entire GC run died on a duplicate-key error, leaving hourly rows
+    // to accumulate forever.
+    //
+    // A path holds rows with different elementIds whenever an entry is deleted
+    // and recreated, or when a URI resolves to an entry one day and to a
+    // template-only route the next. Found on a seeded demo site, where one
+    // path had ten rows with an element and one without.
+    writeHourlyPage('2026-01-05', 9, 10, [1, 2, 3], 1, 194);
+    writeHourlyPage('2026-01-05', 10, 5, [3, 4], 1, 194);
+    writeHourlyPage('2026-01-05', 11, 2, [5], 1, null);
+
+    $this->compactor->run(strtotime('2026-02-01'));
+
+    $rows = pageRows(['date' => '2026-01-05']);
+
+    expect($rows)->toHaveCount(1)
+        ->and((int)$rows[0]['hour'])->toBe(Compactor::DAILY_HOUR)
+        ->and((int)$rows[0]['views'])->toBe(17)
+        // First non-null wins: a row that knows its entry can be joined to the
+        // Content reports, and one that doesn't cannot.
+        ->and((int)$rows[0]['elementId'])->toBe(194);
+});
+
+test('a page with no element at all still compacts', function() {
+    writeHourlyPage('2026-01-06', 9, 4, [1], 2, null);
+    writeHourlyPage('2026-01-06', 10, 3, [2], 2, null);
+
+    $this->compactor->run(strtotime('2026-02-01'));
+
+    $rows = pageRows(['date' => '2026-01-06']);
+
+    expect($rows)->toHaveCount(1)
+        ->and((int)$rows[0]['views'])->toBe(7)
+        ->and($rows[0]['elementId'])->toBeNull();
 });
