@@ -2,6 +2,7 @@
 
 namespace coyshdigital\craftanalytics\services;
 
+use coyshdigital\craftanalytics\db\SchemaBuilder;
 use coyshdigital\craftanalytics\db\Table;
 use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\Plugin;
@@ -135,12 +136,10 @@ class GcService extends Component
     {
         $referenced = [];
 
-        foreach ([
-            [Table::PAGES_ROLLUP, 'pathDimId'],
-            [Table::SOURCES_ROLLUP, 'refHostDimId'],
-            [Table::DEVICES_ROLLUP, 'browserDimId'],
-            [Table::DEVICES_ROLLUP, 'osDimId'],
-        ] as [$table, $column]) {
+        // Every dimension column in the plugin, from the one list that the
+        // schema itself owns. Hardcoding a subset here is how every Pro
+        // report's dimensions got deleted the first time this ran.
+        foreach (SchemaBuilder::dimensionReferences() as [$table, $column]) {
             foreach ((new Query())->select($column)->distinct()->from($table)->column($this->db()) as $id) {
                 $referenced[(int)$id] = true;
             }

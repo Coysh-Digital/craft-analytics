@@ -645,11 +645,19 @@ class SeedController extends Controller
             default => [10_000, 110_000],
         };
 
+        // Each page gets its own character, derived from its path so it is the
+        // same every day. Without this, every page of a type converges on the
+        // same average - all fourteen blog posts read for exactly 2m00s - and
+        // the report says "generated" rather than "measured". Real posts differ
+        // from each other because they are different lengths about different
+        // things.
+        $factor = 0.6 + (hexdec(substr(md5($path), 0, 4)) % 100) / 100;
+
         // Skewed towards the short end: most visits to any page are brief, and
         // a symmetric spread puts the average in a place no real page sits.
         $roll = min(random_int($min, $max), random_int($min, $max));
 
-        return $roll;
+        return (int)round($roll * $factor);
     }
 
     /**

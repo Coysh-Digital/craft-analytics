@@ -385,6 +385,50 @@ final class SchemaBuilder
     }
 
     /**
+     * Every column in the plugin that points at the dimensions table.
+     *
+     * The single source of truth for "is this dimension still in use", which
+     * the GC needs before it deletes one. It lives here, beside the schema
+     * that creates these columns, because the two must change together: a new
+     * rollup with a dimension column and no entry here means the GC deletes
+     * dimensions that rollup is still using, and the report silently empties
+     * the first night the GC runs.
+     *
+     * That is not hypothetical - it is exactly what happened to every Pro
+     * report, from the moment they were added until it was noticed on a
+     * seeded demo site. DimensionReferencesTest reads the real schema and
+     * fails if anything is missing from this list, so forgetting is no longer
+     * possible.
+     *
+     * @return array<int,array{0: string, 1: string}> table, column
+     */
+    public static function dimensionReferences(): array
+    {
+        return [
+            [Table::PAGES_ROLLUP, 'pathDimId'],
+            [Table::SOURCES_ROLLUP, 'refHostDimId'],
+            [Table::DEVICES_ROLLUP, 'browserDimId'],
+            [Table::DEVICES_ROLLUP, 'osDimId'],
+            [Table::CAMPAIGNS_ROLLUP, 'sourceDimId'],
+            [Table::CAMPAIGNS_ROLLUP, 'mediumDimId'],
+            [Table::CAMPAIGNS_ROLLUP, 'campaignDimId'],
+            [Table::CAMPAIGNS_ROLLUP, 'termDimId'],
+            [Table::CAMPAIGNS_ROLLUP, 'contentDimId'],
+            [Table::GEO_ROLLUP, 'regionDimId'],
+            [Table::EVENTS_ROLLUP, 'eventNameDimId'],
+            [Table::EVENTS_ROLLUP, 'pathDimId'],
+            [Table::SCROLL_ROLLUP, 'pathDimId'],
+            [Table::SEARCH_ROLLUP, 'termDimId'],
+            [Table::OUTBOUND_ROLLUP, 'targetHostDimId'],
+            [Table::OUTBOUND_ROLLUP, 'targetDimId'],
+            [Table::OUTBOUND_ROLLUP, 'pathDimId'],
+            [Table::CRAWLERS_ROLLUP, 'crawlerDimId'],
+            [Table::JOURNEYS, 'pathDimId'],
+            [Table::JOURNEYS, 'eventDimId'],
+        ];
+    }
+
+    /**
      * @return string[] every plugin table, newest-dependency first so they
      *                  can be dropped in order
      */
