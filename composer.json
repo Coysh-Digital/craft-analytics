@@ -3,7 +3,6 @@
     "description": "Privacy-first, consent-aware analytics for Craft CMS. First-party, cookieless by default, and it never sends your visitors' data anywhere.",
     "type": "craft-plugin",
     "license": "proprietary",
-    "version": "1.0.0",
     "keywords": [
         "craft",
         "cms",
@@ -23,7 +22,7 @@
         "email": "support@coysh.digital",
         "issues": "https://github.com/Coysh-Digital/craft-analytics/issues",
         "source": "https://github.com/Coysh-Digital/craft-analytics",
-        "docs": "https://github.com/Coysh-Digital/craft-analytics/blob/main/docs/README.md"
+        "docs": "https://coysh.digital/plugins/craft-analytics/docs"
     },
     "require": {
         "php": "^8.2",
@@ -53,7 +52,7 @@
         "name": "Craft Analytics",
         "developer": "Coysh Digital",
         "developerUrl": "https://coysh.digital",
-        "documentationUrl": "https://github.com/Coysh-Digital/craft-analytics/blob/main/docs/README.md",
+        "documentationUrl": "https://coysh.digital/plugins/craft-analytics/docs",
         "changelogUrl": "https://raw.githubusercontent.com/Coysh-Digital/craft-analytics/main/CHANGELOG.md",
         "class": "coyshdigital\\craftanalytics\\Plugin",
         "editions": [
