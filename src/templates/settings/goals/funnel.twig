@@ -12,6 +12,14 @@
     { label: 'Goals & funnels'|t('craft-analytics'), url: url('settings/plugins/craft-analytics/goals') }
 ] %}
 
+{# A step's type changes how it behaves - duration and scroll gate the funnel
+   rather than taking a place in the order - so the list says which is which
+   instead of making you go and look it up. #}
+{% set goalOptions = goals|map(g => {
+    label: g.name ~ ' - ' ~ g.goalType().label()|t('craft-analytics'),
+    value: g.handle
+}) %}
+
 {% block content %}
     <input type="hidden" name="action" value="craft-analytics/goals/save-funnel">
     <input type="hidden" name="redirect" value="{{ 'settings/plugins/craft-analytics/goals'|hash }}">
@@ -50,14 +58,14 @@
 
     {{ forms.editableTableField({
         label: 'Steps'|t('craft-analytics'),
-        instructions: 'The goals that make up this funnel, in the order they should happen. A session that reaches step 3 without having reached step 2 first is not counted at step 3.'|t('craft-analytics'),
+        instructions: 'The goals that make up this funnel, in the order they should happen. A session that reaches step 3 without having reached step 2 first is not counted at step 3. To change what a step matches, edit the goal itself - a step is a goal, so the two can never disagree about what a conversion is.'|t('craft-analytics'),
         id: 'steps',
         name: 'steps',
         cols: {
             goal: {
                 type: 'select',
                 heading: 'Goal'|t('craft-analytics'),
-                options: goals|map(g => { label: g.name, value: g.handle })
+                options: goalOptions
             }
         },
         rows: funnel.steps|map(handle => { goal: handle }),
@@ -89,7 +97,11 @@
     }) }}
 
     <div class="readable" style="margin-top: 24px">
-        <blockquote class="note">
+        <blockquote class="note tip">
+            <p>{{ 'Session duration and scroll depth steps work a little differently: those are properties of the whole visit rather than things that happen at a moment, so they gate the funnel without taking a place in the order. A “stayed 60 seconds” step means the steps around it still have to happen in sequence, and the visit also has to have lasted a minute.'|t('craft-analytics') }}</p>
+        </blockquote>
+
+        <blockquote class="note tip">
             <p>{{ 'Funnels are measured within a single session. There is no cross-session funnel: the visitor hash is destroyed when the salt rotates each day, so a decision made over three visits is three sessions - and this reports each of them rather than inventing a link between them.'|t('craft-analytics') }}</p>
         </blockquote>
     </div>

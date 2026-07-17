@@ -13,5 +13,11 @@
 !/dev/app/
 /dev/app/*
 !/dev/app/modules/
+!/dev/app/templates/
+!/dev/app/config/
+/dev/app/config/*
+!/dev/app/config/routes.php
+!/dev/app/config/craft-analytics.php
+!/dev/app/config/blitz.php
 .DS_Store
 *.local.php

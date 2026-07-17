@@ -26,7 +26,7 @@
 {% block content %}
     {% if readOnly %}
         <div class="readable">
-            <blockquote class="note">
+            <blockquote class="note tip">
                 <p>{{ 'Goals and funnels are stored in project config, which is read-only while `allowAdminChanges` is disabled. Edit them in an environment where admin changes are allowed, and deploy the change.'|t('craft-analytics') }}</p>
             </blockquote>
         </div>
