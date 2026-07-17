@@ -30,6 +30,20 @@ class CaptureService extends Component
      */
     public const EVENT_BEFORE_TRACK = 'beforeTrack';
 
+    /**
+     * Query parameters always stripped from tracked paths, on top of the
+     * campaign parameters. None of these carry page identity: they are
+     * ad-network click and analytics artefacts, and Craft's own preview token.
+     * Leaving them on would split one page into a row per variant.
+     */
+    public const NOISE_QUERY_PARAMS = [
+        // Google Ads and Analytics (the click IDs live in Campaign::PARAMS).
+        'gad_source', 'gad_campaignid', 'gclsrc', 'srsltid',
+        '_gl', '_ga', '_gac', '_gid',
+        // Craft's tokenised routes (live preview, share links).
+        'token',
+    ];
+
     public ?Settings $settings = null;
     public ?IdentityService $identity = null;
     public ?BotFilter $bots = null;
@@ -274,22 +288,31 @@ class CaptureService extends Component
      * Strips excluded query params, keeping the rest in a stable order so the
      * same page doesn't fragment into several path dimensions.
      *
-     * Campaign parameters are always stripped. They describe how somebody
-     * arrived, not which page they arrived at — and they are captured into
-     * the campaign dimensions separately. Leaving them on the path would
-     * split one page into a row per campaign and inflate path cardinality
+     * Campaign and ad-network parameters are always stripped. They describe how
+     * somebody arrived, not which page they arrived at - and campaigns are
+     * captured into their own dimensions separately. Leaving them on the path
+     * would split one page into a row per campaign and inflate path cardinality
      * for data already recorded elsewhere (C2).
+     *
+     * With `stripQueryString` on, the query is dropped entirely, so even
+     * site-specific parameters collapse onto the one clean path. Attribution is
+     * unaffected: it reads the raw query string before this runs.
      */
     public function normalizePath(string $pathInfo, string $queryString): string
     {
         $path = '/' . ltrim($pathInfo, '/');
-        $excluded = array_merge($this->settings()->excludeQueryParams, Campaign::PARAMS);
 
-        if ($queryString === '') {
+        if ($queryString === '' || $this->settings()->stripQueryString) {
             return $path;
         }
 
         parse_str($queryString, $params);
+
+        $excluded = array_merge(
+            $this->settings()->excludeQueryParams,
+            Campaign::PARAMS,
+            self::NOISE_QUERY_PARAMS,
+        );
 
         foreach ($excluded as $param) {
             unset($params[$param]);

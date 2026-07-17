@@ -25,10 +25,17 @@ return [
         // 12 = 4KB dense / ±1.6%; 14 = 16KB / ±0.8%. Sparse sketches cost far less.
         'hllPrecision' => 12,
 
-        // Site paths never tracked (glob patterns), and query params stripped
-        // from tracked URIs
+        // Site paths never tracked (glob patterns), and extra query params
+        // stripped from tracked URIs. Campaign tags (utm_*, gclid, fbclid, ...),
+        // ad-network parameters (gad_source, _gl, ...) and Craft's preview token
+        // are always stripped; list any site-specific ones here.
         'excludePaths' => [],
         'excludeQueryParams' => [],
+
+        // Drop the whole query string from tracked page paths. Attribution is
+        // read first, so UTM reports are unaffected; this just collapses every
+        // ?ad=, ?cid= and similar variant of a page onto one clean path.
+        'stripQueryString' => false,
 
         // Session inactivity window, seconds
         'sessionWindow' => 1800,

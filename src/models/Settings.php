@@ -70,11 +70,22 @@ class Settings extends Model
     public array $excludePaths = [];
 
     /**
-     * Query parameters stripped from tracked URIs.
+     * Query parameters stripped from tracked URIs, on top of the campaign and
+     * ad-network parameters that are always removed.
      *
      * @var string[]
      */
     public array $excludeQueryParams = [];
+
+    /**
+     * Drop the entire query string from tracked page paths.
+     *
+     * Campaign attribution is read from the query before this applies, so
+     * turning it on keeps your UTM and click reports while collapsing every
+     * `?ad=...`, `?cid=...` and similar variant of a page onto one clean path.
+     * Site search still works, because it is read separately.
+     */
+    public bool $stripQueryString = false;
 
     /** Session inactivity window, in seconds. */
     public int $sessionWindow = 1800;
@@ -365,7 +376,7 @@ class Settings extends Model
             [['beaconRateLimit'], 'integer', 'min' => 1],
             [['beaconPath', 'consentPath'], 'string'],
             [['beaconPath', 'consentPath'], 'match', 'pattern' => '/^[A-Za-z0-9\-_\/\.]+$/'],
-            [['honourGpc', 'honourDnt', 'injectScript'], 'boolean'],
+            [['honourGpc', 'honourDnt', 'injectScript', 'stripQueryString'], 'boolean'],
             [['excludePaths', 'excludeQueryParams'], 'each', 'rule' => ['string']],
 
             // Consent (Pro)

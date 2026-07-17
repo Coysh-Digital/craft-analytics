@@ -1,5 +1,22 @@
 # Release Notes for Craft Analytics
 
+## 1.2.0 - 2026-07-17
+
+### Added
+
+- A `stripQueryString` setting, with a switch on the settings screen, that
+  records the clean path only and drops everything after the `?`. Campaign tags
+  are still read for attribution first, so turning it on collapses every `?ad=`,
+  `?cid=` and similar variant of a page onto one row without losing your Sources
+  report.
+
+### Changed
+
+- The list of query parameters stripped from tracked paths now covers the newer
+  ad-network and analytics parameters (`gad_source`, `gad_campaignid`, `gclsrc`,
+  `srsltid`, `_gl`, `_ga`, `_gac`, `_gid`) and Craft's preview `token`, so these
+  no longer fragment a page into a row each in the Pages report.
+
 ## 1.1.0 - 2026-07-17
 
 ### Added

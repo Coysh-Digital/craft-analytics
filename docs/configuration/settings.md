@@ -14,7 +14,8 @@ setting supports Craft's multi-environment config format and env vars.
 | `uniqueCounterDriver` | `auto` | `auto` picks `redis` when a Redis cache is configured, else `hll`. `exact` suits small sites. See [storage](../configuration/retention.md). |
 | `hllPrecision` | `12` | HyperLogLog precision (11–14) for the `hll` driver. 12 = 4 KB dense/±1.6%; 14 = 16 KB/±0.8%. Sparse sketches cost far less. |
 | `excludePaths` | `[]` | Glob patterns of site paths never tracked. |
-| `excludeQueryParams` | `[]` | Query params stripped from tracked URIs. |
+| `excludeQueryParams` | `[]` | Extra query params stripped from tracked URIs. Campaign tags (`utm_*`, `gclid`, `fbclid`, ...), ad-network params (`gad_source`, `gad_campaignid`, `_gl`, `_ga`, `srsltid`, ...) and Craft's preview `token` are always stripped; list any site-specific ones here. |
+| `stripQueryString` | `false` | Drop the whole query string from tracked page paths, so every `?ad=`, `?cid=` and similar variant of a page collapses onto one clean path. Attribution is read first, so UTM reports are unaffected, and site search still works because it is read separately. |
 | `sessionWindow` | `1800` | Seconds of inactivity before a session closes (60–14400). |
 | `saltRotationInterval` | `86400` | Seconds between visitor-hash salt rotations. The 24h default with salt destruction is the basis of the banner-free privacy posture; the privacy panel warns when extended. |
 | `saltRotationHour` | `4` | Hour of day (site timezone) rotation aims for, minimising sessions split across the boundary. |

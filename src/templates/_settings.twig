@@ -85,6 +85,15 @@
     errors: settings.getErrors('beaconPath'),
 }) }}
 
+{{ forms.lightswitchField({
+    label: 'Strip query strings from page paths'|t('craft-analytics'),
+    instructions: 'Record the clean path only, dropping everything after the ?. Campaign tags (utm_*, gclid and the like) are always removed and are still credited to your Sources report; this also collapses ad-network and site-specific parameters such as ?ad= or ?cid= onto one row. Site search still works, since it is read separately.'|t('craft-analytics'),
+    id: 'stripQueryString',
+    name: 'stripQueryString',
+    on: settings.stripQueryString,
+    errors: settings.getErrors('stripQueryString'),
+}) }}
+
 <hr>
 
 <h2>{{ 'How data is written'|t('craft-analytics') }}</h2>
