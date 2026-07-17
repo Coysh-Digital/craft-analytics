@@ -137,6 +137,10 @@ because only `tracker.js` is what every visitor to every site gets.
 
 ## Settings
 
+All of these are on the **What gets tracked** section of the settings screen
+(Settings -> Plugins -> Craft Analytics), and every one can also be set in
+`config/craft-analytics.php` to differ between environments.
+
 | Setting | Default |
 |---|---|
 | `enableCampaigns` | `true` |

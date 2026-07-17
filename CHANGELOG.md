@@ -1,5 +1,15 @@
 # Release Notes for Craft Analytics
 
+## 1.2.1 - 2026-07-17
+
+### Added
+
+- A **What gets tracked** section on the settings screen, with switches for
+  geography, campaigns and attribution model, events and their outbound,
+  download and scroll sub-options, and site search with its path and parameter.
+  These already existed in `config/craft-analytics.php` but had no control in
+  the CP, so geography in particular looked as though it could not be turned on.
+
 ## 1.2.0 - 2026-07-17
 
 ### Added

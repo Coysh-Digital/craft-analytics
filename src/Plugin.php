@@ -3,6 +3,7 @@
 namespace coyshdigital\craftanalytics;
 
 use coyshdigital\craftanalytics\assets\CpAsset;
+use coyshdigital\craftanalytics\enums\AttributionModel;
 use coyshdigital\craftanalytics\gql\AnalyticsQuery;
 use coyshdigital\craftanalytics\ingest\CaptureService;
 use coyshdigital\craftanalytics\ingest\NonceRegistry;
@@ -376,10 +377,17 @@ class Plugin extends BasePlugin
 
     protected function settingsHtml(): ?string
     {
+        $attributionModels = [];
+
+        foreach (AttributionModel::cases() as $model) {
+            $attributionModels[$model->value] = Craft::t('craft-analytics', $model->label());
+        }
+
         return Craft::$app->getView()->renderTemplate('craft-analytics/_settings.twig', [
             'plugin' => $this,
             'settings' => $this->getSettings(),
             'reportPeriods' => DateRange::presets(),
+            'attributionModels' => $attributionModels,
         ]);
     }
 

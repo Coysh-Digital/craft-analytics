@@ -239,6 +239,122 @@
 {% if isPro %}
     <hr>
 
+    <h2>{{ 'What gets tracked'|t('craft-analytics') }}</h2>
+
+    <p class="light">
+        {{ 'The Pro reports, each turned on or off here. They are additive: a report left off records nothing and costs nothing.'|t('craft-analytics') }}
+    </p>
+
+    {{ forms.lightswitchField({
+        label: 'Geography'|t('craft-analytics'),
+        instructions: 'Country and region, resolved on your own server from a local database - no lookup service is ever called. Install the database first with the command below, or this records nothing.'|t('craft-analytics'),
+        id: 'enableGeo',
+        name: 'enableGeo',
+        on: settings.enableGeo,
+        errors: settings.getErrors('enableGeo'),
+        toggle: 'geo-settings',
+    }) }}
+
+    <div id="geo-settings" class="{{ settings.enableGeo ? '' : 'hidden' }}">
+        <p class="light">
+            {{ 'Download and install a local geo database (DB-IP Lite or GeoLite2). Nothing is downloaded automatically:'|t('craft-analytics') }}
+        </p>
+        <pre class="ca-code" style="font-size: 12px">php craft craft-analytics/geo/install</pre>
+    </div>
+
+    {{ forms.lightswitchField({
+        label: 'Campaigns & attribution'|t('craft-analytics'),
+        instructions: 'Reads utm_* tags and ad click IDs to show which tagged links brought people, and what they did next.'|t('craft-analytics'),
+        id: 'enableCampaigns',
+        name: 'enableCampaigns',
+        on: settings.enableCampaigns,
+        errors: settings.getErrors('enableCampaigns'),
+        toggle: 'campaign-settings',
+    }) }}
+
+    <div id="campaign-settings" class="{{ settings.enableCampaigns ? '' : 'hidden' }}">
+        {{ forms.selectField({
+            label: 'Attribution model'|t('craft-analytics'),
+            instructions: 'How a session with more than one campaign touch divides the credit. With a single touch, every model agrees.'|t('craft-analytics'),
+            id: 'attributionModel',
+            name: 'attributionModel',
+            options: attributionModels,
+            value: settings.attributionModel,
+            errors: settings.getErrors('attributionModel'),
+        }) }}
+    </div>
+
+    {{ forms.lightswitchField({
+        label: 'Events & interactions'|t('craft-analytics'),
+        instructions: 'Loads a small extra script so custom events, outbound clicks, downloads and scroll depth can be recorded. Left off, none are, and the core tracker stays smaller.'|t('craft-analytics'),
+        id: 'enableEvents',
+        name: 'enableEvents',
+        on: settings.enableEvents,
+        errors: settings.getErrors('enableEvents'),
+        toggle: 'event-settings',
+    }) }}
+
+    <div id="event-settings" class="{{ settings.enableEvents ? '' : 'hidden' }}">
+        {{ forms.lightswitchField({
+            label: 'Outbound links'|t('craft-analytics'),
+            instructions: 'Count clicks on links that leave your site.'|t('craft-analytics'),
+            id: 'trackOutbound',
+            name: 'trackOutbound',
+            on: settings.trackOutbound,
+            errors: settings.getErrors('trackOutbound'),
+        }) }}
+
+        {{ forms.lightswitchField({
+            label: 'Downloads'|t('craft-analytics'),
+            instructions: 'Count clicks on links to downloadable files. The extensions that count as a download are in config/craft-analytics.php.'|t('craft-analytics'),
+            id: 'trackDownloads',
+            name: 'trackDownloads',
+            on: settings.trackDownloads,
+            errors: settings.getErrors('trackDownloads'),
+        }) }}
+
+        {{ forms.lightswitchField({
+            label: 'Scroll depth'|t('craft-analytics'),
+            instructions: 'Record how far down each page people read. It rides the existing pageview beacon, so it adds no extra request.'|t('craft-analytics'),
+            id: 'trackScroll',
+            name: 'trackScroll',
+            on: settings.trackScroll,
+            errors: settings.getErrors('trackScroll'),
+        }) }}
+    </div>
+
+    {{ forms.lightswitchField({
+        label: 'Site search'|t('craft-analytics'),
+        instructions: 'Record what people search for on your own site. Read from the search URL, so it needs no JavaScript.'|t('craft-analytics'),
+        id: 'trackSiteSearch',
+        name: 'trackSiteSearch',
+        on: settings.trackSiteSearch,
+        errors: settings.getErrors('trackSiteSearch'),
+        toggle: 'site-search-settings',
+    }) }}
+
+    <div id="site-search-settings" class="{{ settings.trackSiteSearch ? '' : 'hidden' }}">
+        {{ forms.textField({
+            label: 'Search results path'|t('craft-analytics'),
+            instructions: 'The path your search results land on.'|t('craft-analytics'),
+            id: 'siteSearchPath',
+            name: 'siteSearchPath',
+            value: settings.siteSearchPath,
+            errors: settings.getErrors('siteSearchPath'),
+        }) }}
+
+        {{ forms.textField({
+            label: 'Search query parameter'|t('craft-analytics'),
+            instructions: 'The query-string parameter that holds the search term, e.g. q in ?q=hello.'|t('craft-analytics'),
+            id: 'siteSearchParam',
+            name: 'siteSearchParam',
+            value: settings.siteSearchParam,
+            errors: settings.getErrors('siteSearchParam'),
+        }) }}
+    </div>
+
+    <hr>
+
     <h2>{{ 'Goals & funnels'|t('craft-analytics') }}</h2>
 
     <p class="light">
