@@ -33,7 +33,10 @@ a cache.
 
 **A small script counts it** when the page loads in the browser. It works
 regardless of where the HTML came from: PHP, Blitz, a CDN, or the browser's
-back button.
+back button. It reports the view as the page loads, not when the visitor
+leaves, so a cached page is counted while they are still reading it - which is
+also what lets Real-time show them. A second, smaller request goes as they
+leave, carrying time on page and scroll depth. It can never count a view.
 
 The nonce is what stops the two counting the same view twice.
 
@@ -48,27 +51,34 @@ script tag:
         data-nonce="6a2a1352d5dcc28f"></script>
 ```
 
-and records that nonce in the cache as "unclaimed". When you leave the page,
-the tracker posts the nonce back. The endpoint looks it up:
+and records, against **that nonce and that visitor**, that their view is
+already counted. When the page loads, the tracker posts the nonce back and the
+endpoint looks it up:
 
-- **Nonce found, unclaimed** → PHP already counted this view. Claim the nonce
-  and record only the time-on-page. Don't count it again.
-- **Nonce not found, or already claimed** → nobody counted this view. Count it.
+- **A record for this nonce and this visitor** → PHP already counted them.
+  Claim it and count nothing.
+- **No record** → nobody counted this view. Count it.
 
 When Blitz caches the page, the nonce is stored in the HTML along with
 everything else, so **every visitor to that cached page receives the same
-nonce**. That is what makes it work:
+nonce**. Because the record is keyed on the visitor as well, that does not
+matter:
 
 | | What the visitor gets | What happens |
 |---|---|---|
-| **Visitor 1** | PHP builds the page, nonce `abc` | PHP counts them. Their beacon claims `abc`, adds dwell time, doesn't double count. |
-| **Visitor 2** | Cached HTML, nonce `abc` | PHP never ran. Beacon sends `abc`, which is already claimed → **counted from the beacon**. |
+| **Visitor 1** | PHP builds the page, nonce `abc` | PHP counts them, and records `abc` for visitor 1. Their beacon claims it and counts nothing. |
+| **Visitor 2** | Cached HTML, nonce `abc` | PHP never counted them. No record for `abc` + visitor 2 → **counted from the beacon**. |
 | **Visitor 3** | Cached HTML, nonce `abc` | Same → **counted**. |
 | **Visitor 900** | Cached HTML, nonce `abc` | Same → **counted**. |
 
-Three visitors give three views; nine hundred give nine hundred. Only the
-first claim finds an unclaimed nonce, and everyone after it is counted. There
-is no cache configuration, cache-busting or exclusion rule to set up.
+Three visitors give three views; nine hundred give nine hundred. There is no
+cache configuration, cache-busting or exclusion rule to set up.
+
+Keying the record on the visitor as well as the nonce matters more than it
+looks. Keyed on the nonce alone, whichever visitor claimed it first was
+mistaken for the one PHP rendered for, and their own view vanished - and if the
+cache was warmed by something without JavaScript, such as a warming crawler,
+nobody ever claimed it and the first real visitor vanished instead.
 
 This works with any cache - Blitz, Cloudflare, Fastly, Varnish, nginx
 `proxy_cache`, a static export on Netlify - because the plugin does not detect
@@ -141,19 +151,16 @@ cache and still counts people who block scripts.
 
 Three cases worth knowing about:
 
-**The generating visitor's nonce can be claimed by someone else.** If visitor
-1 generates the page and leaves so fast that their beacon never fires, visitor
-2's beacon claims the unclaimed nonce and isn't counted - visitor 1 was
-counted server-side, so you get one view for two people. This can happen once
-per cache generation, so on a page cached for an hour and viewed 900 times the
-worst case is 899. We accept that in exchange for needing no cache
-integration.
+**A cached page needs JavaScript to be counted.** PHP knows when it built a
+page and when it only served a stored copy, and it counts the first and leaves
+the second to the beacon. So somebody with JavaScript disabled is counted on a
+freshly built page and not on a cached one. Nothing can fix the second case:
+on a cache hit the only evidence they were there is the script you have
+blocked.
 
-**Nonces expire.** They live for `nonceTtl` (default 1800 seconds, 30
-minutes). If somebody opens a page and leaves it in a tab for two hours before
-closing it, its nonce is long gone, and their beacon counts the view a second
-time. Raising `nonceTtl` shrinks the window at the cost of one small cache
-entry per view living longer.
+**Nonces expire.** They live for `nonceTtl` (default 1800 seconds). The beacon
+now goes on load rather than on the way out, so it arrives milliseconds after
+the page is recorded, and an expiry in that gap is very hard to hit.
 
 **A cached page and a browser back-button page look the same.** Neither was
 rendered by PHP for that visitor, so both are counted by the beacon. They did

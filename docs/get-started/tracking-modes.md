@@ -22,8 +22,9 @@ every view served from a cache. They're kept from double-counting by a
 one-time nonce, explained in [Static & edge
 caching](../configuration/caching.md).
 
-**Costs you:** a 1.2 KB script on the page, and one small cache entry per view
-for half an hour.
+**Costs you:** a 1.8 KB script, and two small requests per pageview: the view
+as it happens, then time on page and scroll depth as they leave. Plus one
+short-lived cache entry per view, so the two halves cannot both count it.
 
 **Use this unless you have a specific reason not to.**
 

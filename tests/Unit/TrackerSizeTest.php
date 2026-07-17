@@ -66,14 +66,36 @@ test('the tracker cannot write to the page', function() {
         ->and($source)->not->toContain('appendChild');
 });
 
-test('the tracker sends exactly one request per pageview', function() {
+test('the tracker reports the pageview as it happens, not on the way out', function() {
+    // It used to send one request, on the way out, which meant a cached page
+    // was not counted until the visitor left: Real-time could not show anyone
+    // still reading, and somebody who closed their laptop was never counted at
+    // all. The pageview now goes on load.
     $source = trackerSource();
 
-    // One sendBeacon call, guarded by a latch that is only released when the
-    // page comes back from bfcache — i.e. when it is genuinely a new view.
-    expect(substr_count($source, 'sendBeacon('))->toBe(1)
-        ->and($source)->toContain('if (sent) {')
-        ->and($source)->toContain('event.persisted');
+    // view() is called at the top level, not from an unload handler.
+    expect($source)->toContain("\n    view();\n")
+        ->and($source)->toContain('function view()');
+});
+
+test('the engagement beacon can never count a second view', function() {
+    $source = trackerSource();
+
+    // Two requests per pageview: the view, then time-on-page and scroll on
+    // the way out. The second is flagged so the endpoint cannot mistake it
+    // for another pageview.
+    expect(substr_count($source, 'sendBeacon('))->toBe(2)
+        ->and($source)->toContain("body.set('e', '1')")
+        ->and($source)->toContain('if (leaving) {');
+});
+
+test('a page restored from bfcache is reported as a new view', function() {
+    $source = trackerSource();
+
+    // PHP did not run, so nobody else will count it. The nonce belongs to the
+    // original delivery and must not be reused to claim this one.
+    expect($source)->toContain('event.persisted')
+        ->and($source)->toContain("nonce = '';");
 });
 
 test('the tracker degrades silently on browsers without sendBeacon', function() {

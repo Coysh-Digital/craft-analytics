@@ -83,7 +83,7 @@ class CaptureService extends Component
         // it. Deliberately after the flush — this is a cache write, and the
         // visitor is not waiting for it (C1).
         if ($nonce !== null) {
-            Plugin::getInstance()->getNonces()->record($nonce);
+            Plugin::getInstance()->getNonces()->record($nonce, $event->hit->visitorHash);
         }
 
         return $event->hit;

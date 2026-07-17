@@ -95,10 +95,17 @@ class BeaconController extends Controller
             return $this->noContent();
         }
 
-        // A pageview's nonce decides whether the server already counted it.
-        // An event is not a pageview and never claims one.
+        // The engagement beacon reports time on page and scroll depth for a
+        // view the load beacon already reported. It must never count a second
+        // one, and it never claims a nonce - it carries none.
+        $isEngagement = (string)$request->getBodyParam('e', '') === '1';
+
+        // A pageview's nonce decides whether the server already counted it:
+        // claiming it means PHP did, so this beacon adds nothing. An event is
+        // not a pageview and never claims one either.
         $countView = $kind === Hit::KIND_VIEW
-            && !$plugin->getNonces()->claim((string)$request->getBodyParam('n', ''));
+            && !$isEngagement
+            && !$plugin->getNonces()->claim((string)$request->getBodyParam('n', ''), $visitorHash);
 
         $plugin->getWriter()->write(new Hit(
             siteId: $site->id,

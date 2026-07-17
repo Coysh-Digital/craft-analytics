@@ -45,7 +45,7 @@
                 <div class="light">{{ 'Recommended'|t('craft-analytics') }}</div>
             </th>
             <td>{{ 'Both. PHP counts the view, and the tracker reports time on page and scroll depth. When a page is served from a cache and PHP never runs, the tracker notices nobody counted it and counts it itself.'|t('craft-analytics') }}</td>
-            <td>{{ 'A 1.2 KB script, and one small cache entry per view so the two can’t both count the same visit.'|t('craft-analytics') }}</td>
+            <td>{{ 'A 1.8 KB script, two small requests per pageview (the view as it happens, then time on page as they leave), and one short-lived cache entry so the two halves can’t both count the same visit.'|t('craft-analytics') }}</td>
         </tr>
         <tr{{ settings.trackingMode == 'server' ? ' style="background: var(--gray-050)"' : '' }}>
             <th scope="row" style="white-space: nowrap">{{ 'Server-side only'|t('craft-analytics') }}</th>

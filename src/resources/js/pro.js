@@ -3,12 +3,13 @@
  * scroll depth.
  *
  * A separate file, loaded only on Pro sites with these features on, so
- * tracker.js stays at 1.2 KB for everyone else (C3).
+ * tracker.js stays small for everyone else (C3).
  *
- * Scroll depth rides the pageview beacon rather than sending its own: it is a
- * property of the pageview, and one request per pageview is the budget. Clicks
- * are genuinely separate events and each sends its own beacon — there is no
- * way to report a click on the way out of the page it left.
+ * Scroll depth rides the tracker's engagement beacon rather than sending a
+ * request of its own: it is a property of the pageview, and it is only known
+ * once the visitor leaves — which is exactly when that beacon goes. Clicks are
+ * genuinely separate events and each sends its own, because there is no way to
+ * report a click on the way out of the page it left.
  *
  * Exposes:
  *

@@ -86,7 +86,7 @@ craftAnalytics.gpcDetected   // true when the browser has opted out
 
 `consent.js` is a separate file, loaded **only when consent is switched on** -
 Lite sites and cookieless Pro sites download nothing for it, and `tracker.js`
-stays at 1.2 KB.
+stays small.
 
 The server owns the decision; the script only relays it. The cookie is set
 server-side so it can be HttpOnly and signed.
