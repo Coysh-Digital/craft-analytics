@@ -17,7 +17,7 @@ table locally and look it up in memory.
 Craft Analytics only does the second, because the first means sending your
 visitors' IP addresses to a third party. There is no lookup service and no API
 key. The trade-off is that you supply the table yourself: it is a file of
-between 3 MB and 100 MB depending on which you choose, and its licence is not
+between 8 MB and 100 MB depending on which you choose, and its licence is not
 ours to redistribute.
 
 The plugin will not download it on its own. Changing a setting should not cause
@@ -26,7 +26,7 @@ your server to fetch 100 MB from a third party.
 ## Which database
 
 **DB-IP Lite** is the recommended option: free, CC BY 4.0 and redistributable.
-Country-level is around 3 MB, city-level around 90 MB.
+The country database is around 8 MB, the city one around 90 MB.
 
 Download the free MMDB from [db-ip.com/db/lite.php](https://db-ip.com/db/lite.php).
 You want the **MMDB** format, not CSV.
@@ -46,7 +46,7 @@ Download from [maxmind.com](https://www.maxmind.com/en/geolite2/signup), pick
 
 City-level databases give you country and region. Country-level gives you
 country only and leaves the Regions table empty, which is fine if countries are
-all you need and saves you 87 MB.
+all you need and saves you 80 MB.
 
 ## Installing it
 
