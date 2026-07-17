@@ -1,73 +1,119 @@
 # Release Notes for Craft Analytics
 
-## Unreleased
+## 1.0.0 - 2026-07-17
+
+Initial release.
 
 ### Added
-- Initial plugin scaffold: editions (Lite/Pro), settings model, config file support, dimensions table, cross-database upsert helper, rotating salt store.
-- Server-side pageview capture on `Response::EVENT_AFTER_SEND`, after `fastcgi_finish_request()` — no added time-to-first-byte.
-- Rotating visitor-hash salt with automatic rotation on a configurable window, aligned to a quiet hour, destroying the previous salt.
-- Bot filtering via CrawlerDetect plus headless/automation and missing-`Accept-Language` heuristics.
-- Global Privacy Control (and optional `DNT`) support.
-- Write path with `spool` (default), `queue` and `direct` drivers, plus a spool back-pressure guard.
-- Ephemeral session hot layer (cache-backed) powering session metrics without raw hit rows.
-- `craft-analytics/drain/run` console command (with `--watch`), crash-safe and idempotent.
-- `craft-analytics/salt/rotate` console command.
-- Benchmark harness proving the TTFB and capture-cost claims.
-- Rollup tables (pages, sessions, sources, devices) — the only persistent analytics storage in Lite.
-- Original pure-PHP HyperLogLog with sparse→dense representation, written from the published papers; sketches merge, so date ranges union rather than sum.
-- `UniqueCounterInterface` with `redis` (native `PFADD`/`PFMERGE`), `hll` (portable sketch-on-row) and `exact` (membership table) drivers, auto-detecting Redis.
-- Referrer channel classification (direct/search/social/referral/campaign/internal) with a `registerChannelRules` extension point.
-- Browser, OS and device-type parsing for the devices rollup.
-- Per-(site, date, type) cardinality capping with an `__other__` overflow dimension.
-- Hourly→daily compaction (lossless, merges sketches) and retention/GC, via `craft-analytics/gc/run` and Craft's GC.
-- Client beacon: a 1.2 KB-gzipped, dependency-free, deferred tracker that stores nothing on the device and sends one request per pageview.
-- Hybrid deduplication via a one-time nonce claim, so pages served by a full-page cache or the bfcache are counted without double-counting fresh ones — no cache integration required.
-- Time on page, recorded from the beacon into `totalDwellMs`.
-- Beacon endpoint at a configurable first-party path: anonymous, CSRF-exempt, rate-limited per visitor, bot- and GPC-filtered, always 204.
-- Automatic tracker injection (`injectScript`), full-page-cache detection and a CP warning when `trackingMode` is `server`.
-- CI job and test enforcing the 2 KB gzipped tracker budget (C3).
-- Control panel: dashboard with KPI tiles and a traffic chart, plus Pages, Sources, Devices and Real-time screens.
-- Real-time visitors, read entirely from the session cache — no database queries.
-- Entry editor sidebar stats with a sparkline, and a “Views (30d)” column on the entries index.
-- A dashboard widget for Craft's own dashboard.
-- CSV and JSON export for every report, carrying exact values and stating the uniques accuracy.
-- Granular permissions: view / view all sites / export / manage settings, enforced at the controller layer and scoped per site.
-- `craft.craftAnalytics` Twig variable.
-- `craft-analytics/seed/run` console command for generating realistic development data (dev mode only).
-- Consent state machine (Pro, off by default): our cookie → the site's CMP cookie → the `defineConsent` event, with Global Privacy Control absolute and unoverridable.
-- First-party `_ca_vid` cookie: 128-bit random, HttpOnly, Secure, SameSite=Lax, signed, 13 months default and hard-capped at 24.
-- `consent.js` with `craftAnalytics.consent()` and `gpcDetected`, loaded only when consent is enabled so `tracker.js` stays 1.2 KB.
-- CMP adapters for Klaro, Cookiebot, CookieYes, Osano and Civic, plus IAB TCF v2.2 (purposes 1 + 8).
-- Consent evidence log recording timestamp, state, method, scope and policy version — pseudonymous by construction.
-- Consented raw journeys layer (opt-in, off by default) with its own retention, and optional Craft user association behind a separate setting.
-- Privacy posture panel in the CP, reporting what the configuration permits in compliance language with warning badges.
-- `craft-analytics/privacy/export|erase` DSAR commands, and `craft-analytics/privacy/document` generating ROPA, privacy-notice appendix and DPIA summary from the live configuration.
-- GC enforces journey and consent-log retention.
 
-- Campaign/UTM tracking with last-click (default), first-click and linear attribution; one session is always credited as exactly one session.
-- Country and region from a local DB-IP Lite or GeoLite2 database, installed via `craft-analytics/geo/install`; no lookup service is ever called and no address is stored.
-- Custom events with monetary values, outbound link clicks, file downloads, and scroll depth, via a separate `pro.js` so `tracker.js` stays small.
-- Site-search tracking read from the URL — no JavaScript required.
-- Campaigns, Locations and Events CP screens, Pro-gated at the controller with a plain Lite explanation.
+#### Tracking
 
-- Content reports: traffic by section, entry type and author, joined from Craft's own tables at query time so they always reflect how the site is structured now, and cost no extra storage.
-- Goals (Pro): page, event, entry, session-duration and scroll-depth, each with an optional monetary value. Stored in project config so they deploy; converted once per session; matched while the hits still exist, so session state stays bounded by goal count rather than by how much a visitor browsed.
-- Funnels (Pro): goals in order, with step-level drop-off. Order is enforced - reaching step 3 before step 2 does not count as step 3.
-- Formie and Commerce integrations (Pro): both are noticed rather than required, wiring by class name only when their plugin is installed. A submission is an event named `form:<handle>`; an order carries its total and nothing about the customer.
-- Emailed summary reports (Pro), sent with the site's own mailer. No third-party service, and no tracking pixel.
-- Crawler reporting: bots are kept out of the numbers by default and counted separately, so the gap between your server logs and your reports has an answer on a screen.
-- Front-end Twig API: `totals()`, `views()`, `popularPages()`, `popularEntries()` (an entry query that keeps its view order through `.all()`) and `gpcDetected`.
-- GraphQL API (Pro): `craftAnalyticsTotals` and `craftAnalyticsTopPages`, behind a schema component that is off by default.
-- Configurable aggregate retention and hourly-detail window, editable from the settings screen.
-- The settings screen now explains what each tracking mode and write driver actually does and what it costs you, rather than asserting which is recommended.
+- Server-side pageview capture on `Response::EVENT_AFTER_SEND`, after
+  `fastcgi_finish_request()`, so nothing is added to time-to-first-byte.
+- Three tracking modes: hybrid (default), server-side only, and client beacon
+  only.
+- A dependency-free client beacon, 1.8 KB gzipped, that stores nothing on the
+  device. It reports the pageview as the page loads, then time on page and
+  scroll depth as the visitor leaves.
+- Hybrid deduplication: PHP records that it counted a view for a given visitor
+  and nonce, and that visitor's beacon claims the record instead of counting
+  again. Pages served by a full-page cache or the bfcache are counted correctly
+  with no cache integration, and cached deliveries are left to the beacon so
+  the numbers do not depend on how the cache is wired up.
+- Three write drivers: `spool` (default), `queue` and `direct`, with a spool
+  back-pressure guard.
+- Crash-safe, idempotent drain (`craft-analytics/drain/run`, with `--watch`):
+  claim-by-rename, in-memory aggregation, and batch markers committed in the
+  same transaction as the writes.
+- Bot filtering via CrawlerDetect plus headless, automation and
+  missing-`Accept-Language` heuristics. Crawlers are kept out of the reports by
+  default and counted separately on their own screen.
+- Referrer channel classification (direct, search, social, referral, campaign,
+  internal) with a `registerChannelRules` extension point.
+- Browser, OS and device-type parsing.
+- An ephemeral, cache-backed session layer, giving bounce rate, session
+  duration and entry/exit pages without storing a single raw hit row.
 
-### Fixed
-- **Pageviews were counted twice behind Blitz.** Blitz's default setup serves its cache from inside PHP, which fires the same event a real render does, so the server counted cache hits while the beacon counted them too - its nonce having been baked into the cached HTML and claimed long ago. Three visitors to a cached page produced five views. Cached deliveries are now left to the beacon, exactly as they already were when a web server serves the cache and PHP never runs, so the numbers no longer depend on how the cache is wired up.
-- Craft passes project-config token matches numerically rather than by name, so reading `tokenMatches['uid']` silently yielded an empty string and collapsed every goal onto a single row.
-- `project-config/rebuild` collapsed every goal onto one empty key, by packing the outer uid-keyed map when only nested associative values need it.
-- Funnels apply before goals alphabetically, so funnel steps found no goals to point at on a fresh environment and were silently dropped. The steps are now written in a deferred pass.
-- Em dashes are gone from everything a person reads - control panel, emails and console output.
+#### Privacy
 
-- A visitor who withdrew consent between a hit being spooled and the drain running could have their already-spooled hits written back afterwards, silently resurrecting data they had asked to be erased. The drain now re-checks the consent log at write time.
-- UTM and ad click-id parameters were kept on the recorded path, fragmenting the Pages report into a row per campaign and inflating path cardinality. They are now stripped, since they describe how a visitor arrived rather than which page they arrived at.
-- The beacon sent its path and query as one string but the endpoint normalised it as if it had no query, so a beacon's dwell time could land on a different row from the pageview it belonged to.
+- Cookieless by default. Nothing is stored on a visitor's device unless
+  consented tracking is deliberately turned on.
+- A rotating visitor-hash salt, on a configurable window aligned to a quiet
+  hour, destroying the previous salt as it goes.
+- IP addresses are never stored: an address is hashed in memory and discarded
+  within the call frame.
+- Global Privacy Control support, absolute and unoverridable, plus optional
+  `DNT`.
+- Consent state machine (Pro, off by default): the plugin's own cookie, the
+  site's CMP cookie, or the `defineConsent` event.
+- First-party `_ca_vid` cookie: 128-bit random, HttpOnly, Secure,
+  SameSite=Lax, signed, 13 months by default and hard-capped at 24.
+- CMP adapters for Klaro, Cookiebot, CookieYes, Osano and Civic, plus IAB TCF
+  v2.2 (purposes 1 and 8).
+- A consent evidence log, pseudonymous by construction, recording timestamp,
+  state, method, scope and policy version.
+- An opt-in consented journeys layer, with its own retention and optional Craft
+  user association behind a separate setting.
+- A privacy posture panel reporting what the current configuration permits, in
+  compliance language.
+- `craft-analytics/privacy/export|erase` for data subject requests, and
+  `craft-analytics/privacy/document` generating a ROPA entry, privacy-notice
+  appendix and DPIA summary from the live configuration.
+
+#### Storage
+
+- Rollup-only storage: growth is cardinality × time, never traffic volume.
+- An original pure-PHP HyperLogLog with sparse to dense representation, written
+  from the published papers. Sketches merge, so a date range unions rather than
+  sums.
+- `redis` (native `PFADD`/`PFMERGE`), `hll` (portable sketch-on-row) and
+  `exact` (membership table) unique counters, auto-detecting Redis.
+- Per-(site, date, type) cardinality capping with an `__other__` overflow.
+- Lossless hourly to daily compaction and retention enforcement via
+  `craft-analytics/gc/run` and Craft's own GC. Both windows are configurable.
+- MySQL 8+ and PostgreSQL 13+, through a single cross-database upsert helper.
+
+#### Reports
+
+- Dashboard with KPI tiles, a traffic chart and comparisons against the
+  previous period.
+- Pages, Sources, Devices, Crawlers and Real-time screens.
+- Real-time shows pages per visitor and a row per visit, read entirely from the
+  session cache with no database queries.
+- Content reports: traffic by section, entry type and author, joined from
+  Craft's own tables at query time, so they always reflect how the site is
+  structured now and cost no extra storage.
+- Campaign and UTM tracking (Pro) with last-click, first-click and linear
+  attribution. One session is always credited as exactly one session.
+- Country and region (Pro) from a local DB-IP Lite or GeoLite2 database
+  installed with `craft-analytics/geo/install`. No lookup service is ever
+  called and no address is stored.
+- Custom events with monetary values, outbound clicks, file downloads and
+  scroll depth (Pro), in a separate `pro.js` so the base tracker stays small.
+- Site-search tracking read from the URL, needing no JavaScript.
+- Goals (Pro): page, event, entry, session-duration and scroll-depth, each with
+  an optional value. Stored in project config so they deploy, and converted
+  once per session.
+- Funnels (Pro): goals in order, with step-level drop-off. Order is enforced,
+  so reaching step 3 before step 2 does not count as step 3.
+- Emailed summary reports (Pro), sent with the site's own mailer. No
+  third-party service and no tracking pixel.
+- CSV and JSON export for every report, carrying exact values and stating the
+  accuracy of estimated figures.
+- Entry sidebar stats with a sparkline, a Views column on the entries index,
+  and a dashboard widget.
+
+#### Developer
+
+- `craft.craftAnalytics` Twig API: `totals()`, `views()`, `popularPages()`,
+  `popularEntries()` and `gpcDetected`.
+- GraphQL API (Pro): `craftAnalyticsTotals` and `craftAnalyticsTopPages`,
+  behind a schema component that is off by default.
+- Formie and Commerce integrations (Pro), wired by class name only when those
+  plugins are installed.
+- `CaptureService::trackEvent()` for recording events from your own PHP.
+- A cancellable `beforeTrack` event.
+- Granular permissions: view, view all sites, export and manage settings,
+  enforced at the controller layer and scoped per site.
+- `craft-analytics/seed/run` for generating realistic development data, in dev
+  mode only.

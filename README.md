@@ -92,9 +92,16 @@ composer phpstan    # PHPStan level 8
 composer test       # Pest
 ```
 
-A ddev-based Craft 5 dev harness lives in `dev/` - see `dev/README.md`.
-Contributor rules, architecture decisions and the constraints that drive them:
-[CONTRIBUTING.md](CONTRIBUTING.md).
+Unit tests run without a database. The integration suite needs one, and runs
+against both engines:
+
+```bash
+CRAFT_ANALYTICS_TEST_DRIVER=mysql \
+CRAFT_ANALYTICS_TEST_MYSQL_DSN="mysql:host=127.0.0.1;dbname=craftanalytics_test" \
+CRAFT_ANALYTICS_TEST_DB_USER=root \
+CRAFT_ANALYTICS_TEST_DB_PASSWORD=root \
+composer test
+```
 
 ## Licence
 

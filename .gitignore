@@ -4,20 +4,9 @@
 /.phpunit.result.cache
 /.phpunit.cache
 /.pest
-# dev/ is a throwaway ddev Craft harness. Only the pieces needed to rebuild it
-# are tracked: the setup script, and the module that builds the demo content
-# the analytics reports are seeded against.
-/dev/*
-!/dev/README.md
-!/dev/setup.sh
-!/dev/app/
-/dev/app/*
-!/dev/app/modules/
-!/dev/app/templates/
-!/dev/app/config/
-/dev/app/config/*
-!/dev/app/config/routes.php
-!/dev/app/config/craft-analytics.php
-!/dev/app/config/blitz.php
+# Local only: the ddev demo harness and the benchmark scripts.
+/dev
+/benchmarks
+/CONTRIBUTING.md
 .DS_Store
 *.local.php

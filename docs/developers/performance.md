@@ -1,8 +1,8 @@
 # Performance
 
-Craft Analytics claims it won't hurt your site. That is a measurable claim, so
-it gets measured - see [benchmarks/](../../benchmarks/README.md) to reproduce
-everything below.
+Craft Analytics claims it will not slow your site down. That is a measurable
+claim, so the numbers below are measured rather than asserted. They come from a
+PHP-FPM dev machine; measure your own if it matters to you.
 
 ## Why time-to-first-byte is unaffected
 
@@ -30,17 +30,21 @@ as a real browser so the full capture path runs:
 
 The delta is negative, which is the expected result: there is no real
 difference, and run-to-run noise on a developer machine is larger than
-anything the plugin contributes. `benchmarks/ttfb.sh` asserts the capture
-actually happened during the run (by checking the spool grew), because a
-benchmark that silently measures a no-op is worse than no benchmark.
+anything the plugin contributes.
+
+The run asserts that capture actually happened while it was measuring, by
+checking that the spool grew. An earlier version of this benchmark passed
+while measuring nothing at all: the request it sent looked like a bot, so it
+was correctly ignored, and the "no difference" result was real but meaningless.
+If you measure this yourself, check you are being counted.
 
 ## What capture actually costs
 
 The FPM worker stays busy for the post-flush work, so this doesn't affect
 TTFB but does affect *capacity* at saturation. The budget is ≤ 2 ms of CPU.
 
-Measured over 20,000 hits (`php benchmarks/capture-cost.php 20000`) - visitor
-hashing, payload encoding, and the spool append:
+Measured over 20,000 hits - visitor hashing, payload encoding, and the spool
+append:
 
 | | Per hit |
 |---|---|
