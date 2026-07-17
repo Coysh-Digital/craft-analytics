@@ -33,9 +33,16 @@ beforeEach(function() {
 });
 
 afterEach(function() {
+    // Teardown still runs when beforeEach skipped, at which point there is no
+    // spool directory to remove and no test to clean up after.
+    if (!isset($this->spoolDir)) {
+        return;
+    }
+
     foreach (glob($this->spoolDir . '/*') ?: [] as $file) {
         @unlink($file);
     }
+
     @rmdir($this->spoolDir);
 });
 
