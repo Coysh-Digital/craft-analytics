@@ -29,6 +29,8 @@
                             <th>{{ 'Campaign'|t('craft-analytics') }}</th>
                             <th class="ca-num">{{ 'Sessions'|t('craft-analytics') }}</th>
                             <th class="ca-num">{{ 'Bounce rate'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Conversions'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Value'|t('craft-analytics') }}</th>
                         </tr>
                         </thead>
                         <tbody>
@@ -39,6 +41,12 @@
                                 <td class="ca-muted">{{ row.campaign ?: '-' }}</td>
                                 <td class="ca-num">{{ row.sessions|number_format(row.sessions == row.sessions|round ? 0 : 1) }}</td>
                                 <td class="ca-num ca-muted">{{ row.bounceRate|number_format(1) }}%</td>
+                                <td class="ca-num ca-muted">
+                                    {{- row.conversions
+                                        ? row.conversions|number_format(row.conversions == row.conversions|round ? 0 : 1)
+                                        : '-' -}}
+                                </td>
+                                <td class="ca-num ca-muted">{{ row.value ? row.value|currency : '-' }}</td>
                             </tr>
                         {% endfor %}
                         </tbody>
@@ -51,6 +59,10 @@
                 {% endif %}
             </div>
         </div>
+
+        <p class="ca-footnote">
+            {{ 'Conversions can be fractional: a session touched by two campaigns splits its credit under the attribution model rather than being counted once for each, so the total still adds up to the sessions that actually happened.'|t('craft-analytics') }}
+        </p>
 
         <p class="ca-footnote">
             {{ 'Attribution is within a session. Cross-session windows are not offered for anonymous visitors because the visitor salt rotates daily and destroys the link between visits - that is the privacy trade, and inventing an answer would be dishonest. Consented visitors keep a durable identifier and can be followed across sessions.'|t('craft-analytics') }}

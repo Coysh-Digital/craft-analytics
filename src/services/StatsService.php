@@ -358,7 +358,7 @@ class StatsService extends Component
      * are rounded for display — a campaign credited with 3.5 sessions is
      * correct arithmetic and a strange thing to print.
      *
-     * @return array<int,array{source: string, medium: string, campaign: string, sessions: float, bounces: float, bounceRate: float}>
+     * @return array<int,array{source: string, medium: string, campaign: string, sessions: float, bounces: float, bounceRate: float, conversions: float, value: float, conversionRate: float}>
      */
     public function campaigns(int $siteId, DateRange $range, int $limit = 200): array
     {
@@ -369,6 +369,8 @@ class StatsService extends Component
                 'campaign' => '[[c]].[[value]]',
                 'sessions' => 'SUM([[r]].[[sessions]])',
                 'bounces' => 'SUM([[r]].[[bounces]])',
+                'conversions' => 'SUM([[r]].[[conversions]])',
+                'value' => 'SUM([[r]].[[value]])',
             ])
             ->from(['r' => Table::CAMPAIGNS_ROLLUP])
             ->innerJoin(['s' => Table::DIMENSIONS], '[[s]].[[id]] = [[r]].[[sourceDimId]]')
@@ -392,6 +394,12 @@ class StatsService extends Component
                 'sessions' => $sessions,
                 'bounces' => $bounces,
                 'bounceRate' => $sessions > 0 ? $bounces / $sessions * 100 : 0.0,
+                // Fractional, because a session touched by two campaigns
+                // splits its credit under the attribution model rather than
+                // being counted once for each.
+                'conversions' => (float)$row['conversions'],
+                'value' => (float)$row['value'],
+                'conversionRate' => $sessions > 0 ? (float)$row['conversions'] / $sessions * 100 : 0.0,
             ];
         }, $rows);
     }
