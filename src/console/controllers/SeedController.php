@@ -3,9 +3,12 @@
 namespace coyshdigital\craftanalytics\console\controllers;
 
 use coyshdigital\craftanalytics\ingest\Hit;
+use coyshdigital\craftanalytics\models\Campaign;
 use coyshdigital\craftanalytics\Plugin;
 use coyshdigital\craftanalytics\rollup\Aggregator;
+use coyshdigital\craftanalytics\rollup\GoalMatcher;
 use coyshdigital\craftanalytics\session\Session;
+use coyshdigital\craftanalytics\session\SessionDelta;
 use Craft;
 use craft\console\Controller;
 use craft\helpers\Console;
@@ -32,20 +35,20 @@ class SeedController extends Controller
         return array_merge(parent::options($actionID), ['days', 'perDay']);
     }
 
-    private const PATHS = [
-        '/' => 24,
-        '/about' => 9,
-        '/services' => 8,
-        '/services/consulting' => 6,
-        '/services/support' => 4,
-        '/blog' => 10,
-        '/blog/why-privacy-first-analytics' => 7,
-        '/blog/measuring-without-cookies' => 5,
-        '/blog/craft-cms-performance' => 4,
-        '/pricing' => 8,
-        '/contact' => 6,
-        '/careers' => 3,
-        '/legal/privacy' => 2,
+    /**
+     * Routes that exist without being entries: a template-only page, a search
+     * results page. Real sites have these, and they are the reason the Pages
+     * report and the Content report never quite agree - so the demo data
+     * should contain some rather than presenting a site where every URL is
+     * tidily an entry.
+     *
+     * @var array<string,int> path => weight
+     */
+    private const NON_ENTRY_PATHS = [
+        '/search?q=analytics' => 3,
+        '/search?q=pricing' => 2,
+        '/search?q=gdpr' => 1,
+        '/sitemap' => 1,
     ];
 
     private const REFERRERS = [
@@ -57,6 +60,79 @@ class SeedController extends Controller
         'https://www.linkedin.com/feed/' => 5,
         'https://craftcms.com/plugins' => 7,
         'https://example.org/blog/roundup' => 4,
+    ];
+
+    /** @var array<string,int> event name => weight */
+    private const EVENTS = [
+        'newsletter-signup' => 26,
+        'quote-requested' => 8,
+        'video-play' => 18,
+        'faq-expand' => 22,
+        'pricing-toggle' => 14,
+        'chat-opened' => 12,
+    ];
+
+    /** @var array<string,int> */
+    private const OUTBOUND = [
+        'https://craftcms.com/' => 22,
+        'https://github.com/coyshdigital/craft-analytics' => 16,
+        'https://plugins.craftcms.com/craft-analytics' => 12,
+        'https://x.com/coyshdigital' => 9,
+        'https://gdpr.eu/what-is-gdpr/' => 6,
+    ];
+
+    /** @var array<string,int> */
+    private const DOWNLOADS = [
+        'https://example.test/media/craft-analytics-overview.pdf' => 14,
+        'https://example.test/media/dpia-template.docx' => 6,
+        'https://example.test/media/pricing-2026.pdf' => 9,
+    ];
+
+    /**
+     * Crawlers, and roughly how many requests each makes a day.
+     *
+     * A real site sees far more of this than most people realise, which is the
+     * whole reason the Crawlers screen exists. These are excluded from every
+     * other number.
+     *
+     * @var array<string,int>
+     */
+    private const CRAWLERS = [
+        'Googlebot' => 180,
+        'Bingbot' => 90,
+        'GPTBot' => 45,
+        'AhrefsBot' => 38,
+        'SemrushBot' => 30,
+        'Applebot' => 18,
+        'YandexBot' => 12,
+        'DuckDuckBot' => 7,
+        'UptimeRobot' => 144,
+    ];
+
+    /**
+     * Countries and regions, weighted. Only a country code and a region ever
+     * exist here - the same two fields real capture keeps after resolving an
+     * address in memory and throwing it away.
+     *
+     * @var array<int,array{0: string, 1: string, 2: int}>
+     */
+    private const LOCATIONS = [
+        ['GB', 'England', 34],
+        ['GB', 'Scotland', 5],
+        ['GB', 'Wales', 3],
+        ['US', 'California', 12],
+        ['US', 'New York', 8],
+        ['US', 'Texas', 4],
+        ['DE', 'Berlin', 6],
+        ['NL', 'North Holland', 5],
+        ['FR', 'Ile-de-France', 4],
+        ['AU', 'New South Wales', 4],
+        ['CA', 'Ontario', 3],
+        ['IE', 'Leinster', 3],
+        ['SE', 'Stockholm', 2],
+        ['ES', 'Madrid', 2],
+        ['JP', 'Tokyo', 2],
+        ['IN', 'Maharashtra', 3],
     ];
 
     private const AGENTS = [
@@ -114,7 +190,7 @@ class SeedController extends Controller
         int $siteId,
         \DateTimeImmutable $day,
     ): void {
-        // Quieter at weekends, with a slow upward trend over the period —
+        // Quieter at weekends, with a slow upward trend over the period -
         // flat random noise looks nothing like a real site.
         $weekday = (int)$day->format('N');
         $weekendFactor = $weekday >= 6 ? 0.55 : 1.0;
@@ -127,54 +203,312 @@ class SeedController extends Controller
 
         for ($v = 0; $v < $visitorCount; $v++) {
             $visitorHash = bin2hex(random_bytes(8));
+            $sessionKey = substr(hash('sha256', $visitorHash), 0, 32);
             $hour = self::weightedHour();
             $start = $day->setTime($hour, random_int(0, 59), random_int(0, 59));
             $pageCount = self::weightedPageCount();
             $referrer = self::weightedString(self::REFERRERS);
             $userAgent = self::weightedString(self::AGENTS);
+            $campaign = $this->weightedCampaign($referrer);
+            [$country, $region] = self::weightedLocation();
 
-            $entryPath = self::weightedString(self::PATHS);
+            $entryPath = self::weightedString($this->paths($siteId));
             $lastPath = $entryPath;
             $cursor = $start;
 
+            /** @var Hit[] $hits */
+            $hits = [];
+
             for ($p = 0; $p < $pageCount; $p++) {
-                $path = $p === 0 ? $entryPath : self::weightedString(self::PATHS);
+                $path = $p === 0 ? $entryPath : self::weightedString($this->paths($siteId));
                 $lastPath = $path;
                 $dwell = random_int(4000, 180000);
 
-                $aggregator->add(new Hit(
+                $hits[] = new Hit(
                     siteId: $siteId,
                     path: $path,
                     visitorHash: $visitorHash,
-                    sessionKey: substr(hash('sha256', $visitorHash), 0, 32),
+                    sessionKey: $sessionKey,
                     timestamp: $cursor->getTimestamp(),
                     // Real capture gets this from the matched element; here we
-                    // resolve it from the URI so the entry sidebar and index
-                    // column have something to show.
+                    // resolve it from the URI so the Content reports, the entry
+                    // sidebar and the index column have something to show.
                     elementId: $this->elementIdForPath($siteId, $path),
                     referrer: $p === 0 ? $referrer : '',
                     userAgent: $userAgent,
                     dwellMs: $dwell,
-                ));
+                    // Only the first page carries the campaign: it describes
+                    // how they arrived, not where they went next.
+                    campaign: $p === 0 ? $campaign : null,
+                    countryCode: $country,
+                    region: $region,
+                    scrollBucket: self::weightedScroll(),
+                );
 
                 $cursor = $cursor->modify('+' . (int)round($dwell / 1000) . ' seconds');
+
+                foreach ($this->interactionsFor($siteId, $path, $visitorHash, $sessionKey, $cursor) as $hit) {
+                    $hits[] = $hit;
+                }
             }
 
-            $sessions[] = new Session(
-                siteId: $siteId,
-                sessionKey: substr(hash('sha256', $visitorHash), 0, 32),
-                visitorHash: $visitorHash,
-                startedAt: $start->getTimestamp(),
-                lastSeenAt: $cursor->getTimestamp(),
-                pageviews: $pageCount,
-                entryPath: $entryPath,
-                lastPath: $lastPath,
-                referrer: $referrer,
-                userAgent: $userAgent,
+            foreach ($hits as $hit) {
+                $aggregator->add($hit);
+            }
+
+            $sessions[] = $this->sessionFor($hits, [
+                'siteId' => $siteId,
+                'sessionKey' => $sessionKey,
+                'visitorHash' => $visitorHash,
+                'startedAt' => $start->getTimestamp(),
+                'lastSeenAt' => $cursor->getTimestamp(),
+                'pageviews' => $pageCount,
+                'entryPath' => $entryPath,
+                'lastPath' => $lastPath,
+                'referrer' => $referrer,
+                'userAgent' => $userAgent,
+                'campaign' => $campaign,
+                'countryCode' => $country,
+                'region' => $region,
+            ]);
+        }
+
+        $this->seedCrawlers($aggregator, $siteId, $day);
+
+        $sink->flush($aggregator->buckets(), $sessions, $aggregator->interactions);
+    }
+
+    /**
+     * Builds the session, with its goal conversions decided by the real
+     * matcher rather than by a second, guessed-at copy of the rules.
+     *
+     * If the seeded goals and the live ones ever disagreed, the demo data
+     * would be lying about the feature it exists to demonstrate.
+     *
+     * @param Hit[] $hits
+     * @param array<string,mixed> $attributes
+     */
+    private function sessionFor(array $hits, array $attributes): Session
+    {
+        $delta = null;
+
+        foreach ($hits as $hit) {
+            if ($delta === null) {
+                $delta = SessionDelta::fromHit($hit);
+            } else {
+                $delta->add($hit);
+            }
+        }
+
+        if ($delta !== null) {
+            $this->goalMatcher()->matchBatch($hits, [
+                $attributes['siteId'] . ':' . $attributes['sessionKey'] => $delta,
+            ]);
+        }
+
+        /** @var \coyshdigital\craftanalytics\models\Campaign|null $campaign */
+        $campaign = $attributes['campaign'];
+
+        return new Session(
+            siteId: $attributes['siteId'],
+            sessionKey: $attributes['sessionKey'],
+            visitorHash: $attributes['visitorHash'],
+            startedAt: $attributes['startedAt'],
+            lastSeenAt: $attributes['lastSeenAt'],
+            pageviews: $attributes['pageviews'],
+            entryPath: $attributes['entryPath'],
+            lastPath: $attributes['lastPath'],
+            referrer: $attributes['referrer'],
+            userAgent: $attributes['userAgent'],
+            campaigns: $campaign !== null ? [$campaign->toArray()] : [],
+            countryCode: $attributes['countryCode'],
+            region: $attributes['region'],
+            goals: $delta?->goals ?? [],
+            maxScroll: $delta?->maxScroll ?? 0,
+        );
+    }
+
+    /**
+     * The Pro interactions that happen on a page: an event, an outbound click,
+     * a download, a search.
+     *
+     * @return Hit[]
+     */
+    private function interactionsFor(
+        int $siteId,
+        string $path,
+        string $visitorHash,
+        string $sessionKey,
+        \DateTimeImmutable $at,
+    ): array {
+        $hits = [];
+
+        $make = static fn(string $kind, ?string $eventName, ?float $value, ?string $target): Hit => new Hit(
+            siteId: $siteId,
+            path: $path,
+            visitorHash: $visitorHash,
+            sessionKey: $sessionKey,
+            timestamp: $at->getTimestamp(),
+            countView: false,
+            kind: $kind,
+            eventName: $eventName,
+            eventValue: $value,
+            target: $target,
+        );
+
+        // Most pageviews produce no interaction at all. A site where every
+        // visitor clicks something is not a site.
+        if (random_int(1, 100) <= 12) {
+            $event = self::weightedString(self::EVENTS);
+            $hits[] = $make(
+                Hit::KIND_EVENT,
+                $event,
+                $event === 'quote-requested' ? (float)random_int(120, 900) : null,
+                null,
             );
         }
 
-        $sink->flush($aggregator->buckets(), $sessions);
+        if (random_int(1, 100) <= 6) {
+            $hits[] = $make(Hit::KIND_OUTBOUND, null, null, self::weightedString(self::OUTBOUND));
+        }
+
+        if (random_int(1, 100) <= 3) {
+            $hits[] = $make(Hit::KIND_DOWNLOAD, null, null, self::weightedString(self::DOWNLOADS));
+        }
+
+        return $hits;
+    }
+
+    /**
+     * Crawler traffic, which is a large share of any real site's requests and
+     * the reason the Crawlers screen exists.
+     */
+    private function seedCrawlers(Aggregator $aggregator, int $siteId, \DateTimeImmutable $day): void
+    {
+        foreach (self::CRAWLERS as $name => $perDay) {
+            $requests = (int)round($perDay * random_int(60, 140) / 100);
+
+            for ($i = 0; $i < $requests; $i++) {
+                $aggregator->add(new Hit(
+                    siteId: $siteId,
+                    path: '/',
+                    visitorHash: 'crawler000000000',
+                    sessionKey: 'crawler000000000',
+                    timestamp: $day->setTime(random_int(0, 23), random_int(0, 59))->getTimestamp(),
+                    countView: false,
+                    kind: Hit::KIND_CRAWLER,
+                    eventName: $name,
+                ));
+            }
+        }
+    }
+
+    private ?GoalMatcher $matcher = null;
+
+    private function goalMatcher(): GoalMatcher
+    {
+        return $this->matcher ??= new GoalMatcher(
+            Plugin::getInstance()->getGoals(),
+            Plugin::getInstance()->is(Plugin::EDITION_PRO),
+        );
+    }
+
+    /**
+     * A campaign, for the traffic that arrived from one.
+     *
+     * Only for sessions with no organic referrer or a social one: a visitor
+     * who arrived from a Google search did not arrive from your newsletter,
+     * and tagging them both would make the Campaigns report disagree with the
+     * Sources report.
+     */
+    private function weightedCampaign(string $referrer): ?Campaign
+    {
+        if (random_int(1, 100) > 22) {
+            return null;
+        }
+
+        $campaigns = [
+            ['newsletter', 'email', 'monthly-roundup'],
+            ['newsletter', 'email', 'product-launch'],
+            ['twitter', 'social', 'launch-week'],
+            ['linkedin', 'social', 'thought-leadership'],
+            ['google', 'cpc', 'brand'],
+            ['google', 'cpc', 'competitor-terms'],
+            ['craftcms', 'referral', 'plugin-store'],
+            ['podcast', 'audio', 'sponsorship'],
+        ];
+
+        [$source, $medium, $name] = $campaigns[random_int(0, count($campaigns) - 1)];
+
+        return Campaign::fromQueryString(http_build_query([
+            'utm_source' => $source,
+            'utm_medium' => $medium,
+            'utm_campaign' => $name,
+        ]));
+    }
+
+    /**
+     * The paths to seed, weighted, discovered from the site's own entries.
+     *
+     * Built from what is actually published rather than from a list baked in
+     * here, so the Content reports have real sections, entry types and authors
+     * to join to - and so adding an entry to the demo site is enough to make
+     * it appear in the seeded traffic.
+     *
+     * @var array<string,int>|null path => weight
+     */
+    private ?array $paths = null;
+
+    /**
+     * @return array<string,int>
+     */
+    private function paths(int $siteId): array
+    {
+        if ($this->paths !== null) {
+            return $this->paths;
+        }
+
+        $paths = ['/' => 24];
+
+        /** @var array<int,array{uri: string, section: string}> $rows */
+        $rows = (new \craft\db\Query())
+            ->select(['uri' => '[[es]].[[uri]]', 'section' => '[[s]].[[handle]]'])
+            ->from(['es' => \craft\db\Table::ELEMENTS_SITES])
+            ->innerJoin(['e' => \craft\db\Table::ENTRIES], '[[e]].[[id]] = [[es]].[[elementId]]')
+            ->innerJoin(['el' => \craft\db\Table::ELEMENTS], '[[el]].[[id]] = [[es]].[[elementId]]')
+            ->leftJoin(['s' => \craft\db\Table::SECTIONS], '[[s]].[[id]] = [[e]].[[sectionId]]')
+            ->where(['[[es]].[[siteId]]' => $siteId])
+            ->andWhere(['not', ['[[es]].[[uri]]' => null]])
+            ->andWhere(['[[el]].[[dateDeleted]]' => null])
+            ->andWhere(['[[el]].[[draftId]]' => null])
+            ->andWhere(['[[el]].[[revisionId]]' => null])
+            ->all();
+
+        foreach ($rows as $row) {
+            $uri = (string)$row['uri'];
+
+            if ($uri === '__home__') {
+                continue;
+            }
+
+            // Popularity is long-tailed and section-dependent: the blog index
+            // and a couple of posts carry most of it, and a case study nobody
+            // links to gets a handful of views a week. Flat weights produce a
+            // report where every row is the same length, which looks wrong
+            // precisely because it is.
+            $paths['/' . $uri] = match ($row['section']) {
+                'blog' => random_int(2, 14),
+                'guides' => random_int(2, 10),
+                'caseStudies' => random_int(1, 5),
+                default => random_int(3, 12),
+            };
+        }
+
+        foreach (self::NON_ENTRY_PATHS as $path => $weight) {
+            $paths[$path] = $weight;
+        }
+
+        return $this->paths = $paths;
     }
 
     /** @var array<string,int|null> path => elementId */
@@ -189,6 +523,34 @@ class SeedController extends Controller
         }
 
         return $this->elementIds[$path];
+    }
+
+    /**
+     * @return array{0: string, 1: string} country code, region
+     */
+    private static function weightedLocation(): array
+    {
+        $total = array_sum(array_column(self::LOCATIONS, 2));
+        $roll = random_int(1, $total);
+
+        foreach (self::LOCATIONS as [$country, $region, $weight]) {
+            $roll -= $weight;
+
+            if ($roll <= 0) {
+                return [$country, $region];
+            }
+        }
+
+        return ['GB', 'England'];
+    }
+
+    /**
+     * How far down the page they read. Most people do not reach the bottom,
+     * and a seeder that pretends otherwise makes the scroll report useless.
+     */
+    private static function weightedScroll(): int
+    {
+        return (int)self::weighted([25 => 38, 50 => 28, 75 => 20, 100 => 14]);
     }
 
     /** Traffic clusters in the working day rather than spreading evenly. */
