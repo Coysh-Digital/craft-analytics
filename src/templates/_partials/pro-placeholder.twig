@@ -1,0 +1,19 @@
+{# The inside of a dashboard card for a Pro feature this site doesn't have.
+
+   The card keeps its place in the grid rather than disappearing: a screen that
+   silently omits things teaches nobody what they are missing, and a gap where
+   a card should be reads as a bug. Said once, quietly, with no countdown and
+   nothing flashing. #}
+<div class="ca-placeholder">
+    <div class="ca-placeholder-bars" aria-hidden="true">
+        {% for width in [96, 72, 54, 38] %}
+            <div class="ca-placeholder-row">
+                <div class="ca-placeholder-bar" style="width: {{ width }}%"></div>
+            </div>
+        {% endfor %}
+    </div>
+    <div class="ca-placeholder-note">
+        <span class="ca-badge">{{ 'Pro'|t('craft-analytics') }}</span>
+        <p>{{ description }}</p>
+    </div>
+</div>

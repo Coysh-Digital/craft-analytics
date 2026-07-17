@@ -74,18 +74,27 @@
 .ca-kpis {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 1px;
-    background: var(--hairline-color);
+    background: var(--white);
     border: 1px solid var(--hairline-color);
     border-radius: var(--ca-radius);
     overflow: hidden;
     margin-bottom: 24px;
 }
 
+/* The dividers are the tiles' own borders, pulled 1px into their neighbour so
+   the outermost ones tuck under the container's.
+   
+   The obvious way - a hairline-coloured container showing through 1px grid
+   gaps - draws a grey block wherever a cell is empty. Any tile count that
+   doesn't divide exactly into the column count leaves those blocks, at some
+   viewport width, for every count. This way an empty cell is just white. */
 .ca-kpi {
     background: var(--white);
     padding: 16px 18px 18px;
     min-width: 0;
+    border-left: 1px solid var(--hairline-color);
+    border-top: 1px solid var(--hairline-color);
+    margin: -1px 0 0 -1px;
 }
 
 .ca-kpi-label {
@@ -666,4 +675,79 @@
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+}
+
+/* -------------------------------------------------------- dashboard grid */
+
+/* Two up on anything wide enough, one up below that. The cards are each a
+   glance rather than a report, and a single column of them is a lot of
+   scrolling to learn very little. */
+.ca-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 16px;
+    align-items: start;
+}
+
+.ca-grid-2 .ca-card {
+    margin-bottom: 0;
+}
+
+/* ------------------------------------------------- Pro placeholder card */
+
+/* Shows the shape of the thing you don't have, greyed, with one line saying
+   what it would tell you. The card keeps its place in the grid: a gap where a
+   card should be reads as a bug rather than as an edition boundary. */
+.ca-placeholder {
+    position: relative;
+    min-height: 132px;
+}
+
+.ca-placeholder-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 4px 0 8px;
+}
+
+.ca-placeholder-row {
+    height: 12px;
+    background: var(--gray-050);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.ca-placeholder-bar {
+    height: 100%;
+    background: var(--gray-100);
+    border-radius: 3px;
+}
+
+.ca-placeholder-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding-top: 4px;
+}
+
+.ca-placeholder-note p {
+    margin: 0;
+    color: var(--medium-text-color);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* A neutral badge, for labelling rather than warning. The amber one is
+   .ca-warning-badge and means something is wrong. */
+.ca-badge {
+    flex: none;
+    background: var(--ca-bar);
+    color: var(--ca-views);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 7px;
+    border-radius: 3px;
+    margin-top: 1px;
 }

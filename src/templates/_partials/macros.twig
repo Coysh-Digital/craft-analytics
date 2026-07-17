@@ -62,6 +62,47 @@
     </td>
 {% endmacro %}
 
+{# A dashboard card: a title, a link to the full report, and a short ranked
+   list. The dashboard had five near-identical copies of this table before it
+   existed, which is five places to fix a column. #}
+{% macro listCard(title, rows, options) %}
+    {% import _self as ca %}
+    {% set options = options ?? {} %}
+    <div class="ca-card">
+        <div class="ca-card-head">
+            <h2 class="ca-card-title">{{ title }}</h2>
+            {% if options.url is defined %}
+                <a class="ca-muted" href="{{ options.url }}">{{ 'View all'|t('craft-analytics') }} &rarr;</a>
+            {% endif %}
+        </div>
+        <div class="ca-card-body ca-table-scroll">
+            {% if options.placeholder is defined %}
+                {% include 'craft-analytics/_partials/pro-placeholder.twig' with { description: options.placeholder } only %}
+            {% elseif rows|length %}
+                {% set max = max(rows|map(r => r.value)) %}
+                <table class="ca-table">
+                    <thead>
+                    <tr>
+                        <th>{{ options.labelHeading ?? 'Name'|t('craft-analytics') }}</th>
+                        <th class="ca-num">{{ options.valueHeading ?? 'Sessions'|t('craft-analytics') }}</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for row in rows %}
+                        <tr>
+                            {{ ca.barCell(row.label, row.value, max, row.url ?? null) }}
+                            <td class="ca-num">{{ row.display ?? row.value|number_format }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p class="ca-muted">{{ options.empty ?? 'Nothing recorded for this period.'|t('craft-analytics') }}</p>
+            {% endif %}
+        </div>
+    </div>
+{% endmacro %}
+
 {% macro empty(title, message) %}
     <div class="ca-empty">
         <div class="ca-empty-title">{{ title }}</div>

@@ -22,9 +22,19 @@
                 delta: deltas.bounceRate,
                 inverse: true,
             }) }}
+            {{ ca.kpi('Pages / session'|t('craft-analytics'), totals.avgViewsPerSession, {
+                raw: totals.avgViewsPerSession|number_format(2),
+                delta: deltas.avgViewsPerSession,
+            }) }}
             {{ ca.kpi('Avg. session'|t('craft-analytics'), totals.avgDurationMs, {
                 raw: ca.duration(totals.avgDurationMs),
                 delta: deltas.avgDurationMs,
+            }) }}
+            {{ ca.kpi('Avg. time on page'|t('craft-analytics'), totals.avgDwellMs, {
+                raw: totals.avgDwellMs ? ca.duration(totals.avgDwellMs) : '-',
+                sub: totals.avgDwellMs
+                    ? 'Measured by the tracker'|t('craft-analytics')
+                    : 'Needs hybrid or client mode'|t('craft-analytics'),
             }) }}
         </div>
 
@@ -36,82 +46,114 @@
                 <a class="ca-muted" href="{{ url('craft-analytics/pages', currentParams) }}">{{ 'View all'|t('craft-analytics') }} &rarr;</a>
             </div>
             <div class="ca-card-body ca-table-scroll">
-                {% set maxViews = topPages|length ? max(topPages|map(p => p.views)) : 0 %}
-                <table class="ca-table">
-                    <thead>
-                    <tr>
-                        <th>{{ 'Page'|t('craft-analytics') }}</th>
-                        <th class="ca-num">{{ 'Views'|t('craft-analytics') }}</th>
-                        <th class="ca-num">{{ 'Avg. time'|t('craft-analytics') }}</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {% for page in topPages %}
+                {% if topPages|length %}
+                    {% set maxViews = max(topPages|map(p => p.views)) %}
+                    <table class="ca-table">
+                        <thead>
                         <tr>
-                            {{ ca.barCell(page.path, page.views, maxViews, editUrls[page.elementId] ?? null) }}
-                            <td class="ca-num">{{ page.views|number_format }}</td>
-                            <td class="ca-num ca-muted">{{ page.avgDwellMs ? ca.duration(page.avgDwellMs) : '-' }}</td>
+                            <th>{{ 'Page'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Views'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Avg. time'|t('craft-analytics') }}</th>
                         </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                        {% for page in topPages %}
+                            <tr>
+                                {{ ca.barCell(page.path, page.views, maxViews, editUrls[page.elementId] ?? null) }}
+                                <td class="ca-num">{{ page.views|number_format }}</td>
+                                <td class="ca-num ca-muted">{{ page.avgDwellMs ? ca.duration(page.avgDwellMs) : '-' }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p class="ca-muted">{{ 'Nothing recorded for this period.'|t('craft-analytics') }}</p>
+                {% endif %}
             </div>
         </div>
 
-        <div class="ca-card">
-            <div class="ca-card-head">
-                <h2 class="ca-card-title">{{ 'Channels'|t('craft-analytics') }}</h2>
-                <a class="ca-muted" href="{{ url('craft-analytics/sources', currentParams) }}">{{ 'View all'|t('craft-analytics') }} &rarr;</a>
-            </div>
-            <div class="ca-card-body ca-table-scroll">
-                {% set maxChannel = channels|length ? max(channels|map(c => c.sessions)) : 0 %}
-                <table class="ca-table">
-                    <thead>
-                    <tr>
-                        <th>{{ 'Channel'|t('craft-analytics') }}</th>
-                        <th class="ca-num">{{ 'Sessions'|t('craft-analytics') }}</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {% for channel in channels %}
-                        <tr>
-                            {{ ca.barCell(channel.channel, channel.sessions, maxChannel, null) }}
-                            <td class="ca-num">{{ channel.sessions|number_format }}</td>
-                        </tr>
-                    {% else %}
-                        <tr><td colspan="2" class="ca-muted">{{ 'No sessions have closed yet.'|t('craft-analytics') }}</td></tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+        {# Two up from here down: these are each a glance, not a report, and a
+           single column of them is a lot of scrolling to learn very little. #}
+        <div class="ca-grid-2">
+            {{ ca.listCard('Channels'|t('craft-analytics'),
+                channels|map(c => { label: c.channel, value: c.sessions }),
+                {
+                    url: url('craft-analytics/sources', currentParams),
+                    labelHeading: 'Channel'|t('craft-analytics'),
+                    empty: 'No sessions have closed yet.'|t('craft-analytics'),
+                }
+            ) }}
+
+            {{ ca.listCard('Devices'|t('craft-analytics'),
+                deviceTypes|map(d => { label: d.label, value: d.sessions }),
+                {
+                    url: url('craft-analytics/devices', currentParams),
+                    labelHeading: 'Device'|t('craft-analytics'),
+                    empty: 'No sessions have closed yet.'|t('craft-analytics'),
+                }
+            ) }}
+
+            {{ ca.listCard('Sections'|t('craft-analytics'),
+                sections|map(s => {
+                    label: s.name,
+                    value: s.views,
+                    url: url('craft-analytics/content/section/' ~ s.id, currentParams),
+                }),
+                {
+                    url: url('craft-analytics/content', currentParams),
+                    labelHeading: 'Section'|t('craft-analytics'),
+                    valueHeading: 'Views'|t('craft-analytics'),
+                    empty: 'No views have resolved to an entry yet.'|t('craft-analytics'),
+                }
+            ) }}
+
+            {{ ca.listCard('Goals'|t('craft-analytics'),
+                goals|map(g => {
+                    label: g.name,
+                    value: g.conversions,
+                    display: g.conversions|number_format ~ (g.value ? ' · ' ~ g.value|currency : ''),
+                }),
+                {
+                    url: url('craft-analytics/goals', currentParams),
+                    labelHeading: 'Goal'|t('craft-analytics'),
+                    valueHeading: 'Conversions'|t('craft-analytics'),
+                    empty: 'No goals defined yet.'|t('craft-analytics'),
+                    placeholder: isPro ? null : 'Count what matters - a page reached, an event fired, a form sent - and what each one was worth.'|t('craft-analytics'),
+                }|filter(v => v is not null)
+            ) }}
+
+            {{ ca.listCard('Campaigns'|t('craft-analytics'),
+                campaigns|map(c => {
+                    label: c.campaign ?: c.source,
+                    value: c.sessions,
+                    display: c.sessions|number_format(c.sessions == c.sessions|round ? 0 : 1),
+                }),
+                {
+                    url: url('craft-analytics/campaigns', currentParams),
+                    labelHeading: 'Campaign'|t('craft-analytics'),
+                    empty: 'No tagged links have brought anyone here yet.'|t('craft-analytics'),
+                    placeholder: isPro ? null : 'See which tagged links actually brought people, and what they did next.'|t('craft-analytics'),
+                }|filter(v => v is not null)
+            ) }}
+
+            {{ ca.listCard('Locations'|t('craft-analytics'),
+                countries|map(c => { label: c.country, value: c.sessions }),
+                {
+                    url: url('craft-analytics/geo', currentParams),
+                    labelHeading: 'Country'|t('craft-analytics'),
+                    empty: 'No locations resolved. The geo database may not be installed.'|t('craft-analytics'),
+                    placeholder: isPro ? null : 'Countries and regions, resolved on your own server from a local database.'|t('craft-analytics'),
+                }|filter(v => v is not null)
+            ) }}
         </div>
 
-        <div class="ca-card">
-            <div class="ca-card-head">
-                <h2 class="ca-card-title">{{ 'Devices'|t('craft-analytics') }}</h2>
-                <a class="ca-muted" href="{{ url('craft-analytics/devices', currentParams) }}">{{ 'View all'|t('craft-analytics') }} &rarr;</a>
-            </div>
-            <div class="ca-card-body ca-table-scroll">
-                {% set maxDevice = deviceTypes|length ? max(deviceTypes|map(d => d.sessions)) : 0 %}
-                <table class="ca-table">
-                    <thead>
-                    <tr>
-                        <th>{{ 'Device'|t('craft-analytics') }}</th>
-                        <th class="ca-num">{{ 'Sessions'|t('craft-analytics') }}</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {% for device in deviceTypes %}
-                        <tr>
-                            {{ ca.barCell(device.label, device.sessions, maxDevice, null) }}
-                            <td class="ca-num">{{ device.sessions|number_format }}</td>
-                        </tr>
-                    {% else %}
-                        <tr><td colspan="2" class="ca-muted">{{ 'No sessions have closed yet.'|t('craft-analytics') }}</td></tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+        {% if crawlerRequests %}
+            <p class="ca-footnote">
+                {{ '{count} crawler requests were kept out of every number above.'|t('craft-analytics', {
+                    count: crawlerRequests|number_format,
+                }) }}
+                <a href="{{ url('craft-analytics/crawlers', currentParams) }}">{{ 'See what they were'|t('craft-analytics') }} &rarr;</a>
+            </p>
+        {% endif %}
     {% endif %}
 {% endblock %}
