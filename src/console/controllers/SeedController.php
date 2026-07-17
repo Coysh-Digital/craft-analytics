@@ -258,7 +258,7 @@ class SeedController extends Controller
                 $path = $journey[$p]
                     ?? ($p === 0 ? $entryPath : self::weightedString($this->paths($siteId)));
                 $lastPath = $path;
-                $dwell = random_int(4000, 180000);
+                $dwell = self::dwellFor($path);
 
                 $hits[] = new Hit(
                     siteId: $siteId,
@@ -619,6 +619,37 @@ class SeedController extends Controller
         }
 
         return ['GB', 'England'];
+    }
+
+    /**
+     * How long somebody spends on a page, which depends entirely on what the
+     * page is.
+     *
+     * One range for everything makes every page's average converge on the same
+     * number - the demo site read 1m 32s on all fourteen of its top pages,
+     * which is not a thing that happens and looks exactly as generated as it
+     * was. A guide is read for minutes; a contact page is glanced at and
+     * acted on.
+     */
+    private static function dwellFor(string $path): int
+    {
+        [$min, $max] = match (true) {
+            str_starts_with($path, '/guides/') => [45_000, 420_000],
+            str_starts_with($path, '/blog/') => [30_000, 300_000],
+            str_starts_with($path, '/work/') => [25_000, 180_000],
+            str_starts_with($path, '/contact') => [8_000, 70_000],
+            str_starts_with($path, '/search') => [3_000, 25_000],
+            str_starts_with($path, '/pricing') => [15_000, 150_000],
+            $path === '/blog', $path === '/guides', $path === '/work' => [6_000, 60_000],
+            $path === '/' => [5_000, 55_000],
+            default => [10_000, 110_000],
+        };
+
+        // Skewed towards the short end: most visits to any page are brief, and
+        // a symmetric spread puts the average in a place no real page sits.
+        $roll = min(random_int($min, $max), random_int($min, $max));
+
+        return $roll;
     }
 
     /**
