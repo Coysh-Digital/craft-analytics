@@ -48,6 +48,11 @@ class DashboardController extends BaseCpController
                         $previous['avgViewsPerSession'],
                     ),
                 ],
+                // The live banner reads the session cache only, so it costs no
+                // database query - the same source as the Real-time screen.
+                'realtime' => $stats->realtime($siteId),
+                'sessionWindow' => $plugin->getSettings()->sessionWindow,
+
                 'trend' => $stats->trend($siteId, $range),
                 'topPages' => $topPages,
                 'editUrls' => ElementLinks::editUrls(array_column($topPages, 'elementId')),

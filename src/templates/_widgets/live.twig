@@ -1,0 +1,93 @@
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+<div class="ca">
+    <div class="ca-card-head" style="margin-bottom: 8px">
+        <div class="ca-sidebar-stat">
+            <div class="ca-kpi-label">{{ 'Visitors right now'|t('craft-analytics') }}</div>
+            <div class="ca-hero" id="{{ domId }}-count">{{ realtime.visitors|number_format }}</div>
+        </div>
+        <span class="ca-live"><i class="ca-live-dot"></i>{{ 'Live'|t('craft-analytics') }}</span>
+    </div>
+
+    <div class="ca-kpi-sub" style="margin-bottom: 12px">
+        {{ 'active in the last {mins} minutes'|t('craft-analytics', {
+            mins: (sessionWindow / 60)|round,
+        }) }}
+    </div>
+
+    <div class="ca-table-scroll" id="{{ domId }}-pages">
+        {% include 'craft-analytics/_partials/realtime-pages.twig' %}
+    </div>
+
+    <p style="margin-top: 10px">
+        <a class="go" href="{{ url('craft-analytics/realtime', { site: site.handle }) }}">
+            {{ 'Open real-time'|t('craft-analytics') }}
+        </a>
+    </p>
+</div>
+
+{% js %}
+(function () {
+    var count = document.getElementById('{{ domId }}-count');
+    var pages = document.getElementById('{{ domId }}-pages');
+    if (!count) return;
+
+    var url = {{ url('craft-analytics/realtime-data', { site: site.handle })|json_encode|raw }};
+    var strings = {{ {
+        page: 'Page'|t('craft-analytics'),
+        visitors: 'Visitors'|t('craft-analytics'),
+        nobody: 'Nobody is on the site right now.'|t('craft-analytics'),
+    }|json_encode|raw }};
+
+    function escapeHtml(value) {
+        return String(value).replace(/[<>&"]/g, function (c) {
+            return { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c];
+        });
+    }
+
+    // Mirrors the realtime-pages partial, so the polled markup reads the same
+    // as the server-rendered markup rather than drifting into its own dialect.
+    function renderPages(data) {
+        if (!pages) return;
+
+        if (!data.pages.length) {
+            pages.innerHTML = '<p class="ca-muted">' + strings.nobody + '</p>';
+            return;
+        }
+
+        var max = data.pages[0].visitors;
+        var rows = data.pages.map(function (page) {
+            var width = max > 0 ? (page.visitors / max * 100).toFixed(1) : 0;
+            return '<tr><td class="ca-bar-cell"><div class="ca-bar-fill" style="width:' + width +
+                '%"></div><span class="ca-bar-label">' + escapeHtml(page.path) + '</span></td>' +
+                '<td class="ca-num">' + page.visitors.toLocaleString() + '</td></tr>';
+        }).join('');
+
+        pages.innerHTML = '<table class="ca-table"><thead><tr><th>' + strings.page + '</th>' +
+            '<th class="ca-num">' + strings.visitors + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    }
+
+    function refresh() {
+        fetch(url, { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                if (!data) return;
+                count.textContent = data.visitors.toLocaleString();
+                renderPages(data);
+            })
+            .catch(function () { /* a failed poll is not worth an error */ });
+    }
+
+    var timer = setInterval(refresh, 15000);
+
+    // Don't poll a tab nobody is looking at.
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') {
+            clearInterval(timer);
+        } else {
+            refresh();
+            timer = setInterval(refresh, 15000);
+        }
+    });
+})();
+{% endjs %}

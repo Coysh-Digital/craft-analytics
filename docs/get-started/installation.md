@@ -82,7 +82,7 @@ There is nothing to configure. The defaults are:
 | **Settings → Plugins → Craft Analytics** | Tracking, retention, crawlers, emails |
 | **Settings → Plugins → Craft Analytics → Goals & funnels** | Conversions (Pro) |
 | Any entry's sidebar | That entry's views |
-| Dashboard widgets | The overview widget |
+| Dashboard widgets | The Analytics overview and Analytics real-time widgets |
 
 ## Permissions
 

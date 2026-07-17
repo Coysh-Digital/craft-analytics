@@ -36,6 +36,7 @@ use coyshdigital\craftanalytics\uniques\HllUniqueCounter;
 use coyshdigital\craftanalytics\uniques\RedisUniqueCounter;
 use coyshdigital\craftanalytics\uniques\UniqueCounterInterface;
 use coyshdigital\craftanalytics\variables\CraftAnalyticsVariable;
+use coyshdigital\craftanalytics\widgets\LiveWidget;
 use coyshdigital\craftanalytics\widgets\OverviewWidget;
 use coyshdigital\craftanalytics\write\DirectWriter;
 use coyshdigital\craftanalytics\write\QueueWriter;
@@ -719,6 +720,7 @@ class Plugin extends BasePlugin
             Dashboard::EVENT_REGISTER_WIDGET_TYPES,
             static function(RegisterComponentTypesEvent $event) {
                 $event->types[] = OverviewWidget::class;
+                $event->types[] = LiveWidget::class;
             },
         );
 

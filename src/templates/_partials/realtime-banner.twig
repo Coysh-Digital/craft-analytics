@@ -1,0 +1,40 @@
+{# A slim, live count that links through to the Real-time screen. Reads the
+   session cache only, and polls the same endpoint that screen does. #}
+<a class="ca-realtime-banner" href="{{ url('craft-analytics/realtime', currentParams) }}">
+    <span class="ca-live"><i class="ca-live-dot"></i>{{ 'Live'|t('craft-analytics') }}</span>
+    <span class="ca-realtime-banner-text">
+        <strong id="ca-dash-live-count">{{ realtime.visitors|number_format }}</strong>
+        {{ 'on the site right now'|t('craft-analytics') }}
+    </span>
+    <span class="ca-realtime-banner-go">{{ 'Real-time'|t('craft-analytics') }} &rarr;</span>
+</a>
+
+{% js %}
+(function () {
+    var count = document.getElementById('ca-dash-live-count');
+    if (!count) return;
+
+    var url = {{ url('craft-analytics/realtime-data', currentParams)|json_encode|raw }};
+
+    function refresh() {
+        fetch(url, { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                if (data) count.textContent = data.visitors.toLocaleString();
+            })
+            .catch(function () { /* a failed poll is not worth an error */ });
+    }
+
+    var timer = setInterval(refresh, 15000);
+
+    // Don't poll a tab nobody is looking at.
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') {
+            clearInterval(timer);
+        } else {
+            refresh();
+            timer = setInterval(refresh, 15000);
+        }
+    });
+})();
+{% endjs %}

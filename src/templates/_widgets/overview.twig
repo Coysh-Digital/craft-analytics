@@ -2,19 +2,27 @@
 
 <div class="ca">
     {% if totals.views > 0 %}
-        <div class="ca-sidebar-stats" style="margin-bottom: 12px">
-            <div class="ca-sidebar-stat">
-                <div class="ca-kpi-label">{{ 'Views'|t('craft-analytics') }}</div>
-                <div class="ca-kpi-value">{{ ca.compact(totals.views) }}</div>
-            </div>
-            <div class="ca-sidebar-stat">
-                <div class="ca-kpi-label">{{ 'Visitors'|t('craft-analytics') }}</div>
-                <div class="ca-kpi-value">{{ ca.compact(totals.uniques) }}</div>
-            </div>
-            <div class="ca-sidebar-stat">
-                <div class="ca-kpi-label">{{ 'Bounce'|t('craft-analytics') }}</div>
-                <div class="ca-kpi-value">{{ totals.bounceRate|number_format(0) }}%</div>
-            </div>
+        {# Formatted value per metric, so the loop below stays about layout. The
+           keys match StatsService::totals() and OverviewWidget::metricLabels(). #}
+        {% set formatted = {
+            views: ca.compact(totals.views),
+            uniques: ca.compact(totals.uniques),
+            sessions: ca.compact(totals.sessions),
+            bounceRate: totals.bounceRate|number_format(0) ~ '%',
+            avgViewsPerSession: totals.avgViewsPerSession|number_format(1),
+            avgDurationMs: ca.duration(totals.avgDurationMs),
+            avgDwellMs: totals.avgDwellMs ? ca.duration(totals.avgDwellMs) : '-',
+        } %}
+        <div class="ca-sidebar-stats" style="margin-bottom: 12px; flex-wrap: wrap; gap: 14px 18px">
+            {# Iterate the canonical order, not the order they were picked. #}
+            {% for key, label in metricLabels %}
+                {% if key in metrics %}
+                    <div class="ca-sidebar-stat">
+                        <div class="ca-kpi-label">{{ label }}</div>
+                        <div class="ca-kpi-value">{{ formatted[key] }}</div>
+                    </div>
+                {% endif %}
+            {% endfor %}
         </div>
 
         {% set spark = craft.craftAnalytics.sparkline(trend.views, 300, 40) %}

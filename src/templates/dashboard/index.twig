@@ -2,6 +2,8 @@
 {% import 'craft-analytics/_partials/macros.twig' as ca %}
 
 {% block report %}
+    {% include 'craft-analytics/_partials/realtime-banner.twig' %}
+
     {% if totals.views == 0 %}
         <div class="ca-card">
             {{ ca.empty(

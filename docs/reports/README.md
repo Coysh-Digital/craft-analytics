@@ -7,7 +7,9 @@ Pages, Sources, Devices.
 
 **Dashboard** - headline numbers (pageviews, unique visitors, sessions,
 bounce rate, average session) each compared against the previous period of the
-same length, a traffic chart, and the top of each report.
+same length, a traffic chart, and the top of each report. A live banner at the
+top shows how many visitors are on the site right now, updating every 15
+seconds, and links through to the Real-time screen.
 
 **Real-time** - visitors active inside the session window, read entirely from
 the session cache. **No database queries at all**, which is a pleasant
@@ -33,7 +35,20 @@ idea what an entry is:
 - **“Views (30d)” column** on the entries index. Craft only shows table
   columns a user has selected, so turn it on via **View → Table columns**.
 
-There's also a **dashboard widget** for Craft's own dashboard.
+## Dashboard widgets
+
+Two widgets for Craft's own dashboard, both under the *View analytics*
+permission and both scoped to the currently selected site:
+
+- **Analytics** - a compact overview: a row of headline figures, a views
+  sparkline and a link into the full report. Its settings let you choose the
+  **period** (today through the last 12 months) and which **figures** to show.
+  Any of views, visitors, sessions, bounce rate, pages per session, average
+  session and average time on page can be turned on; it ships showing views,
+  visitors and bounce rate.
+- **Analytics real-time** - visitors on the site right now and the pages
+  they're on, read entirely from the session cache and refreshed every 15
+  seconds. The same live figure the Real-time screen shows, on your dashboard.
 
 ## Export
 

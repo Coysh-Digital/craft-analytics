@@ -1,5 +1,21 @@
 # Release Notes for Craft Analytics
 
+## 1.1.0 - 2026-07-17
+
+### Added
+
+- The dashboard now leads with a live banner showing how many visitors are on
+  the site right now, refreshed every 15 seconds and linking through to the
+  Real-time screen. It reads the session cache only, so it costs no database
+  query.
+- A new **Analytics real-time** dashboard widget puts the live visitor count and
+  the pages people are on onto Craft's own dashboard, refreshed on the same 15
+  second poll.
+- The **Analytics** overview widget can now show any of seven figures - views,
+  visitors, sessions, bounce rate, pages per session, average session and
+  average time on page - chosen in its settings. It still ships showing views,
+  visitors and bounce rate, so existing widgets look the same after upgrading.
+
 ## 1.0.1 - 2026-07-17
 
 ### Added

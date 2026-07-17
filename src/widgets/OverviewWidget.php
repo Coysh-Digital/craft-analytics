@@ -15,6 +15,35 @@ class OverviewWidget extends Widget
 {
     public string $range = DateRange::PRESET_7_DAYS;
 
+    /**
+     * Which headline figures to show, in the order they appear. Defaults to the
+     * three the widget has always shown; the rest are opt-in so an existing
+     * widget looks the same after an upgrade.
+     *
+     * @var string[]
+     */
+    public array $metrics = ['views', 'uniques', 'bounceRate'];
+
+    /**
+     * The figures the widget can show, keyed by the totals() array key. Kept
+     * here so the settings screen, the body and the validation rule all read
+     * from one list rather than three that drift apart.
+     *
+     * @return array<string,string> key => label
+     */
+    public static function metricLabels(): array
+    {
+        return [
+            'views' => Craft::t('craft-analytics', 'Views'),
+            'uniques' => Craft::t('craft-analytics', 'Visitors'),
+            'sessions' => Craft::t('craft-analytics', 'Sessions'),
+            'bounceRate' => Craft::t('craft-analytics', 'Bounce'),
+            'avgViewsPerSession' => Craft::t('craft-analytics', 'Pages / session'),
+            'avgDurationMs' => Craft::t('craft-analytics', 'Avg. session'),
+            'avgDwellMs' => Craft::t('craft-analytics', 'Avg. time on page'),
+        ];
+    }
+
     public static function displayName(): string
     {
         return Craft::t('craft-analytics', 'Analytics');
@@ -63,14 +92,23 @@ class OverviewWidget extends Widget
             'trend' => $stats->trend($site->id, $range),
             'range' => $range,
             'site' => $site,
+            'metrics' => $this->metrics,
+            'metricLabels' => self::metricLabels(),
         ]);
     }
 
     public function getSettingsHtml(): ?string
     {
+        $options = [];
+
+        foreach (self::metricLabels() as $value => $label) {
+            $options[] = ['label' => $label, 'value' => $value];
+        }
+
         return Craft::$app->getView()->renderTemplate('craft-analytics/_widgets/overview-settings.twig', [
             'widget' => $this,
             'ranges' => DateRange::presets(),
+            'metricOptions' => $options,
         ]);
     }
 
@@ -81,6 +119,7 @@ class OverviewWidget extends Widget
     {
         return array_merge(parent::defineRules(), [
             [['range'], 'in', 'range' => array_keys(DateRange::presets())],
+            [['metrics'], 'each', 'rule' => ['in', 'range' => array_keys(self::metricLabels())]],
         ]);
     }
 }

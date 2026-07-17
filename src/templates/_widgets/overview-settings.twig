@@ -8,3 +8,13 @@
     value: widget.range,
     errors: widget.getErrors('range'),
 }) }}
+
+{{ forms.checkboxSelectField({
+    label: 'Figures'|t('craft-analytics'),
+    instructions: 'Which headline numbers to show. The sparkline always plots views.'|t('craft-analytics'),
+    id: 'metrics',
+    name: 'metrics',
+    options: metricOptions,
+    values: widget.metrics,
+    errors: widget.getErrors('metrics'),
+}) }}
