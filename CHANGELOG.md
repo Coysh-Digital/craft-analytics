@@ -1,5 +1,31 @@
 # Release Notes for Craft Analytics
 
+## 1.0.1 - 2026-07-17
+
+### Added
+
+- The dashboard now leads with seven figures rather than four, adding pages per
+  session, average session duration and average time on page.
+- Top pages gained an average time column.
+- The dashboard's lists are now a two-up grid, and Sections, Goals, Campaigns
+  and Locations have joined Channels and Devices there.
+- On Lite, the Pro cards keep their place and say what they would show, instead
+  of disappearing. The queries behind them do not run.
+
+### Fixed
+
+- The Locations card read the wrong key off the countries query, so its labels
+  would have rendered blank.
+- The KPI strip drew its dividers as a gap over a background, which painted the
+  empty cells beside a wrapped row grey. The dividers are now the tiles' own
+  borders.
+- The Crawlers screen styled a badge class that does not exist.
+- The Goals screen offered an Export CSV button on Lite, where the export
+  action refuses, so the button returned a 403. The layout's guard tested
+  whether the variable was defined, which is true for a variable set to null.
+- The Pro gate read "Goals is a Pro feature". Every screen it gates has a plural
+  name, so it was wrong on all five.
+
 ## 1.0.0 - 2026-07-17
 
 Initial release.
