@@ -36,6 +36,35 @@ class SeedController extends Controller
     }
 
     /**
+     * Journeys people take on purpose.
+     *
+     * Left to chance, a random walk over the site's paths almost never
+     * produces a visitor who lands on the blog, reads a post and then reaches
+     * the contact page in that order - so every funnel would report a
+     * completion rate near zero and the screen would look broken rather than
+     * informative. Real sites have both: most visitors wander, and a minority
+     * arrive meaning to do something.
+     *
+     * `*` picks a random path under that prefix.
+     *
+     * @var array<int,array{0: array<int,string>, 1: int}> steps, weight
+     */
+    private const JOURNEYS = [
+        [['/blog', '/blog/*', '/contact'], 12],
+        [['/blog', '/blog/*', '/blog/*'], 22],
+        [['/blog', '/blog/*', '/about', '/contact'], 6],
+        [['/guides', '/guides/*', '/contact'], 8],
+        [['/guides/*', '/guides/*'], 10],
+        [['/work', '/work/*', '/contact'], 5],
+        [['/pricing', '/contact'], 9],
+        [['/', '/services', '/contact'], 7],
+        [['/', '/pricing', '/about', '/contact'], 4],
+    ];
+
+    /** Share of sessions that follow a journey rather than wandering. */
+    private const JOURNEY_SHARE = 16;
+
+    /**
      * Routes that exist without being entries: a template-only page, a search
      * results page. Real sites have these, and they are the reason the Pages
      * report and the Content report never quite agree - so the demo data
@@ -212,7 +241,13 @@ class SeedController extends Controller
             $campaign = $this->weightedCampaign($referrer);
             [$country, $region] = self::weightedLocation();
 
-            $entryPath = self::weightedString($this->paths($siteId));
+            $journey = random_int(1, 100) <= self::JOURNEY_SHARE ? $this->journey($siteId) : null;
+
+            if ($journey !== null) {
+                $pageCount = count($journey);
+            }
+
+            $entryPath = $journey[0] ?? self::weightedString($this->paths($siteId));
             $lastPath = $entryPath;
             $cursor = $start;
 
@@ -220,7 +255,8 @@ class SeedController extends Controller
             $hits = [];
 
             for ($p = 0; $p < $pageCount; $p++) {
-                $path = $p === 0 ? $entryPath : self::weightedString($this->paths($siteId));
+                $path = $journey[$p]
+                    ?? ($p === 0 ? $entryPath : self::weightedString($this->paths($siteId)));
                 $lastPath = $path;
                 $dwell = random_int(4000, 180000);
 
@@ -401,6 +437,47 @@ class SeedController extends Controller
                 ));
             }
         }
+    }
+
+    /**
+     * One purposeful journey, with its wildcards resolved to real paths.
+     *
+     * @return array<int,string>|null
+     */
+    private function journey(int $siteId): ?array
+    {
+        $weights = [];
+
+        foreach (self::JOURNEYS as $index => [, $weight]) {
+            $weights[$index] = $weight;
+        }
+
+        $steps = self::JOURNEYS[(int)self::weighted($weights)][0];
+        $paths = array_keys($this->paths($siteId));
+        $resolved = [];
+
+        foreach ($steps as $step) {
+            if (!str_ends_with($step, '*')) {
+                $resolved[] = $step;
+                continue;
+            }
+
+            $prefix = rtrim($step, '*');
+            $candidates = array_values(array_filter(
+                $paths,
+                static fn(string $p): bool => str_starts_with($p, $prefix) && $p !== $prefix,
+            ));
+
+            if ($candidates === []) {
+                // Nothing published under that prefix - the journey cannot be
+                // walked, so it is dropped rather than half-invented.
+                return null;
+            }
+
+            $resolved[] = $candidates[random_int(0, count($candidates) - 1)];
+        }
+
+        return $resolved;
     }
 
     private ?GoalMatcher $matcher = null;
