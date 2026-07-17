@@ -151,8 +151,14 @@ class ProRollupWriter extends Component
      */
     private function writeFunnels(Session $session, string $date): void
     {
+        $goals = [];
+
+        foreach ($this->goals()->enabledForSite($session->siteId) as $goal) {
+            $goals[$goal->handle] = $goal;
+        }
+
         foreach ($this->funnels()->enabledForSite($session->siteId) as $funnel) {
-            $reached = $funnel->reachedStep($session);
+            $reached = $funnel->reachedStep($session, $goals);
 
             for ($position = 1; $position <= $reached; $position++) {
                 Upsert::counters($this->db(), Table::FUNNEL_STEP_ROLLUP, [

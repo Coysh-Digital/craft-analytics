@@ -55,6 +55,25 @@ answering different questions.
 Unrelated goals in between don't break anything. blog → newsletter signup →
 post → live chat → services is still a complete walk.
 
+### Duration and scroll steps are conditions, not positions
+
+A **session duration** or **scroll depth** step behaves differently, and
+deliberately: those are properties of the whole visit rather than things that
+happened at a particular moment. "Stayed 60 seconds" isn't true *at* a point
+you could slot into a sequence - it's true of the visit or it isn't.
+
+So a step like that **gates** the funnel without taking a place in the order:
+
+```
+1. Read a guide
+2. Stayed 60 seconds      ← a condition on the session, not a position
+3. Requested a quote      ← must still come after step 1
+```
+
+Somebody who read a guide, requested a quote and was there for two minutes
+completes all three. Somebody who did the same in forty seconds stops at step
+1, because step 2 gates them.
+
 ## Within a session, and only within a session
 
 **There is no cross-session funnel, and there cannot be one.**

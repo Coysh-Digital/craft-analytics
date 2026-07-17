@@ -44,13 +44,45 @@ class Funnel extends Model
      * in the order they converted, so a visitor who somehow hit the checkout
      * page before the basket page did not walk this funnel, and saying they
      * did would turn a broken flow into a healthy-looking one.
+     *
+     * @param array<string,Goal> $goalsByHandle every goal this funnel's steps
+     *                                          could name
      */
-    public function reachedStep(Session $session): int
+    public function reachedStep(Session $session, array $goalsByHandle): int
     {
         $reached = 0;
         $searchFrom = 0;
 
         foreach ($this->steps as $handle) {
+            $goal = $goalsByHandle[$handle] ?? null;
+
+            // A step naming a goal that no longer exists cannot be satisfied,
+            // and everything after it is unreachable. Guessing either way
+            // would invent a number.
+            if ($goal === null) {
+                break;
+            }
+
+            // Duration and scroll are properties of the whole session rather
+            // than things that happened at a point in it: "stayed 60 seconds"
+            // is true of the visit, not true *at* some moment you could put in
+            // a sequence. So they gate the step without consuming a position
+            // in the order.
+            //
+            // Before this, they were looked for in the session's ordered goal
+            // list - where they never appear, because that list is built while
+            // the hits arrive and these two are only decided once the session
+            // is over. Any funnel with a duration or scroll step therefore
+            // died at that step and reported a completion rate of zero.
+            if (!$goal->isLive()) {
+                if (!$goal->convertsAtClose($session)) {
+                    break;
+                }
+
+                $reached++;
+                continue;
+            }
+
             $at = array_search($handle, array_slice($session->goals, $searchFrom), true);
 
             if ($at === false) {
