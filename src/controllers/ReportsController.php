@@ -2,6 +2,7 @@
 
 namespace coyshdigital\craftanalytics\controllers;
 
+use coyshdigital\craftanalytics\helpers\ElementLinks;
 use coyshdigital\craftanalytics\Plugin;
 use Craft;
 use yii\web\Response;
@@ -40,13 +41,15 @@ class ReportsController extends BaseCpController
         $site = $this->currentSite();
         $siteId = $this->siteId($site);
         $range = $this->range();
+        $pages = $this->stats()->topPages($siteId, $range, 200);
 
         return $this->renderTemplate('craft-analytics/reports/pages.twig', array_merge(
             $this->commonVariables($site, $range),
             [
                 'title' => 'Pages',
                 'selectedSubnavItem' => 'pages',
-                'pages' => $this->stats()->topPages($siteId, $range, 200),
+                'pages' => $pages,
+                'editUrls' => ElementLinks::editUrls(array_column($pages, 'elementId')),
                 'exportKind' => 'pages',
                 'exportParams' => ['site' => $site->handle, 'range' => $range->preset],
             ],

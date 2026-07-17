@@ -24,7 +24,7 @@
                     <tbody>
                     {% for page in pages %}
                         <tr>
-                            {{ ca.barCell(page.path, page.views, maxViews, page.elementId ? cpUrl('entries/' ~ page.elementId) : null) }}
+                            {{ ca.barCell(page.path, page.views, maxViews, editUrls[page.elementId] ?? null) }}
                             <td class="ca-num">{{ page.views|number_format }}</td>
                             <td class="ca-num ca-muted">{{ page.entrances|number_format }}</td>
                             <td class="ca-num ca-muted">{{ page.exits|number_format }}</td>

@@ -29,7 +29,7 @@
                                 entry.title ?: 'Untitled'|t('craft-analytics'),
                                 entry.views,
                                 maxViews,
-                                cpUrl('entries/' ~ entry.elementId)
+                                editUrls[entry.elementId] ?? null
                             ) }}
                             <td class="ca-num">{{ entry.views|number_format }}</td>
                         </tr>

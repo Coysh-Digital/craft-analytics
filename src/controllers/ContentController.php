@@ -2,6 +2,7 @@
 
 namespace coyshdigital\craftanalytics\controllers;
 
+use coyshdigital\craftanalytics\helpers\ElementLinks;
 use coyshdigital\craftanalytics\Plugin;
 use Craft;
 use yii\web\Response;
@@ -63,14 +64,16 @@ class ContentController extends BaseCpController
             throw new \yii\web\NotFoundHttpException('Section not found.');
         }
 
+        $entries = Plugin::getInstance()->getContentStats()->entriesInSection($siteId, $range, $sectionId);
+
         return $this->renderTemplate('craft-analytics/content/section.twig', array_merge(
             $this->commonVariables($site, $range),
             [
                 'title' => $section->name,
                 'selectedSubnavItem' => 'content',
                 'section' => $section,
-                'entries' => Plugin::getInstance()->getContentStats()
-                    ->entriesInSection($siteId, $range, $sectionId),
+                'entries' => $entries,
+                'editUrls' => ElementLinks::editUrls(array_column($entries, 'elementId')),
             ],
         ));
     }

@@ -2,6 +2,7 @@
 
 namespace coyshdigital\craftanalytics\controllers;
 
+use coyshdigital\craftanalytics\helpers\ElementLinks;
 use yii\web\Response;
 
 /**
@@ -20,6 +21,8 @@ class DashboardController extends BaseCpController
         $totals = $stats->totals($siteId, $range);
         $previous = $stats->totals($siteId, $range->previous());
 
+        $topPages = $stats->topPages($siteId, $range, 8);
+
         return $this->renderTemplate('craft-analytics/dashboard/index.twig', array_merge(
             $this->commonVariables($site, $range),
             [
@@ -34,7 +37,8 @@ class DashboardController extends BaseCpController
                     'avgDurationMs' => self::delta($totals['avgDurationMs'], $previous['avgDurationMs']),
                 ],
                 'trend' => $stats->trend($siteId, $range),
-                'topPages' => $stats->topPages($siteId, $range, 8),
+                'topPages' => $topPages,
+                'editUrls' => ElementLinks::editUrls(array_column($topPages, 'elementId')),
                 'channels' => $stats->channels($siteId, $range),
                 'deviceTypes' => $stats->devices($siteId, $range, 'deviceType'),
                 'exportKind' => 'pages',

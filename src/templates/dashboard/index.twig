@@ -48,7 +48,7 @@
                     <tbody>
                     {% for page in topPages %}
                         <tr>
-                            {{ ca.barCell(page.path, page.views, maxViews, page.elementId ? cpUrl('entries/' ~ page.elementId) : null) }}
+                            {{ ca.barCell(page.path, page.views, maxViews, editUrls[page.elementId] ?? null) }}
                             <td class="ca-num">{{ page.views|number_format }}</td>
                             <td class="ca-num ca-muted">{{ page.avgDwellMs ? ca.duration(page.avgDwellMs) : '-' }}</td>
                         </tr>
