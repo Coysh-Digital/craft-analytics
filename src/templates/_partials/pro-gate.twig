@@ -7,7 +7,12 @@
         <div class="ca-posture is-consent">
             <div class="ca-posture-icon" aria-hidden="true">★</div>
             <div>
-                <div class="ca-posture-title">{{ title }} {{ 'is a Pro feature'|t('craft-analytics') }}</div>
+                {# Every screen this gates has a plural name - Goals, Funnels,
+                   Campaigns - so "{title} is a Pro feature" was wrong on all of
+                   them. Naming the feature and labelling it separately avoids
+                   agreeing with a word we don't control. #}
+                <div class="ca-posture-title">{{ title }}</div>
+                <div class="ca-posture-label">{{ 'A Craft Analytics Pro feature'|t('craft-analytics') }}</div>
                 <p class="ca-posture-body">{{ description }}</p>
                 <p style="margin-top: 10px">
                     <a class="go" href="{{ url('settings/plugins/craft-analytics') }}">

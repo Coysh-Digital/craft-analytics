@@ -28,7 +28,10 @@ class ConversionsController extends BaseCpController
                     ? Plugin::getInstance()->getConversionStats()->goals($siteId, $range)
                     : [],
                 'canManage' => Craft::$app->getUser()->checkPermission(Plugin::PERMISSION_MANAGE_SETTINGS),
-                'exportKind' => 'goals',
+                // Only when there is something to export. The export action
+                // refuses on Lite, so offering the button there is offering an
+                // error.
+                'exportKind' => $isPro ? 'goals' : null,
             ],
         ));
     }

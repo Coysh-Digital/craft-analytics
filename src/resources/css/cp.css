@@ -468,6 +468,15 @@
     color: #b45309;
 }
 
+.ca-posture-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--medium-text-color);
+    margin-bottom: 4px;
+}
+
 .ca-posture-title {
     font-size: 15px;
     font-weight: 600;

@@ -9,7 +9,9 @@
 {% block actionButton %}
     {# Only where there is actually something to export — a button that
        quietly exports a different screen's data is worse than no button. #}
-    {% if (canExport ?? false) and exportKind is defined %}
+    {# `is defined` is true for a variable set to null, so a screen that has
+       nothing to export says so with null rather than by omitting the key. #}
+    {% if (canExport ?? false) and (exportKind ?? null) %}
         <div class="btngroup">
             <a class="btn" href="{{ url('craft-analytics/export/' ~ exportKind, exportParams ?? {}) }}">
                 {{ 'Export CSV'|t('craft-analytics') }}
