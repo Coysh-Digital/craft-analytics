@@ -54,6 +54,9 @@ what it costs. See [privacy](../privacy/README.md).
 
 ## Locations
 
+Setting this up needs a database file you install yourself - see
+[Locations & the geo database](../configuration/geolocation.md).
+
 Country and region, resolved from a database **on your own server**. No lookup
 service is called, nothing leaves the machine, and the address is resolved and
 discarded inside a single call frame - only the country code and region name

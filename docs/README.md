@@ -1,41 +1,38 @@
 ---
 title: Craft Analytics
-description: Privacy-first, consent-aware analytics that lives inside Craft CMS.
+description: Privacy-first, consent-aware analytics that runs inside Craft CMS.
 ---
 
 # Craft Analytics
 
-Analytics for Craft CMS that doesn't need a cookie banner, doesn't send your
-visitors to anyone else's servers, and knows the difference between a URL and
-an Article in your Blog section.
+Analytics for Craft CMS that runs on your own server. No cookie banner, no
+account to create, no script loaded from someone else's CDN, and no data sent
+anywhere.
 
-It runs entirely on your own infrastructure. There's no account to create, no
-script from a CDN, no data leaving your server, and nothing phoning home -
-because there's nowhere for it to phone.
+It also understands your content: it can tell you how the Blog section is
+doing, not just that `/blog/some-slug` got 400 views.
 
-## Why it exists
+## What it does differently
 
-Most analytics makes you choose between knowing what's happening on your site
-and being straight with the people using it. This doesn't:
-
-- **No cookies, no banner.** Visitors are counted with a hash that's destroyed
-  and remade every 24 hours. Nothing is stored on their device, so there's
-  nothing to consent to.
-- **No IP addresses.** Not in a table, not in a log, not in a cache key. The
-  address is used in memory to work out a hash, and then it's gone.
-- **Nothing per-visitor.** The database holds counts, not people. There's no
-  record of anyone to hand over, delete, or leak.
-- **It doesn't slow your site down.** The work happens after the page has been
-  sent. Measured: -0.46 ms difference in time-to-first-byte, which is noise.
-- **Your database doesn't grow with your traffic.** A page viewed a million
-  times is the same one row as a page viewed twice.
-- **It knows your content model.** Traffic by section, entry type and author,
-  because it's a Craft plugin and Craft already knows all this.
+- **No cookies, so no banner.** Visitors are counted with a hash built from a
+  salt that is thrown away and replaced every 24 hours. Nothing is stored on
+  anyone's device.
+- **No IP addresses.** The address is used in memory to work out that hash and
+  then dropped. It is never written to a table, a log or a cache key.
+- **No per-visitor records.** The database holds counts. If someone asks what
+  you know about them, the answer is nothing.
+- **No effect on page speed.** Everything happens after the response has been
+  sent. We measure a 0.46 ms difference in time-to-first-byte, which is within
+  the noise.
+- **Storage that does not track traffic.** A page viewed a million times takes
+  up the same one row as a page viewed twice.
+- **Reports built on your content model.** Traffic by section, entry type and
+  author, because Craft already knows all of that.
 
 ## Start here
 
-- **[Installation & setup](get-started/installation.md)** - ten minutes, and
-  don't skip the cron
+- **[Installation & setup](get-started/installation.md)** - about ten minutes.
+  The cron step is the one people miss.
 - **[How tracking works](get-started/tracking-modes.md)** - the modes, and what
   each one costs you
 - **[Static & edge caching](configuration/caching.md)** - **read this if you
@@ -51,8 +48,8 @@ and being straight with the people using it. This doesn't:
 
 ## Privacy
 
-- [How visitors are counted](privacy/how-counting-works.md) - **the one thing
-  that will surprise you**
+- [How visitors are counted](privacy/how-counting-works.md) - **read this
+  before comparing the numbers with Google Analytics**
 - [Privacy & compliance](privacy/README.md) - the banner-free argument,
   consent, DSARs and the paperwork
 
@@ -61,22 +58,23 @@ and being straight with the people using it. This doesn't:
 - [All settings](configuration/settings.md)
 - [Retention & storage](configuration/retention.md)
 - [Caching](configuration/caching.md)
+- [Locations & the geo database](configuration/geolocation.md) *(Pro)*
 
 ## For developers
 
-- [Twig API](developers/twig.md) - "most read" in six lines
+- [Twig API](developers/twig.md) - popular entries, view counts, site totals
 - [Performance](developers/performance.md) - how the zero-TTFB claim works and
   what it measures at
 - [Attribution & prior art](developers/attribution.md)
 
 ## When something's wrong
 
-- **[Troubleshooting](troubleshooting.md)** - starting with "the reports are
-  empty", which is almost always the cron
+- **[Troubleshooting](troubleshooting.md)** - starting with empty reports,
+  which is almost always the cron
 
 ## Lite vs Pro
 
-Lite is genuinely useful on its own. It isn't a demo.
+Lite is a usable analytics tool on its own, not a trial of Pro.
 
 | | Lite | Pro |
 |---|---|---|
@@ -96,5 +94,5 @@ Lite is genuinely useful on its own. It isn't a demo.
 | Emailed summaries | | ✅ |
 | GraphQL API | | ✅ |
 
-Upgrading is a licence change. Same tables, no migration, and everything
-you've already collected is still there.
+Upgrading is a licence change. Both editions use the same tables, so there is
+no migration to run and your existing data carries over.

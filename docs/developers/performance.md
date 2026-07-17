@@ -56,7 +56,7 @@ Web requests never write to the database. They append one line to a spool; the
 drain reads the spool, collapses it in memory, and writes rollups.
 
 In the harness, 70 pageviews of one page in one hour drained into **1 bucket**
-- one row to upsert, not 70 inserts. That ratio is the whole point: rows track
+- one row to upsert, not 70 inserts. That ratio matters: rows track
 cardinality × time, never traffic volume.
 
 ## Caveats, stated plainly

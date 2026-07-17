@@ -1,11 +1,11 @@
 ---
 title: Goals
-description: Counting the things that actually matter, and what they were worth.
+description: Counting the things worth counting, and what each one was worth.
 ---
 
 # Goals <Badge text="Pro" />
 
-Pageviews tell you that people came. Goals tell you whether anything happened.
+Pageviews tell you people arrived. Goals tell you whether they did anything.
 
 A goal names something worth counting - reaching the thank-you page, firing a
 signup event, reading a case study to the bottom - and optionally what one is
@@ -36,8 +36,8 @@ worth. Then every report can tell you not just "500 people read the blog" but
 ```
 
 Query strings are ignored, so `/thank-you` matches `/thank-you?ref=email`.
-That's almost always what you want, and a goal that missed your campaign
-traffic would be wrong in the most annoying possible way.
+That is almost always what you want: a goal that ignored query strings would
+miss all your campaign traffic.
 
 **Event** - a named event fired, from your own JavaScript:
 
@@ -58,10 +58,11 @@ seconds. Needs hybrid or client mode; the server can't know.
 **Scroll depth** - they read at least N% down a page. Target is `25`, `50`,
 `75` or `100`. Also needs the beacon.
 
-## Once per session. Always.
+## Goals convert once per session
 
-Someone who reloads the thank-you page three times converted **once**.
-Counting three would be flattering, and wrong, and you'd make decisions on it.
+Someone who reloads the thank-you page three times has converted **once**.
+Counting three would overstate it, and you would be making decisions on that
+number.
 
 This is why conversion rate is conversions ÷ **sessions**, not ÷ pageviews.
 Dividing by pageviews would understate every rate on your site by however much
@@ -69,24 +70,21 @@ people browse.
 
 ## Two things that surprise people
 
-**Goals aren't retrospective.** A goal you add today starts counting today. It
-cannot be applied to last month, because last month's individual pageviews no
-longer exist - they were folded into daily totals and the visits themselves
-were thrown away. That's the same design that means you don't need a cookie
-banner. It cuts both ways, and this is the way it cuts against you.
+**Goals are not retrospective.** A goal you add today starts counting today.
+It cannot be applied to last month, because last month's individual pageviews
+no longer exist: they were folded into daily totals and the visits themselves
+discarded. This is the same design that removes the need for a cookie banner.
 
-So: if you're about to run a campaign, make the goal *first*.
+If you are about to run a campaign, create the goal first.
 
-**Deleting a goal deletes its conversions.** They're only meaningful as that
-goal's conversions - a count nobody can name is worse than no count - so
-they're removed with it. The CP says so before it happens.
+**Deleting a goal deletes its conversions**, since they are only meaningful as
+that goal's conversions. The control panel warns you before it happens.
 
 ## Goals live in project config
 
-Which means they deploy like everything else: make them in your dev
-environment, commit `config/project/craftAnalytics/goals/`, and they arrive in
-production on your next `project-config/apply`. Nobody has to retype them into
-the production CP at 6pm on a Friday.
+So they deploy like everything else: create them in your dev environment,
+commit `config/project/craftAnalytics/goals/`, and they arrive in production on
+your next `project-config/apply`. Nobody has to retype them in production.
 
 ```yaml
 # config/project/craftAnalytics/goals/enquiry--a1b2c3d4-….yaml
@@ -106,24 +104,22 @@ that would be silently discarded.
 
 ## Reading the report
 
-**Analytics → Goals** shows every goal, including the ones sitting at zero. A
-goal at zero is a real answer, and usually means the target is wrong. Hiding
-it is how that goes unnoticed for a month.
+**Analytics → Goals** lists every goal, including any sitting at zero. A goal
+at zero usually means its target is wrong, so it is shown rather than hidden.
 
 Where a goal has a value, campaigns get credit for it under your attribution
 model, so **Analytics → Campaigns** can tell you that the newsletter drove
 12.5 conversions worth £430 - the .5 because a session touched by two
 campaigns splits its credit rather than being counted twice.
 
-## Where goals cost nothing
+## What goals cost to store
 
-Worth knowing, since it explains the design: page, event and entry goals are
-matched *the moment the pageview arrives*, and the session only remembers
-which goal handles matched. It never stores the pages you visited. So session
-state is bounded by how many goals you've defined - a handful - rather than by
-how much any visitor browses.
+Nothing, which is worth explaining. Page, event and entry goals are matched
+the moment a pageview arrives, and the session records only which goal handles
+matched - never the pages themselves. Session state is therefore bounded by the
+number of goals you have defined rather than by how much anyone browses.
 
-Duration and scroll goals are judged when the session ends, from two numbers
-already on it.
+Duration and scroll goals are worked out when the session ends, from two
+numbers already held on it.
 
-Either way: no per-visitor rows, no stored journeys, nothing to erase later.
+Neither creates a per-visitor row or a stored journey.

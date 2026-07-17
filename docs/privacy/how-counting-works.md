@@ -1,21 +1,21 @@
 ---
 title: How visitors are counted
-description: What a "unique visitor" means here, why it isn't what you're used to, and why that's the point.
+description: What a "unique visitor" means here, and why the number differs from other analytics tools.
 ---
 
 # How visitors are counted
 
-This page explains the one thing about Craft Analytics that will surprise you,
-and it's better to be surprised now than in a board meeting.
+Read this before you compare these numbers with another analytics tool, or put
+them in a report. The way visitors are counted here differs from most tools,
+and the difference is deliberate.
 
-## No cookies. No banner. Here's the trick.
+## How visitors are told apart without a cookie
 
-To count visitors you need to tell them apart. Most analytics does that by
-putting a cookie on the device - a permanent name tag - which is why most
-analytics needs a consent banner.
+To count visitors you have to tell them apart. Most analytics does that with a
+cookie on the device, which is why most analytics needs a consent banner.
 
-Craft Analytics doesn't store anything on the device. Instead, when a request
-arrives, it computes:
+Craft Analytics stores nothing on the device. When a request arrives it
+computes:
 
 ```
 visitor = SHA-256(today's secret salt + IP address + user agent + site ID)
@@ -24,31 +24,27 @@ visitor = SHA-256(today's secret salt + IP address + user agent + site ID)
 and keeps the first 8 bytes. The IP address is used for that calculation and
 then **discarded** - it is never written to a table, a log, or a cache key.
 
-The salt is a random secret that **rotates every 24 hours**, and the old one is
-destroyed. Not archived. Destroyed.
+The salt is a random secret that **rotates every 24 hours**. The old one is
+deleted, not archived.
 
-That means: after rotation, there is no way to connect today's hash to
-yesterday's. Not a slow way, not an expensive way, not a way with a court
-order. The information no longer exists anywhere.
-
-That's what lets you run this without a cookie banner, and it's the whole
-design.
+Once it has rotated, there is no way to connect today's hash to yesterday's,
+because the information needed to do so no longer exists. That is what lets
+the plugin run without a cookie banner.
 
 ## The consequence
 
 **Someone who visits on Monday, Wednesday and Friday counts as three unique
 visitors, not one.**
 
-Because on Wednesday there is genuinely no way to know they were here on
-Monday. We could pretend otherwise; we'd have to keep the old salts to do it,
-which is exactly the tracking we're not doing.
+On Wednesday there is no way to know they were here on Monday. Keeping the old
+salts would make it possible, but that is the tracking the plugin is designed
+to avoid.
 
 So when the CP says "unique visitors" over 30 days, it means **the sum of
 daily unique visitors**. The screen says so. Any figure you export or query
 carries the same caveat.
 
-This isn't a limitation we're apologising for - it's the property you're
-buying. But it means:
+This is a consequence of the design rather than a bug, but it does mean:
 
 - ❌ Don't compare this number directly with a Google Analytics "users" figure.
   They're measuring different things.
@@ -56,8 +52,8 @@ buying. But it means:
 - ✅ Do use **sessions** for "how many visits" - that's exact.
 - ✅ Do use **pageviews** for "how much was read" - that's exact.
 
-Plausible has the same property for the same reason. So does any analytics
-tool that manages without a banner.
+Plausible works this way for the same reason, as does any analytics tool that
+manages without a banner.
 
 ## "Unique visitors" is also an estimate
 
@@ -65,15 +61,13 @@ Separately from the above: the unique count is computed with HyperLogLog, a
 sketching algorithm that counts distinct things in a couple of kilobytes
 instead of storing every value.
 
-The trade is about **±1.6%** accuracy, and the reason for it is
-[storage](../configuration/retention.md): storing every visitor hash so you
-could count them exactly means a row per visitor per day per page, and your
-database grows with your traffic forever. The sketch is 33 bytes and doesn't
-care whether it counted 10 visitors or 10,000.
+The trade is about **±1.6%** accuracy, in exchange for
+[storage](../configuration/retention.md) that does not grow with traffic.
+Counting exactly would mean a row per visitor per day per page; the sketch is
+33 bytes whether it counted 10 visitors or 10,000.
 
-Under about 100 uniques the count is exact anyway, because at that size the
-sketch is still storing them individually. So a page with 40 visitors reports
-40, not "about 40".
+Below about 100 uniques the count is exact, because at that size the sketch
+still stores them individually. A page with 40 visitors reports 40.
 
 The CP labels the accuracy on every screen showing uniques. Exports and the
 GraphQL API state it too, so nobody downstream can mistake an estimate for a
@@ -95,8 +89,8 @@ Here is everything the plugin keeps about a pageview:
 | A 33-byte sketch of who was here today | Anything that survives the salt rotating |
 | Browser, OS, device type - as counts | A name, an email, an account |
 
-And that's it. Not "we anonymise it" - there is no per-visitor record to
-anonymise. The rows are counts.
+There is no per-visitor record to anonymise, because none is created. The rows
+are counts.
 
 ## What this means for DSARs
 
@@ -105,8 +99,8 @@ If someone emails asking what you hold about them: for ordinary
 to them, and no way to find one if there were, because the salt that made
 their hash was destroyed.
 
-That's not a dodge - it's the definition of anonymous data under GDPR, and
-anonymous data is outside its scope entirely.
+This meets the definition of anonymous data under GDPR, which puts it outside
+the regulation's scope.
 
 The exception is the Pro **journeys** layer, which stores per-visitor rows for
 visitors who affirmatively consented. It's off by default, and it comes with

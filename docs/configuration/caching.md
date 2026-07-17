@@ -1,43 +1,41 @@
 ---
 title: Static & edge caching
-description: How Craft Analytics counts pageviews behind Blitz, Cloudflare, Varnish and friends - and why it doesn't need you to configure anything.
+description: How Craft Analytics counts pageviews behind Blitz, Cloudflare and Varnish, without any cache configuration.
 ---
 
 # Static & edge caching
 
-If you run Blitz, or put Cloudflare in front of your site, or use Varnish, or
-host on a platform that serves static HTML from the edge - this page is worth
-five minutes. The short version is that it works, and you don't need to
-configure anything. But it's worth understanding *why*, because the failure
-mode of getting this wrong is numbers that look completely plausible and are
-quietly wrong by half.
+Read this if you run Blitz, Cloudflare, Varnish, or anything else that serves
+your HTML without PHP. Tracking works behind all of them and needs no
+configuration, but it is worth knowing how, because getting it wrong produces
+numbers that look reasonable and are half what they should be.
 
-## The problem, in one paragraph
+## The problem
 
-Caching exists to stop PHP running. That's the whole point: the first visitor
-makes PHP build the page, the result is stored, and the next thousand visitors
-get the stored copy without Craft, or your plugins, or your templates being
-involved at all. Which is wonderful for your server and fatal for any
-analytics that counts pageviews in PHP - because PHP doesn't run, so it can't
-count anything. Your cache hit rate becomes your under-count rate. A site with
-a 90% hit rate reports one visitor in ten.
+Caching works by not running PHP. The first visitor causes the page to be
+built, the result is stored, and the next thousand visitors get the stored
+copy without Craft or your templates being involved.
 
-This isn't hypothetical, and it isn't specific to this plugin. Any
-"server-side analytics" behind a cache has this problem.
+That is good for your server and a problem for analytics that counts
+pageviews in PHP, because PHP never runs for those visitors. Your cache hit
+rate becomes your under-count rate: at a 90% hit rate you would see one
+visitor in ten.
+
+This affects any server-side analytics behind a cache, not just this one.
 
 ## How Craft Analytics deals with it
 
-Two ways of noticing a pageview, and hybrid mode uses both:
+There are two ways to notice a pageview, and hybrid mode uses both.
 
-**PHP counts it** when PHP builds the page. Reliable, invisible, and counts
-people with JavaScript disabled - but blind to anything served from a cache.
+**PHP counts it** while building the page. This adds nothing to the page and
+counts people with JavaScript disabled, but it cannot see anything served from
+a cache.
 
-**A small script counts it** when the page loads in the browser. It doesn't
-care where the HTML came from: PHP, Blitz, a CDN in Frankfurt, the browser's
-own back button. It runs either way.
+**A small script counts it** when the page loads in the browser. It works
+regardless of where the HTML came from: PHP, Blitz, a CDN, or the browser's
+back button.
 
-The trick is making sure they don't both count the same view. That's what the
-nonce does.
+The nonce is what stops the two counting the same view twice.
 
 ## The nonce, and why it survives caching
 
@@ -57,9 +55,9 @@ the tracker posts the nonce back. The endpoint looks it up:
   and record only the time-on-page. Don't count it again.
 - **Nonce not found, or already claimed** → nobody counted this view. Count it.
 
-Now watch what happens when Blitz caches the page. The nonce gets baked into
-the stored HTML, so **every visitor to that cached page gets the same nonce**.
-That sounds like a bug. It's the mechanism:
+When Blitz caches the page, the nonce is stored in the HTML along with
+everything else, so **every visitor to that cached page receives the same
+nonce**. That is what makes it work:
 
 | | What the visitor gets | What happens |
 |---|---|---|
@@ -68,14 +66,13 @@ That sounds like a bug. It's the mechanism:
 | **Visitor 3** | Cached HTML, nonce `abc` | Same → **counted**. |
 | **Visitor 900** | Cached HTML, nonce `abc` | Same → **counted**. |
 
-Three visitors, three views. Nine hundred visitors, nine hundred views. No
-cache configuration, no cache-busting, no exclusion rules, no integration
-plugin. The first claim is the only one that finds an unclaimed nonce, and
-everyone after it is counted.
+Three visitors give three views; nine hundred give nine hundred. Only the
+first claim finds an unclaimed nonce, and everyone after it is counted. There
+is no cache configuration, cache-busting or exclusion rule to set up.
 
-This works with **any** cache - Blitz, Cloudflare, Fastly, Varnish, nginx
-`proxy_cache`, a static export on Netlify. The plugin doesn't detect them or
-know their names. It doesn't need to.
+This works with any cache - Blitz, Cloudflare, Fastly, Varnish, nginx
+`proxy_cache`, a static export on Netlify - because the plugin does not detect
+or depend on which one you use.
 
 ## Blitz specifically
 
@@ -91,9 +88,9 @@ templates never run. Craft Analytics spots this (if PHP had rendered the page
 there would be a fresh nonce, and there isn't) and stands aside so the beacon
 counts it, exactly as in the other case.
 
-The point of handling both: **your numbers don't change when you add or remove
-the rewrite.** That's a deployment detail and it has no business moving your
-traffic figures.
+Both are handled so that **your numbers do not change when you add or remove
+the rewrite**, which is a deployment detail rather than something that should
+affect your traffic figures.
 
 ::: tip
 Excluding the beacon endpoint from your cache is a good idea - it's a POST, so
@@ -111,10 +108,9 @@ most caches ignore it anyway, but being explicit costs nothing:
 
 Nothing to do. The tracker posts to a path on **your own domain**, so:
 
-- The request goes to your origin, not to some analytics vendor.
-- Ad blockers have nothing to block - there's no third-party domain in the
-  request, because there's no third party.
-- Your visitors' browsers make exactly one extra request per pageview, to you.
+- The request goes to your origin rather than to an analytics vendor.
+- There is no third-party domain for an ad blocker to block.
+- Each pageview costs one extra request, to your own server.
 
 If you cache aggressively at the edge, make sure your beacon path (default
 `_ca/collect`) is passed through to the origin rather than cached. A cached
@@ -122,38 +118,36 @@ If you cache aggressively at the edge, make sure your beacon path (default
 
 ## What if I turn hybrid off?
 
-Then you're choosing one of the two halves, and you should know what you're
-giving up.
+Then you are choosing one of the two halves, and giving up what the other one
+catches.
 
-**Server-side only** behind a cache **will under-count, badly, and silently**.
-The reports will look fine. They will just be a fraction of reality, and the
-fraction is your cache miss rate. If you run a cache and pick this mode, the
-settings screen warns you, and the warning is not decorative.
+**Server-side only** behind a cache will under-count without any sign that it
+is doing so. The reports look normal; they are simply a fraction of reality,
+and the fraction is your cache miss rate. The settings screen warns you if you
+choose this mode with a caching plugin installed.
 
-There is one honest use for server-only mode: you don't cache anything, and
-you want zero JavaScript on the page. Then it's the right answer, and you
-accept that time-on-page and scroll depth are impossible because nothing on
-the server knows when someone left.
+Server-only makes sense if you cache nothing and want no JavaScript on the
+page. In that case time-on-page and scroll depth are unavailable, because
+nothing on the server knows when someone left.
 
-**Client beacon only** is immune to caching but misses anyone with JavaScript
-off or a blocker installed. That's a small but real share of people, and it
-skews toward the technical end of your audience - which matters if that's who
-you're writing for.
+**Client beacon only** is unaffected by caching but misses anyone with
+JavaScript off or a content blocker installed. That is a small share of
+people, but not a random one: it skews towards a more technical audience.
 
-Hybrid is the default because it's the only mode that's correct behind a cache
-*and* counts people who block scripts.
+Hybrid is the default because it is the only mode that is accurate behind a
+cache and still counts people who block scripts.
 
 ## Known edges
 
-Being straight with you about the rough bits:
+Three cases worth knowing about:
 
 **The generating visitor's nonce can be claimed by someone else.** If visitor
 1 generates the page and leaves so fast that their beacon never fires, visitor
 2's beacon claims the unclaimed nonce and isn't counted - visitor 1 was
-counted server-side, so you get one view for two people. This happens once per
-cache generation at most, so on a page cached for an hour and viewed 900
-times, the worst case is 899 instead of 900. We think that's a fine trade for
-needing no cache integration at all.
+counted server-side, so you get one view for two people. This can happen once
+per cache generation, so on a page cached for an hour and viewed 900 times the
+worst case is 899. We accept that in exchange for needing no cache
+integration.
 
 **Nonces expire.** They live for `nonceTtl` (default 1800 seconds, 30
 minutes). If somebody opens a page and leaves it in a tab for two hours before
@@ -161,14 +155,14 @@ closing it, its nonce is long gone, and their beacon counts the view a second
 time. Raising `nonceTtl` shrinks the window at the cost of one small cache
 entry per view living longer.
 
-**A cached page and a browser back-button page look the same.** Both were
-never rendered by PHP for that visitor, and both get counted by the beacon.
-That's correct - they did view the page - but it's worth knowing that the
-back-forward cache counts as a view here and doesn't in some other tools.
+**A cached page and a browser back-button page look the same.** Neither was
+rendered by PHP for that visitor, so both are counted by the beacon. They did
+view the page, so this is correct, but note that some other tools do not count
+a back-button view.
 
 ## Checking it yourself
 
-Don't take our word for it. Prove it on your own site:
+To confirm it on your own site:
 
 1. Clear your cache: `php craft blitz/cache/clear`
 2. Visit a page in a normal browser.
@@ -178,12 +172,10 @@ Don't take our word for it. Prove it on your own site:
 5. Look at **Analytics → Pages**. Two views.
 
 ::: warning
-If you test with `curl`, you'll get zero views and think it's broken. Two
-reasons, both deliberate: `curl` sends no `Accept-Language` header, which is
-one of the signals used to spot bots, and it runs no JavaScript, so no beacon
-is ever sent. Test with a real browser.
+Testing with `curl` gives you zero views. `curl` sends no `Accept-Language`
+header, which is one of the signals used to identify bots, and it runs no
+JavaScript, so no beacon is sent. Use a real browser.
 
-Two tabs on the same machine also count as **one** visitor, not two - same IP,
-same user agent, so as far as the plugin can tell you are one person, because
-you are.
+Two tabs on the same machine count as one visitor: same IP, same user agent,
+so the plugin sees one person.
 :::

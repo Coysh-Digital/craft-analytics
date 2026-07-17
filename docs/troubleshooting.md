@@ -1,13 +1,13 @@
 ---
 title: Troubleshooting
-description: The reports are empty, the numbers look wrong, and other Thursday afternoons.
+description: Empty reports, numbers that look wrong, and goals stuck at zero.
 ---
 
 # Troubleshooting
 
 ## The reports are empty
 
-**Is the drain running?** This is it. This is the answer nine times out of ten.
+**Is the drain running?** This is the answer nine times out of ten.
 
 ```bash
 php craft craft-analytics/drain/run
@@ -35,10 +35,10 @@ read on.
 
 ## Nothing is being captured
 
-**Are you testing with curl?** Then this is expected. `curl` sends no
-`Accept-Language` header, which is one of the signals used to spot bots, so it
-is correctly ignored. It also runs no JavaScript, so no beacon is sent. Test
-with a real browser.
+**Are you testing with curl?** That would explain it. `curl` sends no
+`Accept-Language` header, which is one of the signals used to identify bots,
+so the request is ignored. It also runs no JavaScript, so no beacon is sent.
+Use a real browser.
 
 If you must use curl:
 
@@ -67,7 +67,7 @@ that isn't HTML.
 because PHP never runs. Your under-count is your cache hit rate - so a 90% hit
 rate means you're seeing one visitor in ten.
 
-**Switch to hybrid.** It fixes this with no cache configuration at all. See
+**Switch to hybrid**, which handles this with no cache configuration. See
 [Static & edge caching](configuration/caching.md).
 
 **Is `blockCrawlers` doing more than you expect?** Check **Analytics →
@@ -81,16 +81,16 @@ and they're inside every number on every screen. Turn it back on.
 
 ## "Unique visitors" doesn't match Google Analytics
 
-It won't, and it can't. Craft Analytics counts on a **daily-unique** basis:
-someone visiting on three days counts three times, because the hashing salt
-rotates every 24 hours and destroys the link between their days.
+It will not match. Craft Analytics counts on a **daily-unique** basis: someone
+visiting on three days counts three times, because the hashing salt rotates
+every 24 hours and removes the link between their days.
 
-This is the property that means you don't need a cookie banner. It is not a
-bug and there is no setting to fix it, because "fixing" it would mean keeping
-the old salts, which is the tracking you're not doing.
+There is no setting to change this. Changing it would mean keeping the old
+salts, which is the tracking the plugin avoids in order to work without a
+cookie banner.
 
-[The full explanation](privacy/how-counting-works.md) is worth five minutes
-before you compare the two tools.
+[How visitors are counted](privacy/how-counting-works.md) explains this in
+full, and is worth reading before comparing the two tools.
 
 ## A goal is stuck at zero
 
@@ -124,7 +124,7 @@ hit your checkout page before your basket page did not walk that funnel.
 
 ## Views appear twice
 
-This shouldn't happen, and if it does we want to know. Things to check first:
+This should not happen. Things to check first:
 
 - **Is `nonceTtl` shorter than people's attention spans?** A page left open
   longer than `nonceTtl` (default 30 minutes) loses its nonce, and the beacon

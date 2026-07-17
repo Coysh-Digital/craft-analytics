@@ -1,33 +1,29 @@
 # Craft Analytics
 
-Privacy-first, consent-aware analytics for Craft CMS 5. First-party,
-cookieless by default, with no added time-to-first-byte and a database that
-doesn't grow with your traffic.
+Privacy-first, consent-aware analytics for Craft CMS 5. First-party, cookieless
+by default, with no added time-to-first-byte and storage that does not grow with
+your traffic.
 
-It runs entirely on your own infrastructure. No account, no CDN script, no
-data leaving your server, nothing phoning home.
+Everything runs on your own server: no account, no CDN script, and no data sent
+anywhere.
 
-## Why
+## What it does differently
 
-Most analytics makes you choose between knowing what's happening on your site
-and being straight with the people using it. This doesn't:
-
-- **No cookies, no banner.** Visitors are counted with a hash built from a salt
-  that's destroyed and replaced every 24 hours. Nothing is stored on the
-  device, so there's nothing to consent to.
-- **No IP addresses.** Not in a table, not in a log, not in a cache key. The
-  address is used in memory to compute a hash, then discarded.
-- **Nothing per-visitor.** The database holds counts, not people - so there's
-  no record to hand over, delete, or leak.
-- **It won't slow your site down.** Capture happens after the response is
-  flushed. Measured on the dev harness: **-0.46 ms** TTFB difference (noise),
-  and 42 µs at the 99th percentile for the capture itself.
-- **Your database doesn't grow with traffic.** A page viewed a million times is
+- **No cookies, so no banner.** Visitors are counted with a hash built from a
+  salt that is replaced every 24 hours. Nothing is stored on the device.
+- **No IP addresses.** The address is used in memory to compute the hash and
+  then dropped. It is never written to a table, a log or a cache key.
+- **No per-visitor records.** The database holds counts, so there is nothing to
+  hand over, delete or leak.
+- **No effect on page speed.** Capture happens after the response is flushed.
+  Measured on the dev harness: 0.46 ms TTFB difference, within the noise, and
+  42 µs at the 99th percentile for the capture itself.
+- **Storage that does not track traffic.** A page viewed a million times takes
   the same one row as a page viewed twice. Growth is cardinality × time.
-- **It works behind a cache.** Blitz, Cloudflare, Varnish - a cached page is
-  still counted, with no cache configuration at all.
-- **It knows your content model.** Traffic by section, entry type and author,
-  because it's a Craft plugin and Craft already knows this.
+- **Accurate behind a cache.** Blitz, Cloudflare and Varnish are all handled,
+  with no cache configuration.
+- **Reports built on your content model.** Traffic by section, entry type and
+  author, because Craft already knows all of that.
 
 ## Requirements
 
@@ -43,7 +39,7 @@ composer require coyshdigital/craft-analytics
 php craft plugin/install craft-analytics
 ```
 
-Then put the drain on your cron, or your reports will stay empty:
+Then put the drain on your cron, or the reports stay empty:
 
 ```
 */5 * * * * php craft craft-analytics/drain/run
@@ -52,19 +48,19 @@ Then put the drain on your cron, or your reports will stay empty:
 
 Full instructions: [docs/get-started/installation.md](docs/get-started/installation.md)
 
-## The one thing to know
+## Before you compare the numbers
 
 **Unique visitors are counted on a daily-unique basis.** Somebody who visits on
 three days counts three times, because the hashing salt rotates every 24 hours
-and destroys the link between their days.
+and removes the link between their days.
 
-That's the property that buys you the missing cookie banner, and it means the
-number isn't comparable with a Google Analytics "users" figure. Sessions and
-pageviews are exact; the unique trend is entirely sound. The control panel says
-so on every screen that shows it, rather than letting you find out later.
+This is what allows the plugin to work without a cookie banner, and it means the
+figure is not comparable with a Google Analytics "users" count. Sessions and
+pageviews are exact, and the unique trend is reliable over time. The control
+panel notes this on every screen that shows the number.
 
-[The full explanation](docs/privacy/how-counting-works.md) is worth five
-minutes before anyone puts the number in a report.
+[How visitors are counted](docs/privacy/how-counting-works.md) explains it in
+full.
 
 ## Documentation
 
@@ -72,6 +68,7 @@ minutes before anyone puts the number in a report.
 - [How tracking works](docs/get-started/tracking-modes.md)
 - [Static & edge caching](docs/configuration/caching.md) - read this if you run
   Blitz or a CDN
+- [Locations & the geo database](docs/configuration/geolocation.md)
 - [How visitors are counted](docs/privacy/how-counting-works.md)
 - [Twig API](docs/developers/twig.md) and [GraphQL API](docs/developers/graphql.md)
 - [Troubleshooting](docs/troubleshooting.md)
@@ -79,9 +76,8 @@ minutes before anyone puts the number in a report.
 
 ## Lite vs Pro
 
-Lite is genuinely useful on its own - pageviews, visitors, sessions, bounce
-rate, real-time, pages, sources, devices, content-model reports, crawler
-reporting and export.
+Lite covers pageviews, visitors, sessions, bounce rate, real-time, pages,
+sources, devices, the content-model reports, crawler reporting and export.
 
 Pro adds campaigns and attribution, geography, events, goals and funnels,
 Formie and Commerce integrations, consent-aware Tier 2, emailed summaries and

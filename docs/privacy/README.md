@@ -136,7 +136,7 @@ removes it too when the site's legal position calls for that.
 
 Every consent decision is logged with its timestamp, state, method, scope and
 **policy version** - so bumping `policyVersion` when your notice changes means
-old consents evidence the old policy, which is the point.
+old consents continue to evidence the policy they were given under.
 
 The log is pseudonymous by construction: a random visitor ID, or the rotating
 Tier-1 hash for a refusal recorded before any ID existed. Nothing in it names
