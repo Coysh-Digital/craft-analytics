@@ -1,11 +1,17 @@
 # Craft Analytics
 
-Privacy-first, consent-aware analytics for Craft CMS 5. First-party, cookieless
-by default, with no added time-to-first-byte and storage that does not grow with
-your traffic.
+My aim was to build an analytics plugin that is lightweight, privacy-focused,
+and feature-rich, with GDPR compliance at the heart of its design. Craft
+Analytics is first-party and cookieless by default, with no added
+time-to-first-byte and storage that does not grow with your traffic.
 
 Everything runs on your own server: no account, no CDN script, and no data sent
 anywhere.
+
+It did not start life as a product. I built it for our own client sites and it
+has been quietly running them for a while, so it reaches the Plugin Store
+already tested in the wild rather than fresh off the workbench. Having leaned on
+it day to day, I decided it was worth releasing to everyone.
 
 ## What it does differently
 
@@ -46,7 +52,7 @@ Then put the drain on your cron, or the reports stay empty:
 0 4 * * *   php craft craft-analytics/gc/run
 ```
 
-Full instructions: [docs/get-started/installation.md](docs/get-started/installation.md)
+Full instructions: [Installation & setup](https://coysh.digital/plugins/craft-analytics/docs/get-started/installation)
 
 ## Before you compare the numbers
 
@@ -59,49 +65,56 @@ figure is not comparable with a Google Analytics "users" count. Sessions and
 pageviews are exact, and the unique trend is reliable over time. The control
 panel notes this on every screen that shows the number.
 
-[How visitors are counted](docs/privacy/how-counting-works.md) explains it in
-full.
+[How visitors are counted](https://coysh.digital/plugins/craft-analytics/docs/privacy/how-counting-works)
+explains it in full.
 
 ## Documentation
 
-- [Installation & setup](docs/get-started/installation.md)
-- [How tracking works](docs/get-started/tracking-modes.md)
-- [Static & edge caching](docs/configuration/caching.md) - read this if you run
-  Blitz or a CDN
-- [Locations & the geo database](docs/configuration/geolocation.md)
-- [How visitors are counted](docs/privacy/how-counting-works.md)
-- [Twig API](docs/developers/twig.md) and [GraphQL API](docs/developers/graphql.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Everything else](docs/)
+The full documentation lives at
+**[coysh.digital/plugins/craft-analytics/docs](https://coysh.digital/plugins/craft-analytics/docs/)**.
+
+- [Installation & setup](https://coysh.digital/plugins/craft-analytics/docs/get-started/installation)
+- [How tracking works](https://coysh.digital/plugins/craft-analytics/docs/get-started/tracking-modes)
+- [Static & edge caching](https://coysh.digital/plugins/craft-analytics/docs/configuration/caching) -
+  read this if you run Blitz or a CDN
+- [Locations & the geo database](https://coysh.digital/plugins/craft-analytics/docs/configuration/geolocation)
+- [How visitors are counted](https://coysh.digital/plugins/craft-analytics/docs/privacy/how-counting-works)
+- [Twig API](https://coysh.digital/plugins/craft-analytics/docs/developers/twig) and
+  [GraphQL API](https://coysh.digital/plugins/craft-analytics/docs/developers/graphql)
+- [Troubleshooting](https://coysh.digital/plugins/craft-analytics/docs/troubleshooting)
 
 ## Lite vs Pro
 
-Lite covers pageviews, visitors, sessions, bounce rate, real-time, pages,
-sources, devices, the content-model reports, crawler reporting and export.
+Lite is a usable analytics tool on its own, not a trial of Pro.
 
-Pro adds campaigns and attribution, geography, events, goals and funnels,
-Formie and Commerce integrations, consent-aware Tier 2, emailed summaries and
-the GraphQL API.
+| | Lite | Pro |
+|---|---|---|
+| Pageviews, visitors, sessions, bounce rate | ✅ | ✅ |
+| Real-time | ✅ | ✅ |
+| Pages, sources, devices | ✅ | ✅ |
+| Content: sections, entry types, authors | ✅ | ✅ |
+| Crawler reporting | ✅ | ✅ |
+| CSV & JSON export | ✅ | ✅ |
+| Entry sidebar & dashboard widgets | ✅ | ✅ |
+| Campaigns & attribution | | ✅ |
+| Geography | | ✅ |
+| Events, outbound clicks, downloads, scroll | | ✅ |
+| Goals & funnels | | ✅ |
+| Formie & Commerce integrations | | ✅ |
+| Consent-aware Tier 2 | | ✅ |
+| Emailed summaries | | ✅ |
+| GraphQL API | | ✅ |
 
-## Development
+Upgrading is a licence change. Both editions use the same tables, so there is
+no migration to run and your existing data carries over.
 
-```bash
-composer install
-composer check-cs   # ECS (Craft ruleset)
-composer phpstan    # PHPStan level 8
-composer test       # Pest
-```
+## A note on AI
 
-Unit tests run without a database. The integration suite needs one, and runs
-against both engines:
-
-```bash
-CRAFT_ANALYTICS_TEST_DRIVER=mysql \
-CRAFT_ANALYTICS_TEST_MYSQL_DSN="mysql:host=127.0.0.1;dbname=craftanalytics_test" \
-CRAFT_ANALYTICS_TEST_DB_USER=root \
-CRAFT_ANALYTICS_TEST_DB_PASSWORD=root \
-composer test
-```
+I used AI tooling while building this: to talk through approaches, to take some
+of the grind out of the groundwork, and to help draft this documentation. What
+it is not is code written by a machine and shipped unread. Every line was
+reviewed, tested and put in place by a developer who understood it and stands
+behind it. The design decisions, the trade-offs and the final code are mine.
 
 ## Licence
 

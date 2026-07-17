@@ -1,16 +1,22 @@
 ---
 title: Craft Analytics
-description: Privacy-first, consent-aware analytics that runs inside Craft CMS.
+description: Lightweight, privacy-focused, feature-rich analytics for Craft CMS, designed with GDPR compliance in mind.
 ---
 
 # Craft Analytics
 
-Analytics for Craft CMS that runs on your own server. No cookie banner, no
-account to create, no script loaded from someone else's CDN, and no data sent
-anywhere.
+My aim was to build an analytics plugin that is lightweight, privacy-focused,
+and feature-rich, with GDPR compliance at the heart of its design. Craft
+Analytics runs on your own server, understands your Craft content, and gives
+you useful reports without sending visitor data to a third-party platform.
 
 It also understands your content: it can tell you how the Blog section is
 doing, not just that `/blog/some-slug` got 400 views.
+
+It did not begin as a product. I built it for our own client sites and it has
+been running them for a while, so it arrives already tested in the wild rather
+than fresh off the workbench. After living with it day to day I decided it was
+worth putting in front of everyone.
 
 ## What it does differently
 
@@ -96,3 +102,12 @@ Lite is a usable analytics tool on its own, not a trial of Pro.
 
 Upgrading is a licence change. Both editions use the same tables, so there is
 no migration to run and your existing data carries over.
+
+## A note on AI
+
+In the spirit of being upfront: I used AI tooling while building this plugin, to
+think through approaches, to speed up some of the groundwork, and to help draft
+these docs. It was a tool in the workshop, not the builder. Every line of code
+was reviewed, tested and put in place by a developer who understood it, and
+nothing shipped that I could not explain and stand behind. The judgement calls
+and the final code are human.
