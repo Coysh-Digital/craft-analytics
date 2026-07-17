@@ -53,6 +53,8 @@
         "name": "Craft Analytics",
         "developer": "Coysh Digital",
         "developerUrl": "https://coysh.digital",
+        "documentationUrl": "https://github.com/Coysh-Digital/craft-analytics/blob/main/docs/README.md",
+        "changelogUrl": "https://raw.githubusercontent.com/Coysh-Digital/craft-analytics/main/CHANGELOG.md",
         "class": "coyshdigital\\craftanalytics\\Plugin",
         "editions": [
             "lite",

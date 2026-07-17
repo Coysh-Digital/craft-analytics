@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Craft Analytics">
+    <title>Craft Analytics</title>
+    <!--
+        Bars in the plugin's own chart colours: Craft blue-600 and teal-600,
+        the pair every report uses. Data-ends are rounded and anchored to a
+        shared baseline, which is the rule the charts themselves follow - the
+        baseline is implied by the bars rather than drawn, so the icon reads on
+        a light background and a dark one alike.
+    -->
+    <g fill="#2563eb">
+        <path d="M4 58V44a5 5 0 0 1 10 0v14z"/>
+        <path d="M18 58V34a5 5 0 0 1 10 0v24z"/>
+        <path d="M32 58V24a5 5 0 0 1 10 0v34z"/>
+    </g>
+    <path fill="#0d9488" d="M46 58V11a5 5 0 0 1 10 0v47z"/>
+</svg>
