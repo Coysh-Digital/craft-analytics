@@ -308,6 +308,18 @@ class CaptureService extends Component
 
         parse_str($queryString, $params);
 
+        // A URL that was HTML-entity-encoded before being linked - sometimes
+        // more than once - arrives with its separators as `&amp;` rather than
+        // `&`, so parse_str reads the parameter after each one as
+        // `amp;utm_source`, `amp;amp;cid` and so on. Strip those leading `amp;`
+        // runs back off, so the real parameter beneath is recognised - and
+        // excluded - like any other, instead of fragmenting the path.
+        $decoded = [];
+        foreach ($params as $key => $value) {
+            $decoded[preg_replace('/^(?:amp;)+/', '', (string)$key)] = $value;
+        }
+        $params = $decoded;
+
         $excluded = array_merge(
             $this->settings()->excludeQueryParams,
             Campaign::PARAMS,

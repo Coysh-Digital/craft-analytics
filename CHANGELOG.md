@@ -1,5 +1,17 @@
 # Release Notes for Craft Analytics
 
+## 1.2.2 - 2026-07-19
+
+### Fixed
+
+- Query parameters whose separators had been HTML-entity-encoded (`&amp;`,
+  sometimes escaped more than once) are now decoded before the strip lists run,
+  so a campaign tag arriving as `amp;utm_source` is recognised and removed
+  instead of surviving as junk that fragments the path.
+- The Real-time tables now keep their horizontal scroll inside their own card at
+  every width. A long unbroken URL in a cell could previously push the whole
+  screen sideways on desktop, because the scroll rule was scoped to mobile only.
+
 ## 1.2.1 - 2026-07-17
 
 ### Added

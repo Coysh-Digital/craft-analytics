@@ -63,6 +63,15 @@ test('a site-specific parameter can be named in excludeQueryParams', function() 
         ->toBe('/membership/join-us-today');
 });
 
+test('entity-encoded separators are decoded so the parameter beneath is stripped', function() {
+    // A link written with `&amp;` instead of `&`, sometimes escaped more than
+    // once, would otherwise reach us as a parameter named `amp;utm_source`
+    // that no strip list matches - fragmenting the path.
+    expect(normalize('/page', 'utm_source=x&amp;utm_medium=email'))->toBe('/page');
+    expect(normalize('/search/results', 'amp;amp;utm_source=old&q=hello'))
+        ->toBe('/search/results?q=hello');
+});
+
 test('stripQueryString drops the whole query, even a would-be-kept parameter', function() {
     $settings = new Settings();
     $settings->stripQueryString = true;

@@ -472,11 +472,14 @@
     margin-bottom: 24px;
 }
 
+/* Wide content scrolls inside its own container; the page never does. A long
+   unbroken URL in a table cell would otherwise push the whole screen sideways,
+   so this must hold at every width, not only on mobile. */
+.ca-table-scroll { overflow-x: auto; }
+
 @media (max-width: 600px) {
     .ca-kpi-value { font-size: 22px; }
     .ca-hero { font-size: 34px; }
-    /* Wide content scrolls inside its own container; the page never does. */
-    .ca-table-scroll { overflow-x: auto; }
 }
 
 /* --------------------------------------------------------------- privacy */
