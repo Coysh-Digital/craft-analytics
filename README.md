@@ -68,6 +68,15 @@ panel notes this on every screen that shows the number.
 [How visitors are counted](https://coysh.digital/plugins/craft-analytics/docs/privacy/how-counting-works)
 explains it in full.
 
+**Sources lean on the server seeing the request.** The referrer is read when PHP
+renders the page; the beacon deliberately never sends one, because a
+browser-supplied referrer is forgeable. Behind a full-page cache, sessions that
+enter on a cached page are reported as Direct. Pageview counts are unaffected,
+and so are UTM campaigns, which travel in the URL - so behind an aggressive
+cache, tag the inbound links you care about.
+[Static & edge caching](https://coysh.digital/plugins/craft-analytics/docs/configuration/caching)
+has the details.
+
 ## Documentation
 
 The full documentation lives at

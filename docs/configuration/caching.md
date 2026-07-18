@@ -149,7 +149,16 @@ cache and still counts people who block scripts.
 
 ## Known edges
 
-Three cases worth knowing about:
+Four cases worth knowing about:
+
+**A cached page carries no referrer.** The referrer that feeds the Sources
+report is read from the request PHP handled; the beacon deliberately does not
+send one, because a value supplied by the browser is a value anyone can forge.
+So a session whose entry page came from the cache lands under **Direct** even
+if the visitor arrived from a search engine or another site. The higher your
+cache hit rate, the more of your traffic this applies to. Campaign tracking is
+unaffected - UTM parameters live in the URL, which the beacon does send - so if
+you rely on source data behind an aggressive cache, tag your inbound links.
 
 **A cached page needs JavaScript to be counted.** PHP knows when it built a
 page and when it only served a stored copy, and it counts the first and leaves

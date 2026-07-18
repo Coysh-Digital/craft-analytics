@@ -19,8 +19,8 @@ code, content type, path globs, UA). No queries, no I/O.
 
 ### Measured
 
-Median TTFB against the ddev harness, 60 samples per condition, requests posing
-as a real browser so the full capture path runs:
+Median TTFB against a local Docker harness, 60 samples per condition, requests
+posing as a real browser so the full capture path runs:
 
 | | Median TTFB |
 |---|---|
@@ -77,7 +77,7 @@ cardinality × time, never traffic volume.
 - **`direct` and `queue` drivers** trade the drain's batching away, and with
   it the collapse ratio above. `spool` is the default for real traffic for
   this reason.
-- **Laptop numbers.** The TTFB figures come from a ddev container on a
+- **Laptop numbers.** The TTFB figures come from a Docker container on a
   developer machine, not production hardware. The structural argument (work
   happens after the connection closes) is what generalises; the specific
   milliseconds do not.

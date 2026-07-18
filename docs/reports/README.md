@@ -87,6 +87,11 @@ editing a URL (C8).
   drain.
 - **Time on page needs the beacon.** In `server` tracking mode it stays blank
   rather than showing a fabricated number.
+- **Sources need the server to see the request.** The referrer is read when PHP
+  renders the page; the beacon never sends one, because a browser-supplied
+  referrer is forgeable. A session entering on a cached page is reported as
+  Direct. UTM campaigns travel in the URL and are unaffected. See
+  [static & edge caching](../configuration/caching.md).
 - **`__other__`** is where values past the daily cardinality cap are folded.
   No views are lost - they're just not attributed individually.
 
