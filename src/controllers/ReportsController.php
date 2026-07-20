@@ -41,10 +41,13 @@ class ReportsController extends BaseCpController
         $site = $this->currentSite();
         $siteId = $this->siteId($site);
         $range = $this->range();
-        $pages = $this->stats()->topPages($siteId, $range, 200);
+        $include = trim((string)$this->request->getParam('q', ''));
+        $exclude = trim((string)$this->request->getParam('exclude', ''));
+        $pages = $this->stats()->topPages($siteId, $range, 200, $include ?: null, $exclude ?: null);
+        $commonVariables = $this->commonVariables($site, $range);
 
         return $this->renderTemplate('craft-analytics/reports/pages.twig', array_merge(
-            $this->commonVariables($site, $range),
+            $commonVariables,
             [
                 'title' => 'Pages',
                 'selectedSubnavItem' => 'pages',
@@ -52,6 +55,16 @@ class ReportsController extends BaseCpController
                 'editUrls' => ElementLinks::editUrls(array_column($pages, 'elementId')),
                 'exportKind' => 'pages',
                 'exportParams' => ['site' => $site->handle, 'range' => $range->preset],
+                'pathInclude' => $include,
+                'pathExclude' => $exclude,
+                'dimensionCap' => Plugin::getInstance()->getSettings()->dimensionCap,
+                // The range/site links reuse currentParams to build their hrefs
+                // - the filter has to ride along or switching range would
+                // silently drop it.
+                'currentParams' => array_merge($commonVariables['currentParams'], array_filter([
+                    'q' => $include !== '' ? $include : null,
+                    'exclude' => $exclude !== '' ? $exclude : null,
+                ])),
             ],
         ));
     }

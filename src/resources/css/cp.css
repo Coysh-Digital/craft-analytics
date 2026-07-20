@@ -20,6 +20,17 @@
     --ca-radius: 6px;
 }
 
+.ca-page-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.ca-page-filters .text {
+    max-width: 220px;
+}
+
 /* ---------------------------------------------------------------- toolbar */
 
 .ca-toolbar {

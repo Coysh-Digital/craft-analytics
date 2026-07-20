@@ -7,6 +7,22 @@
             <h2 class="ca-card-title">{{ 'Pages'|t('craft-analytics') }}</h2>
             <span class="ca-muted">{{ '{count} pages'|t('craft-analytics', { count: pages|length }) }}</span>
         </div>
+        <div class="ca-card-body">
+            <form class="ca-page-filters" method="get">
+                <input type="hidden" name="site" value="{{ site.handle }}">
+                <input type="hidden" name="range" value="{{ range.preset }}">
+                <input type="text" class="text" name="q" value="{{ pathInclude }}"
+                       placeholder="{{ 'Only paths containing…'|t('craft-analytics') }}"
+                       aria-label="{{ 'Only paths containing'|t('craft-analytics') }}">
+                <input type="text" class="text" name="exclude" value="{{ pathExclude }}"
+                       placeholder="{{ 'Exclude paths containing…'|t('craft-analytics') }}"
+                       aria-label="{{ 'Exclude paths containing'|t('craft-analytics') }}">
+                <button type="submit" class="btn submit">{{ 'Filter'|t('craft-analytics') }}</button>
+                {% if pathInclude or pathExclude %}
+                    <a class="btn" href="{{ url(currentPath, currentParams|merge({ q: null, exclude: null })) }}">{{ 'Clear'|t('craft-analytics') }}</a>
+                {% endif %}
+            </form>
+        </div>
         <div class="ca-card-body ca-table-scroll">
             {% if pages|length %}
                 {% set maxViews = max(pages|map(p => p.views)) %}
@@ -24,7 +40,11 @@
                     <tbody>
                     {% for page in pages %}
                         <tr>
-                            {{ ca.barCell(page.path, page.views, maxViews, editUrls[page.elementId] ?? null) }}
+                            {{ ca.barCell(page.path, page.views, maxViews, editUrls[page.elementId] ?? null,
+                                page.path == '__other__'
+                                    ? 'Not a real page - paths beyond the daily cap of {cap} distinct pages are folded in here. No views are lost.'|t('craft-analytics', { cap: dimensionCap|number_format })
+                                    : null
+                            ) }}
                             <td class="ca-num">{{ page.views|number_format }}</td>
                             <td class="ca-num ca-muted">{{ page.entrances|number_format }}</td>
                             <td class="ca-num ca-muted">{{ page.exits|number_format }}</td>
@@ -34,6 +54,11 @@
                     {% endfor %}
                     </tbody>
                 </table>
+            {% elseif pathInclude or pathExclude %}
+                {{ ca.empty(
+                    'No pages match this filter'|t('craft-analytics'),
+                    'Try a different substring, or clear the filter to see everything.'|t('craft-analytics')
+                ) }}
             {% else %}
                 {{ ca.empty(
                     'No pages for this period'|t('craft-analytics'),
@@ -44,6 +69,6 @@
     </div>
 
     <p class="ca-footnote">
-        {{ 'Time on page needs the beacon, so it is blank in server-only tracking mode. “__other__” is where values beyond the daily cardinality cap are folded - no views are lost.'|t('craft-analytics') }}
+        {{ 'Time on page needs the beacon, so it is blank in server-only tracking mode. “__other__” is where paths beyond the daily cap of {cap} distinct pages are folded - no views are lost. Hover it for a reminder.'|t('craft-analytics', { cap: dimensionCap|number_format }) }}
     </p>
 {% endblock %}

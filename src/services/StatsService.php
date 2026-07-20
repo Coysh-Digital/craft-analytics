@@ -216,9 +216,9 @@ class StatsService extends Component
     /**
      * @return array<int,array{path: string, elementId: int|null, views: int, entrances: int, exits: int, bounces: int, avgDwellMs: int, bounceRate: float}>
      */
-    public function topPages(int $siteId, DateRange $range, int $limit = 100): array
+    public function topPages(int $siteId, DateRange $range, int $limit = 100, ?string $include = null, ?string $exclude = null): array
     {
-        $rows = (new Query())
+        $query = (new Query())
             ->select([
                 'path' => '[[d]].[[value]]',
                 'elementId' => 'MAX([[p]].[[elementId]])',
@@ -231,7 +231,17 @@ class StatsService extends Component
             ->from(['p' => Table::PAGES_ROLLUP])
             ->innerJoin(['d' => Table::DIMENSIONS], '[[d]].[[id]] = [[p]].[[pathDimId]]')
             ->where(['[[p]].[[siteId]]' => $siteId])
-            ->andWhere(['between', '[[p]].[[date]]', $range->from, $range->to])
+            ->andWhere(['between', '[[p]].[[date]]', $range->from, $range->to]);
+
+        if ($include !== null && $include !== '') {
+            $query->andWhere(['like', '[[d]].[[value]]', $include]);
+        }
+
+        if ($exclude !== null && $exclude !== '') {
+            $query->andWhere(['not like', '[[d]].[[value]]', $exclude]);
+        }
+
+        $rows = $query
             ->groupBy('[[d]].[[value]]')
             ->orderBy(['views' => SORT_DESC])
             ->limit($limit)

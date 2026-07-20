@@ -92,6 +92,14 @@ php craft craft-analytics/geo/status</pre>
                 </div>
             </div>
         {% endif %}
+
+        <p class="ca-footnote">
+            {% if blockCrawlers %}
+                {{ 'Known crawlers and bots are filtered out before location data is recorded, so these figures only reflect human visitors. See the Crawlers report for what was kept out.'|t('craft-analytics') }}
+            {% else %}
+                {{ 'Crawler blocking is currently off (blockCrawlers), so bot traffic may be included in these figures.'|t('craft-analytics') }}
+            {% endif %}
+        </p>
     {% endif %}
 
     {% if isPro and database.installed %}

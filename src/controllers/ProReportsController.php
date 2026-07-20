@@ -44,6 +44,7 @@ class ProReportsController extends BaseCpController
             'enabled' => $plugin->getSettings()->enableGeo,
             'database' => $plugin->getGeo()->databaseInfo(),
             'attribution' => $plugin->getGeo()->attributionNotice(),
+            'blockCrawlers' => $plugin->getSettings()->blockCrawlers,
         ]);
     }
 

@@ -1,5 +1,20 @@
 # Release Notes for Craft Analytics
 
+## 1.2.3 - 2026-07-20
+
+### Added
+
+- The Pages report can now be filtered to only show paths containing a given
+  substring, or to exclude paths containing one - useful for pulling `?ad=`
+  variants out of the list, or narrowing to one section of the site. The
+  filter rides along when you switch date range or site.
+- The `__other__` row on the Pages report now explains itself on hover: it is
+  the daily cardinality cap's catch-all, not a real page, and the tooltip
+  states the current cap.
+- The Locations report now notes that known crawlers and bots are filtered
+  out before location data is recorded, so the figures only reflect human
+  visitors.
+
 ## 1.2.2 - 2026-07-19
 
 ### Fixed

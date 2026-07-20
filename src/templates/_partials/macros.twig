@@ -53,11 +53,14 @@
 
 {# A table row whose bar is a background wash; the number is always spelled
    out beside it, so magnitude is never encoded by length alone. #}
-{% macro barCell(label, value, max, url) %}
+{% macro barCell(label, value, max, url, info) %}
     <td class="ca-bar-cell">
         <div class="ca-bar-fill" style="width: {{ max > 0 ? (value / max * 100)|round(1) : 0 }}%"></div>
         <span class="ca-bar-label">
             {% if url %}<a href="{{ url }}">{{ label }}</a>{% else %}{{ label }}{% endif %}
+            {% if info is defined and info %}
+                <span data-icon="info" title="{{ info }}" class="ca-muted"></span>
+            {% endif %}
         </span>
     </td>
 {% endmacro %}
