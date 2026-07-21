@@ -29,6 +29,47 @@ php craft craft-analytics/geo/status</pre>
             'The database is installed. Turn on enableGeo to start resolving countries.'|t('craft-analytics')
         ) }}
     {% else %}
+        {% if countries|length %}
+            <div class="ca-card">
+                <div class="ca-card-head">
+                    <h2 class="ca-card-title">{{ 'Map'|t('craft-analytics') }}</h2>
+                </div>
+                <div class="ca-card-body">
+                    <div id="ca-geo-map" style="width: 100%; height: 340px"></div>
+                </div>
+            </div>
+
+            {% js %}
+                (function () {
+                    var el = document.getElementById('ca-geo-map');
+                    if (!el || typeof jsVectorMap === 'undefined') return;
+
+                    var values = {{ countryValues|json_encode|raw }};
+
+                    new jsVectorMap({
+                        selector: '#ca-geo-map',
+                        map: 'world_merc',
+                        zoomButtons: false,
+                        showTooltip: true,
+                        series: {
+                            regions: [{
+                                values: values,
+                                scale: ['#dbe4fb', '#2563eb'],
+                                normalizeFunction: 'polynomial',
+                            }],
+                        },
+                        regionStyle: {
+                            initial: { fill: '#e5e7eb' },
+                        },
+                        onRegionTooltipShow: function (event, tooltip, code) {
+                            var sessions = values[code] || 0;
+                            tooltip.text(tooltip.text() + ': ' + sessions.toLocaleString() + ' {{ 'sessions'|t('craft-analytics') }}');
+                        },
+                    });
+                })();
+            {% endjs %}
+        {% endif %}
+
         <div class="ca-card">
             <div class="ca-card-head">
                 <h2 class="ca-card-title">{{ 'Countries'|t('craft-analytics') }}</h2>

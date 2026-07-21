@@ -166,6 +166,38 @@ class ContentStatsService extends Component
     }
 
     /**
+     * The best-performing entries by one author — the drill-down from the
+     * author report.
+     *
+     * @return array<int,array{elementId: int, title: string, views: int}>
+     */
+    public function entriesByAuthor(int $siteId, DateRange $range, int $authorId, int $limit = 50): array
+    {
+        $rows = $this->contentQuery($siteId, $range)
+            ->select([
+                'elementId' => '[[p]].[[elementId]]',
+                'title' => '[[es]].[[title]]',
+                'views' => 'SUM([[p]].[[views]])',
+            ])
+            ->innerJoin(
+                ['es' => CraftTable::ELEMENTS_SITES],
+                '[[es]].[[elementId]] = [[p]].[[elementId]] AND [[es]].[[siteId]] = [[p]].[[siteId]]',
+            )
+            ->innerJoin(['ea' => CraftTable::ENTRIES_AUTHORS], '[[ea]].[[entryId]] = [[e]].[[id]]')
+            ->andWhere(['[[ea]].[[authorId]]' => $authorId])
+            ->groupBy(['[[p]].[[elementId]]', '[[es]].[[title]]'])
+            ->orderBy(['views' => SORT_DESC])
+            ->limit($limit)
+            ->all($this->db());
+
+        return array_map(static fn(array $row): array => [
+            'elementId' => (int)$row['elementId'],
+            'title' => (string)($row['title'] ?? ''),
+            'views' => (int)$row['views'],
+        ], $rows);
+    }
+
+    /**
      * The rollup rows that matched an entry, joined to Craft's own tables.
      *
      * Soft-deleted and draft/revision elements are excluded: a report about

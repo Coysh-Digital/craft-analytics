@@ -133,7 +133,12 @@
                         <tbody>
                         {% for author in authors %}
                             <tr>
-                                {{ ca.barCell(author.name, author.views, maxViews) }}
+                                {{ ca.barCell(
+                                    author.name,
+                                    author.views,
+                                    maxViews,
+                                    url('craft-analytics/content/author/' ~ author.id, currentParams)
+                                ) }}
                                 <td class="ca-num">{{ author.views|number_format }}</td>
                                 <td class="ca-num ca-muted">{{ author.entries|number_format }}</td>
                                 <td class="ca-num ca-muted">

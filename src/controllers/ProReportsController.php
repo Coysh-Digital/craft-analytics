@@ -2,8 +2,10 @@
 
 namespace coyshdigital\craftanalytics\controllers;
 
+use coyshdigital\craftanalytics\assets\GeoMapAsset;
 use coyshdigital\craftanalytics\enums\AttributionModel;
 use coyshdigital\craftanalytics\Plugin;
+use Craft;
 use yii\web\Response;
 
 /**
@@ -36,10 +38,16 @@ class ProReportsController extends BaseCpController
         $siteId = $this->siteId($site);
         $range = $this->range();
         $plugin = Plugin::getInstance();
+        $countries = $this->stats()->countries($siteId, $range);
+
+        if ($plugin->is(Plugin::EDITION_PRO) && $plugin->getSettings()->enableGeo) {
+            Craft::$app->getView()->registerAssetBundle(GeoMapAsset::class);
+        }
 
         return $this->renderProTemplate('geo', $site, $range, [
             'title' => 'Locations',
-            'countries' => $this->stats()->countries($siteId, $range),
+            'countries' => $countries,
+            'countryValues' => array_column($countries, 'sessions', 'country'),
             'regions' => $this->stats()->regions($siteId, $range),
             'enabled' => $plugin->getSettings()->enableGeo,
             'database' => $plugin->getGeo()->databaseInfo(),

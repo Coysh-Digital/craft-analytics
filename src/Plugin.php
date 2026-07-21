@@ -706,6 +706,7 @@ class Plugin extends BasePlugin
                 $event->rules['craft-analytics/events'] = 'craft-analytics/pro-reports/events';
                 $event->rules['craft-analytics/content'] = 'craft-analytics/content/index';
                 $event->rules['craft-analytics/content/section/<sectionId:\d+>'] = 'craft-analytics/content/section';
+                $event->rules['craft-analytics/content/author/<authorId:\d+>'] = 'craft-analytics/content/author';
                 $event->rules['craft-analytics/goals'] = 'craft-analytics/conversions/goals';
                 $event->rules['craft-analytics/funnels'] = 'craft-analytics/conversions/funnels';
 

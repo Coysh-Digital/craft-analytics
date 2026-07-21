@@ -40,7 +40,8 @@
                     <tbody>
                     {% for page in pages %}
                         <tr>
-                            {{ ca.barCell(page.path, page.views, maxViews, editUrls[page.elementId] ?? null,
+                            {{ ca.barCell(page.path, page.views, maxViews,
+                                page.path == '__other__' ? null : (editUrls[page.elementId] ?? null),
                                 page.path == '__other__'
                                     ? 'Not a real page - paths beyond the daily cap of {cap} distinct pages are folded in here. No views are lost.'|t('craft-analytics', { cap: dimensionCap|number_format })
                                     : null

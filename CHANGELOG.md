@@ -1,5 +1,23 @@
 # Release Notes for Craft Analytics
 
+## 1.3.0 - 2026-07-21
+
+### Added
+
+- The Locations report now includes a world map, shaded by session volume,
+  alongside the existing Countries table.
+- Author names on Content > Authors now link through to that author's
+  individual entries, ranked by views - the same drill-down the Sections tab
+  already has.
+
+### Fixed
+
+- The `__other__` row on the Pages report is no longer occasionally
+  hyperlinked to an unrelated real page. It picked up its link target from
+  whichever real page's rollup row it happened to borrow an element ID from
+  once folded past the daily cap - it now always renders as plain text,
+  matching what it represents (not a real page).
+
 ## 1.2.3 - 2026-07-20
 
 ### Added

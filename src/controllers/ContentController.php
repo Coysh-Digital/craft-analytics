@@ -77,4 +77,33 @@ class ContentController extends BaseCpController
             ],
         ));
     }
+
+    /**
+     * The entries by one author — the drill-down from the author table.
+     */
+    public function actionAuthor(): Response
+    {
+        $site = $this->currentSite();
+        $siteId = $this->siteId($site);
+        $range = $this->range();
+        $authorId = (int)$this->request->getRequiredParam('authorId');
+        $author = Craft::$app->getUsers()->getUserById($authorId);
+
+        if ($author === null) {
+            throw new \yii\web\NotFoundHttpException('Author not found.');
+        }
+
+        $entries = Plugin::getInstance()->getContentStats()->entriesByAuthor($siteId, $range, $authorId);
+
+        return $this->renderTemplate('craft-analytics/content/author.twig', array_merge(
+            $this->commonVariables($site, $range),
+            [
+                'title' => $author->getName(),
+                'selectedSubnavItem' => 'content',
+                'author' => $author,
+                'entries' => $entries,
+                'editUrls' => ElementLinks::editUrls(array_column($entries, 'elementId')),
+            ],
+        ));
+    }
 }
