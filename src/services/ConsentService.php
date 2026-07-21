@@ -6,6 +6,7 @@ use coyshdigital\craftanalytics\db\Table;
 use coyshdigital\craftanalytics\enums\ConsentMethod;
 use coyshdigital\craftanalytics\enums\ConsentState;
 use coyshdigital\craftanalytics\events\DefineConsentEvent;
+use coyshdigital\craftanalytics\events\DefineVisitorIdEvent;
 use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\Plugin;
 use Craft;
@@ -40,6 +41,12 @@ class ConsentService extends Component
      */
     public const EVENT_DEFINE_CONSENT = 'defineConsent';
 
+    /**
+     * @event DefineVisitorIdEvent Use the site's own id for a consented
+     * visitor, rather than the one we issued.
+     */
+    public const EVENT_DEFINE_VISITOR_ID = 'defineVisitorId';
+
     /** What the consent covers, recorded as evidence. */
     public const SCOPE = 'analytics';
 
@@ -50,6 +57,9 @@ class ConsentService extends Component
 
     /** Edition override; defaults to the plugin's own. Set in tests. */
     public ?bool $isPro = null;
+
+    /** @var array<int,string|null> siteId => resolved visitor id */
+    private array $resolved = [];
 
     /**
      * Whether consented tracking is available at all on this install.
@@ -107,6 +117,65 @@ class ConsentService extends Component
     }
 
     /**
+     * The id everything downstream should use for this visitor — the cookie's,
+     * unless the site's own code supplied one of its own.
+     *
+     * This is what is written to the journeys table and to the consent log,
+     * and the two have to agree: withdrawal is matched by id, so a log row
+     * under one id and journeys under another would leave a visitor unable to
+     * withdraw from the rows that are actually about them.
+     *
+     * The cookie is deliberately *not* rewritten. Whatever the site calls this
+     * person is the site's business and the database's; the visitor's device
+     * keeps holding the opaque random value we issued, which is all it ever
+     * needed to hold.
+     */
+    public function resolvedVisitorId(Request $request, int $siteId): ?string
+    {
+        if (!$this->isAvailable()) {
+            return null;
+        }
+
+        // Memoised: a request can ask for this three times over, and a handler
+        // is entitled to do real work — look up an account, read a session —
+        // to answer it.
+        if (array_key_exists($siteId, $this->resolved)) {
+            return $this->resolved[$siteId];
+        }
+
+        $cookieId = $this->visitorId($request);
+
+        if (!$this->hasEventHandlers(self::EVENT_DEFINE_VISITOR_ID)) {
+            return $this->resolved[$siteId] = $cookieId;
+        }
+
+        $event = new DefineVisitorIdEvent($request, $siteId, $cookieId);
+        $this->trigger(self::EVENT_DEFINE_VISITOR_ID, $event);
+
+        $supplied = $event->visitorId;
+
+        if ($supplied === null || $supplied === $cookieId) {
+            return $this->resolved[$siteId] = $cookieId;
+        }
+
+        if (!self::isValidExternalId($supplied)) {
+            // Loudly, and then not at all: silently storing a truncated or
+            // mangled id would put rows in the journeys table that no DSAR
+            // could ever find again.
+            Craft::warning(
+                'craft-analytics: a defineVisitorId handler returned an id that is not usable — '
+                . 'it must be 1-64 characters of letters, digits, underscore, dot, colon or hyphen. '
+                . 'Falling back to the issued id.',
+                __METHOD__,
+            );
+
+            return $this->resolved[$siteId] = $cookieId;
+        }
+
+        return $this->resolved[$siteId] = $supplied;
+    }
+
+    /**
      * Records an affirmative grant: issues the visitor ID, sets the cookie,
      * and writes the evidence.
      *
@@ -124,7 +193,7 @@ class ConsentService extends Component
             return null;
         }
 
-        $visitorId = $this->visitorId($request) ?? bin2hex(random_bytes(self::VISITOR_ID_BYTES));
+        $cookieId = $this->visitorId($request) ?? bin2hex(random_bytes(self::VISITOR_ID_BYTES));
 
         $response = Craft::$app->getResponse();
 
@@ -132,7 +201,14 @@ class ConsentService extends Component
             return null;
         }
 
-        $response->getCookies()->add($this->cookie($request, $visitorId));
+        $response->getCookies()->add($this->cookie($request, $cookieId));
+
+        // The cookie carries what we issued; the evidence carries whatever the
+        // site's own code calls this person, because that is what the journeys
+        // will be under and the two have to be matchable.
+        $this->resolved = [];
+        $visitorId = $this->resolvedVisitorId($request, $siteId) ?? $cookieId;
+
         $this->log($siteId, ConsentState::Granted, $method, $visitorId, $visitorHash);
 
         return $visitorId;
@@ -151,7 +227,10 @@ class ConsentService extends Component
             return;
         }
 
-        $visitorId = $this->visitorId($request);
+        // Resolved, not raw: the rows to erase are under whatever id the site
+        // supplied, so asking for the cookie's would delete nothing and
+        // report success.
+        $visitorId = $this->resolvedVisitorId($request, $siteId);
         $response = Craft::$app->getResponse();
 
         // Gone from the device before anything else happens.
@@ -260,6 +339,20 @@ class ConsentService extends Component
     private static function isValidVisitorId(string $value): bool
     {
         return strlen($value) === self::VISITOR_ID_BYTES * 2 && ctype_xdigit($value);
+    }
+
+    /**
+     * Whether an id a site handed us is one we can store and find again.
+     *
+     * Looser than the check above, and deliberately so: that one guards a
+     * value an attacker controls (the cookie), this one guards a value the
+     * site's own PHP produced. It is a shape check, not a security boundary —
+     * it exists so an id fits the column, survives a URL in the DSAR screen,
+     * and cannot smuggle a separator into a table keyed on it.
+     */
+    private static function isValidExternalId(string $value): bool
+    {
+        return preg_match('/^[A-Za-z0-9_.:-]{1,64}$/', $value) === 1;
     }
 
     private function settings(): Settings

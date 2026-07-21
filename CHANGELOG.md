@@ -1,5 +1,39 @@
 # Release Notes for Craft Analytics
 
+## 1.4.0 - 2026-07-21
+
+### Added
+
+- **Segments (Pro).** A site's own module can now declare what to break its
+  traffic down by - the plan somebody is on, whether they were signed in, the
+  role they hold - and a new Segments report shows sessions, views, bounce
+  rate and average duration for each. Values can be resolved server-side or,
+  for pages served from a cache, set from the browser. Nothing about an
+  individual is stored: a segment is a counter, capped and aggregated like
+  every other dimension, and a visit in a segment costs one row a day however
+  many pages it covered. The report and its nav item appear only once
+  something is declared.
+- **Your own IDs for consented visitors (Pro).** A module can supply its own
+  identifier - a customer or member number - for a visitor who has
+  affirmatively consented, so the journeys layer and subject access requests
+  use the identifier the rest of the business already uses. Every existing
+  gate still applies first, and a browser privacy signal still cannot be
+  overridden. The privacy panel raises a warning when a handler is attached,
+  because this makes the consented layer directly identifiable rather than
+  pseudonymous.
+- A new [Extending](https://coysh.digital/plugins/craft-analytics/docs/developers/extending)
+  page in the docs covering both, plus the three extension events that had
+  existed since 1.0 without ever being written down.
+
+### Changed
+
+- The beacon endpoint now refuses events, outbound clicks and downloads when
+  `enableEvents` is off, rather than only on Lite. The setting now means the
+  same thing at the endpoint as it does in the tracker.
+- `craftanalytics_journeys.visitorId` and `craftanalytics_consentlog.visitorId`
+  widen from `char(32)` to `varchar(64)` to hold a site-supplied identifier.
+  Existing values are unaffected.
+
 ## 1.3.0 - 2026-07-21
 
 ### Added

@@ -21,6 +21,7 @@ class Install extends Migration
         SchemaBuilder::createProRollupTables($this);
         SchemaBuilder::createGoalTables($this);
         SchemaBuilder::createCrawlerTable($this);
+        SchemaBuilder::createSegmentTable($this);
         SchemaBuilder::createConsentTables($this);
 
         return true;

@@ -90,8 +90,12 @@ class BeaconController extends Controller
         $kind = self::sanitizeKind((string)$request->getBodyParam('k', Hit::KIND_VIEW));
 
         // Pro interactions are gated here as well as in the writer: a Lite
-        // site's endpoint simply does not accept them.
-        if ($kind !== Hit::KIND_VIEW && !$plugin->is(Plugin::EDITION_PRO)) {
+        // site's endpoint simply does not accept them, and neither does a Pro
+        // site with events switched off — the setting has to mean the same
+        // thing at the endpoint as it does in the tracker, or it only means
+        // anything to visitors who aren't trying.
+        if ($kind !== Hit::KIND_VIEW
+            && (!$plugin->is(Plugin::EDITION_PRO) || !$settings->enableEvents)) {
             return $this->noContent();
         }
 
@@ -127,6 +131,15 @@ class BeaconController extends Controller
             eventValue: self::sanitizeEventValue($request->getBodyParam('ev')),
             target: self::sanitizeTarget($request->getBodyParam('t')),
             scrollBucket: self::sanitizeScroll($request->getBodyParam('s')),
+            // Filtered against the site's declarations before it is believed:
+            // anyone can post to this route, so a segment the site did not
+            // ask for - or did not mark as settable from the browser - is
+            // dropped here rather than written.
+            segments: $plugin->getSegments()->resolve(
+                $request,
+                $site->id,
+                self::sanitizeSegments($request->getBodyParam('sg')),
+            ),
         ));
 
         return $this->noContent();
@@ -240,6 +253,30 @@ class BeaconController extends Controller
 
         return in_array($bucket, [25, 50, 75, 100], true) ? $bucket : null;
     }
+
+    /**
+     * The segments a browser claimed, as a shape the registry can look at.
+     *
+     * Only the shape is checked here — whether any of it is *allowed* is the
+     * registry's business. The length cap is a parser guard: this is an
+     * unauthenticated endpoint, and json_decode on a megabyte of nested
+     * brackets is work somebody else chose for us.
+     *
+     * @return array<string,mixed>
+     */
+    private static function sanitizeSegments(mixed $value): array
+    {
+        if (!is_string($value) || $value === '' || strlen($value) > self::MAX_SEGMENTS_BYTES) {
+            return [];
+        }
+
+        $decoded = json_decode($value, true, 3);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    /** Comfortably more than five short key/value pairs, and no more. */
+    private const MAX_SEGMENTS_BYTES = 1024;
 
     /**
      * Splits "/page?a=1" into ["/page", "a=1"], matching what the server-side

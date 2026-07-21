@@ -71,6 +71,17 @@ final class Hit
         public readonly ?string $target = null,
         /** Pro: how far down the page they read, as a 25/50/75/100 bucket. */
         public readonly ?int $scrollBucket = null,
+        /**
+         * Pro: the segments the site's own code put on this visit — `plan`,
+         * `role`, whatever it declared. Already filtered against the
+         * declarations by the time it gets here (SegmentRegistry).
+         *
+         * Aggregate, like everything else: these end up as counters keyed by
+         * a dimension ID, never as a record of who this was.
+         *
+         * @var array<string,string>
+         */
+        public readonly array $segments = [],
     ) {
     }
 
@@ -120,6 +131,10 @@ final class Hit
             'ev' => $this->eventValue,
             'tg' => $this->target,
             'sb' => $this->scrollBucket,
+            // Nulled rather than left empty: array_filter below drops empty
+            // strings and zeroes, but an empty array would survive it and
+            // cost every spool line four bytes it has no use for.
+            'sg' => $this->segments === [] ? null : $this->segments,
         ], static fn($value) => $value !== null && $value !== '' && $value !== 0);
     }
 
@@ -150,7 +165,33 @@ final class Hit
             eventValue: isset($data['ev']) ? (float)$data['ev'] : null,
             target: isset($data['tg']) ? (string)$data['tg'] : null,
             scrollBucket: isset($data['sb']) ? (int)$data['sb'] : null,
+            segments: self::decodeSegments($data['sg'] ?? null),
         );
+    }
+
+    /**
+     * Reads segments back off a spool line.
+     *
+     * Defensive because the spool is a file: a truncated write or a hand-edit
+     * should cost the segments on one hit, not the batch it is in.
+     *
+     * @return array<string,string>
+     */
+    private static function decodeSegments(mixed $raw): array
+    {
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $segments = [];
+
+        foreach ($raw as $key => $value) {
+            if (is_string($key) && is_scalar($value)) {
+                $segments[$key] = (string)$value;
+            }
+        }
+
+        return $segments;
     }
 
     public function encode(): string

@@ -11,6 +11,7 @@ use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\Plugin;
 use coyshdigital\craftanalytics\services\FunnelsService;
 use coyshdigital\craftanalytics\services\GoalsService;
+use coyshdigital\craftanalytics\services\SegmentRegistry;
 use coyshdigital\craftanalytics\session\Session;
 use Craft;
 use yii\base\Component;
@@ -56,6 +57,7 @@ class ProRollupWriter extends Component
 
         $this->writeCampaigns($session, $date);
         $this->writeGeo($session, $date);
+        $this->writeSegments($session, $date);
         $this->writeConversions($session, $date, $conversions);
         $this->writeCampaignConversions($session, $date, $conversions);
         $this->writeFunnels($session, $date);
@@ -298,6 +300,48 @@ class ProRollupWriter extends Component
         ], [
             'sessions' => 1,
         ]);
+    }
+
+    /**
+     * One row per segment the site put on this visit.
+     *
+     * A session in two segments is counted in both — `plan=pro` and
+     * `role=member` are two questions about the same visit, not two visits.
+     * So these rows deliberately do not sum to the site's session total, and
+     * the report says as much on the screen rather than leaving somebody to
+     * work out why the columns don't add up.
+     */
+    private function writeSegments(Session $session, string $date): void
+    {
+        if ($session->segments === []) {
+            return;
+        }
+
+        $isBounce = $session->isBounce();
+
+        foreach ($session->segments as $key => $value) {
+            $dimId = $this->dimId(
+                $session->siteId,
+                $date,
+                DimensionType::Segment,
+                SegmentRegistry::dimensionValue($key, $value),
+            );
+
+            if ($dimId === 0) {
+                continue;
+            }
+
+            Upsert::counters($this->db(), Table::SEGMENTS_ROLLUP, [
+                'siteId' => $session->siteId,
+                'date' => $date,
+                'segmentDimId' => $dimId,
+            ], [
+                'sessions' => 1,
+                'views' => $session->pageviews,
+                'bounces' => $isBounce ? 1 : 0,
+                'durationMs' => $session->durationMs(),
+            ]);
+        }
     }
 
     /**

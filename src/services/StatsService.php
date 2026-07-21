@@ -5,6 +5,7 @@ namespace coyshdigital\craftanalytics\services;
 use coyshdigital\craftanalytics\db\Table;
 use coyshdigital\craftanalytics\enums\Channel;
 use coyshdigital\craftanalytics\enums\DeviceType;
+use coyshdigital\craftanalytics\enums\DimensionType;
 use coyshdigital\craftanalytics\models\DateRange;
 use coyshdigital\craftanalytics\Plugin;
 use coyshdigital\craftanalytics\session\Session;
@@ -26,6 +27,9 @@ class StatsService extends Component
 {
     public ?Connection $db = null;
     public ?UniqueCounterInterface $counter = null;
+
+    /** Injectable, like every other collaborator here, so tests can set it. */
+    public ?SegmentRegistry $segments = null;
 
     /**
      * The headline numbers.
@@ -361,6 +365,92 @@ class StatsService extends Component
     }
 
     // ------------------------------------------------- Pro analytics (§7)
+
+    /**
+     * The site's own segments, grouped by key.
+     *
+     * Only keys still declared by a module come back: a segment somebody
+     * stopped reporting last year leaves its rows in the table, but showing
+     * them under a heading the code no longer has a label for is how a report
+     * starts lying quietly. The `__other__` overflow is returned separately
+     * for the same reason — it belongs to no one key, because the cap folds
+     * every segment's tail into the same bucket.
+     *
+     * These groups do not sum to the site's session total, and they are not
+     * meant to: a visit in two segments is counted in both.
+     *
+     * @return array{groups: array<int,array{key: string, label: string, rows: array<int,array{value: string, sessions: int, views: int, bounces: int, bounceRate: float, avgDurationMs: int}>}>, other: int}
+     */
+    public function segments(int $siteId, DateRange $range): array
+    {
+        $declared = ($this->segments ??= Plugin::getInstance()->getSegments())->all();
+
+        if ($declared === []) {
+            return ['groups' => [], 'other' => 0];
+        }
+
+        $rows = (new Query())
+            ->select([
+                'value' => '[[d]].[[value]]',
+                'sessions' => 'SUM([[s]].[[sessions]])',
+                'views' => 'SUM([[s]].[[views]])',
+                'bounces' => 'SUM([[s]].[[bounces]])',
+                'durationMs' => 'SUM([[s]].[[durationMs]])',
+            ])
+            ->from(['s' => Table::SEGMENTS_ROLLUP])
+            ->innerJoin(['d' => Table::DIMENSIONS], '[[d]].[[id]] = [[s]].[[segmentDimId]]')
+            ->where(['[[s]].[[siteId]]' => $siteId])
+            ->andWhere(['between', '[[s]].[[date]]', $range->from, $range->to])
+            ->groupBy(['[[d]].[[value]]'])
+            ->orderBy(['sessions' => SORT_DESC])
+            ->all($this->db());
+
+        $grouped = [];
+        $other = 0;
+
+        foreach ($rows as $row) {
+            $stored = (string)$row['value'];
+
+            if ($stored === DimensionType::OTHER_VALUE) {
+                $other += (int)$row['sessions'];
+
+                continue;
+            }
+
+            [$key, $value] = SegmentRegistry::splitDimensionValue($stored);
+
+            if ($value === '' || !isset($declared[$key])) {
+                continue;
+            }
+
+            $sessions = (int)$row['sessions'];
+
+            $grouped[$key][] = [
+                'value' => $value,
+                'sessions' => $sessions,
+                'views' => (int)$row['views'],
+                'bounces' => (int)$row['bounces'],
+                'bounceRate' => $sessions > 0 ? round((int)$row['bounces'] / $sessions * 100, 1) : 0.0,
+                'avgDurationMs' => $sessions > 0 ? (int)round((int)$row['durationMs'] / $sessions) : 0,
+            ];
+        }
+
+        $groups = [];
+
+        // Declaration order, so the screen is laid out the way the site's
+        // code reads rather than by whichever segment happened to be busiest.
+        foreach ($declared as $key => $definition) {
+            if (isset($grouped[$key])) {
+                $groups[] = [
+                    'key' => $key,
+                    'label' => $definition->getLabel(),
+                    'rows' => $grouped[$key],
+                ];
+            }
+        }
+
+        return ['groups' => $groups, 'other' => $other];
+    }
 
     /**
      * Campaign performance.

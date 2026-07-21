@@ -69,6 +69,10 @@ worth putting in front of everyone.
 ## For developers
 
 - [Twig API](developers/twig.md) - popular entries, view counts, site totals
+- [Extending](developers/extending.md) *(Pro)* - segment your traffic by what
+  your own site knows, use your own IDs for consented visitors, and the events
+  you can already listen to
+- [GraphQL API](developers/graphql.md) *(Pro)*
 - [Performance](developers/performance.md) - how the zero-TTFB claim works and
   what it measures at
 - [Attribution & prior art](developers/attribution.md)
@@ -97,6 +101,7 @@ Lite is a usable analytics tool on its own, not a trial of Pro.
 | Goals & funnels | | ✅ |
 | Formie & Commerce integrations | | ✅ |
 | Consent-aware Tier 2 | | ✅ |
+| Segments & the extension API | | ✅ |
 | Emailed summaries | | ✅ |
 | GraphQL API | | ✅ |
 

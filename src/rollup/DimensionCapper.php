@@ -43,6 +43,10 @@ class DimensionCapper extends Component
     private const CAPPED_TYPES = [
         DimensionType::Path->value => [Table::PAGES_ROLLUP, 'pathDimId'],
         DimensionType::ReferrerHost->value => [Table::SOURCES_ROLLUP, 'refHostDimId'],
+        // A site declares its segment *keys*, but not necessarily their
+        // values — an undeclared value list means the site's own code decides,
+        // and code with a bug in it can decide a great many times.
+        DimensionType::Segment->value => [Table::SEGMENTS_ROLLUP, 'segmentDimId'],
     ];
 
     public ?Connection $db = null;

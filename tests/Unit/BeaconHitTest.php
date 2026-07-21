@@ -32,7 +32,55 @@ test('the common case stays compact on the wire', function() {
     $encoded = beaconHit(true, 0)->encode();
 
     expect($encoded)->not->toContain('nv')
-        ->and($encoded)->not->toContain('"d"');
+        ->and($encoded)->not->toContain('"d"')
+        // And a site with no segments pays nothing for those either: the
+        // spool is written once per pageview, so every key costs I/O.
+        ->and($encoded)->not->toContain('sg');
+});
+
+test('segments round-trip through the spool', function() {
+    $hit = new Hit(
+        siteId: 1,
+        path: '/pricing',
+        visitorHash: 'aaaaaaaaaaaaaaaa',
+        sessionKey: 'k',
+        timestamp: mktime(10, 0, 0, 7, 16, 2026),
+        segments: ['plan' => 'pro', 'role' => 'member'],
+    );
+
+    expect(Hit::decode($hit->encode())->segments)->toBe(['plan' => 'pro', 'role' => 'member']);
+});
+
+test('a mangled spool line costs the segments on one hit, not the batch', function() {
+    // The spool is a file; a truncated write or a hand-edit should degrade,
+    // not throw somewhere in the middle of a drain.
+    expect(Hit::fromArray(['si' => 1, 'v' => 'a', 'sg' => 'not-an-array'])->segments)->toBe([])
+        ->and(Hit::fromArray(['si' => 1, 'v' => 'a', 'sg' => ['plan' => ['nested']]])->segments)->toBe([]);
+});
+
+test('a segment reaches the session it describes', function() {
+    $delta = SessionDelta::fromHit(new Hit(
+        siteId: 1,
+        path: '/',
+        visitorHash: 'aaaaaaaaaaaaaaaa',
+        sessionKey: 'k',
+        timestamp: mktime(10, 0, 0, 7, 16, 2026),
+        segments: ['plan' => 'pro'],
+    ));
+
+    // A later hit adds a key that was missing, but never overwrites one that
+    // is already there: somebody who signs in halfway through is counted as
+    // whatever they were when they arrived.
+    $delta->add(new Hit(
+        siteId: 1,
+        path: '/pricing',
+        visitorHash: 'aaaaaaaaaaaaaaaa',
+        sessionKey: 'k',
+        timestamp: mktime(10, 1, 0, 7, 16, 2026),
+        segments: ['plan' => 'free', 'role' => 'member'],
+    ));
+
+    expect($delta->segments)->toBe(['plan' => 'pro', 'role' => 'member']);
 });
 
 test('a dwell-only beacon adds time without adding a view', function() {

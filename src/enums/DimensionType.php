@@ -28,6 +28,16 @@ enum DimensionType: int
     case Crawler = 15;
 
     /**
+     * A site-declared segment, stored as `key:value` — `plan:pro`.
+     *
+     * One type for every segment rather than one per key, because the keys
+     * are the site's to invent and an enum backed by a database column cannot
+     * grow at runtime. A key may not contain a colon, so the first one always
+     * separates the two halves again (SegmentRegistry).
+     */
+    case Segment = 16;
+
+    /**
      * Reserved dimension value that per-(site, day, type) cardinality-capped
      * tails are folded into during the drain.
      */

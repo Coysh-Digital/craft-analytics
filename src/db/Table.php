@@ -34,6 +34,9 @@ final class Table
     public const OUTBOUND_ROLLUP = '{{%craftanalytics_outboundrollup}}';
     public const CRAWLERS_ROLLUP = '{{%craftanalytics_crawlersrollup}}';
 
+    /** Pro, and only for the segments a site's own module declared. */
+    public const SEGMENTS_ROLLUP = '{{%craftanalytics_segmentsrollup}}';
+
     /**
      * Pro goals and funnels. The definitions mirror project config; the
      * rollups are aggregates like any other.

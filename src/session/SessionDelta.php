@@ -42,6 +42,18 @@ final class SessionDelta
     /** Deepest scroll bucket seen in this batch. */
     public int $maxScroll = 0;
 
+    /**
+     * Segments seen in this batch, first value per key winning.
+     *
+     * A segment describes the visit, so it is read once — the same rule geo
+     * follows below. Somebody who signs in halfway through is recorded as
+     * whatever they were when they arrived, which is the honest answer to
+     * "where did this session come from".
+     *
+     * @var array<string,string>
+     */
+    public array $segments = [];
+
     public function __construct(
         public readonly int $siteId,
         public readonly string $sessionKey,
@@ -56,6 +68,7 @@ final class SessionDelta
         $this->lastPath = $firstHit->path;
         $this->countryCode = $firstHit->countryCode;
         $this->region = $firstHit->region;
+        $this->segments = $firstHit->segments;
 
         if ($firstHit->campaign !== null) {
             $this->campaigns[] = $firstHit->campaign->toArray();
@@ -123,6 +136,9 @@ final class SessionDelta
         }
 
         $this->maxScroll = max($this->maxScroll, $hit->scrollBucket ?? 0);
+
+        // Union, so the first value for each key is the one that stays.
+        $this->segments += $hit->segments;
 
         // Geo is resolved once, when they arrive.
         if ($this->countryCode === '' && $hit->countryCode !== '') {

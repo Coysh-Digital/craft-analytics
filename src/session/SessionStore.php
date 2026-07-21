@@ -77,6 +77,7 @@ class SessionStore extends Component
                 region: $delta->region,
                 goals: $delta->goals,
                 maxScroll: $delta->maxScroll,
+                segments: $delta->segments,
             );
         } else {
             $session->pageviews += $delta->views;
@@ -110,6 +111,10 @@ class SessionStore extends Component
             }
 
             $session->maxScroll = max($session->maxScroll, $delta->maxScroll);
+
+            // Union again: whatever the visitor was when the session started
+            // is what it is counted as, however they change mid-visit.
+            $session->segments += $delta->segments;
         }
 
         $session->lastBatch = $batchId;

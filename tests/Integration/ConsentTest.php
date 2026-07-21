@@ -5,6 +5,7 @@ use coyshdigital\craftanalytics\db\Table;
 use coyshdigital\craftanalytics\enums\ConsentMethod;
 use coyshdigital\craftanalytics\enums\ConsentState;
 use coyshdigital\craftanalytics\events\DefineConsentEvent;
+use coyshdigital\craftanalytics\events\DefineVisitorIdEvent;
 use coyshdigital\craftanalytics\migrations\Install;
 use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\services\ConsentService;
@@ -179,4 +180,83 @@ test('the defineConsent event can resolve consent the plugin cannot see', functi
     $service->trigger(ConsentService::EVENT_DEFINE_CONSENT, $event);
 
     expect($event->state)->toBe(ConsentState::Granted);
+});
+
+test('a site can supply its own id for a consented visitor', function() {
+    $service = consentService();
+    $service->on(ConsentService::EVENT_DEFINE_VISITOR_ID, function(DefineVisitorIdEvent $event) {
+        $event->visitorId = 'cust_9182';
+    });
+
+    $request = FakeRequest::make(cookies: ['_ca_vid' => str_repeat('a', 32)]);
+
+    // The cookie's value is untouched: what the site calls this person belongs
+    // in the database, not on their device.
+    expect($service->resolvedVisitorId($request, 1))->toBe('cust_9182')
+        ->and($service->visitorId($request))->toBe(str_repeat('a', 32));
+});
+
+test('an unusable supplied id is refused rather than mangled', function() {
+    // Stored truncated or half-escaped, it would put rows in the journeys
+    // table that no subject request could ever find again.
+    $service = consentService();
+    $service->on(ConsentService::EVENT_DEFINE_VISITOR_ID, function(DefineVisitorIdEvent $event) {
+        $event->visitorId = 'cust 9182; drop table';
+    });
+
+    $request = FakeRequest::make(cookies: ['_ca_vid' => str_repeat('a', 32)]);
+
+    expect($service->resolvedVisitorId($request, 1))->toBe(str_repeat('a', 32));
+});
+
+test('a handler cannot invent a consented visitor out of somebody who refused', function() {
+    // The event fires downstream of every gate there is. GPC in particular is
+    // not something the site gets a vote on.
+    $service = consentService();
+    $service->on(ConsentService::EVENT_DEFINE_VISITOR_ID, function(DefineVisitorIdEvent $event) {
+        $event->visitorId = 'cust_9182';
+    });
+
+    $gpc = FakeRequest::make(headers: ['sec-gpc' => '1']);
+
+    expect($service->resolve($gpc, 1))->toBe(ConsentState::Denied)
+        ->and($service->grant($gpc, 1, ConsentMethod::JsApi))->toBeNull();
+
+    // And with consent switched off entirely there is no id at all.
+    $off = consentService(['enableConsent' => false]);
+    $off->on(ConsentService::EVENT_DEFINE_VISITOR_ID, function(DefineVisitorIdEvent $event) {
+        $event->visitorId = 'cust_9182';
+    });
+
+    expect($off->resolvedVisitorId(FakeRequest::make(), 1))->toBeNull();
+});
+
+test('lite never reaches the handler', function() {
+    $service = new ConsentService([
+        'db' => TestDb::connection(),
+        'settings' => new Settings(['enableConsent' => true]),
+        'isPro' => false,
+    ]);
+    $service->on(ConsentService::EVENT_DEFINE_VISITOR_ID, function(DefineVisitorIdEvent $event) {
+        $event->visitorId = 'cust_9182';
+    });
+
+    expect($service->resolvedVisitorId(FakeRequest::make(cookies: ['_ca_vid' => str_repeat('a', 32)]), 1))
+        ->toBeNull();
+});
+
+test('the evidence is logged under the supplied id, so withdrawal can find it', function() {
+    // The journeys are written under this id. If the consent log used a
+    // different one, a withdrawal would match nothing and the drain would
+    // carry on writing rows for somebody who said no.
+    $service = consentService();
+    $service->on(ConsentService::EVENT_DEFINE_VISITOR_ID, function(DefineVisitorIdEvent $event) {
+        $event->visitorId = 'cust_9182';
+    });
+
+    $service->log(1, ConsentState::Granted, ConsentMethod::JsApi, 'cust_9182');
+
+    $row = (new Query())->from(Table::CONSENT_LOG)->one(TestDb::connection());
+
+    expect($row['visitorId'])->toBe('cust_9182');
 });

@@ -94,16 +94,28 @@ class ScriptInjector extends Component
     }
 
     /**
-     * The Pro tracker: events, outbound clicks, downloads and scroll depth.
+     * The Pro tracker: events, outbound clicks, downloads, scroll depth and
+     * segments.
      *
      * Separate from tracker.js so a Lite site downloads nothing for features
-     * it does not have (C3).
+     * it does not have (C3) — which is also why segments live in here rather
+     * than in the tracker every visitor to every site gets.
+     *
+     * A site that declared segments but left `enableEvents` off still gets
+     * this file, with everything else in it switched off at the attributes.
      */
     private function proTag(): ?string
     {
         $settings = $this->settings();
+        $plugin = Plugin::getInstance();
 
-        if (!$settings->enableEvents || !Plugin::getInstance()->is(Plugin::EDITION_PRO)) {
+        if (!$plugin->is(Plugin::EDITION_PRO)) {
+            return null;
+        }
+
+        $events = $settings->enableEvents;
+
+        if (!$events && !$plugin->getSegments()->isEnabled()) {
             return null;
         }
 
@@ -117,9 +129,14 @@ class ScriptInjector extends Component
             'src' => $url,
             'defer' => true,
             'data-endpoint' => UrlHelper::siteUrl($settings->beaconPath),
-            'data-outbound' => $settings->trackOutbound ? '1' : '0',
-            'data-downloads' => $settings->trackDownloads ? '1' : '0',
-            'data-scroll' => $settings->trackScroll ? '1' : '0',
+            'data-events' => $events ? '1' : '0',
+            // `enableEvents` is the master switch for all of these, so an
+            // install that has it off gets the file for its segments and
+            // nothing else — the same as before this file could be loaded
+            // for any other reason.
+            'data-outbound' => $events && $settings->trackOutbound ? '1' : '0',
+            'data-downloads' => $events && $settings->trackDownloads ? '1' : '0',
+            'data-scroll' => $events && $settings->trackScroll ? '1' : '0',
             'data-extensions' => implode(',', $settings->downloadExtensions),
         ]);
     }

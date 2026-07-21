@@ -11,9 +11,15 @@
  * genuinely separate events and each sends its own, because there is no way to
  * report a click on the way out of the page it left.
  *
+ * Segments live here too, for the same reason: they are a Pro feature, and
+ * tracker.js is what every visitor to every site downloads. They ride the
+ * engagement beacon as well — a segment describes the whole visit, so it does
+ * not matter which of a session's beacons carries it.
+ *
  * Exposes:
  *
  *   craftAnalytics.event(name, { value: 12.5, path: '/x' })
+ *   craftAnalytics.segment('plan', 'pro')
  */
 (function(window, document) {
     'use strict';
@@ -31,6 +37,7 @@
     }
 
     var api = window.craftAnalytics = window.craftAnalytics || {};
+    var trackEvents = script.getAttribute('data-events') === '1';
     var trackOutbound = script.getAttribute('data-outbound') === '1';
     var trackDownloads = script.getAttribute('data-downloads') === '1';
     var trackScroll = script.getAttribute('data-scroll') === '1';
@@ -56,7 +63,7 @@
      * @param {{value?: number, path?: string}} [options]
      */
     api.event = function(name, options) {
-        if (typeof name !== 'string' || !name) {
+        if (!trackEvents || typeof name !== 'string' || !name) {
             return;
         }
 
@@ -69,6 +76,54 @@
             p: options.path || location.pathname + location.search,
         });
     };
+
+    // ----------------------------------------------------------- segments
+
+    var segments = {};
+
+    /**
+     * Tags this visit with something the site knows about it — the plan they
+     * are on, the role they hold.
+     *
+     * The server keeps only the segments the site declared in PHP, so this
+     * cannot invent a dimension. It exists because a page served from a cache
+     * is one PHP never saw, and could not work the answer out for.
+     *
+     * This script is deferred, so window.craftAnalyticsSegments lets an inline
+     * script tag a visit before it has loaded. Both are read when the beacon
+     * is sent, so either is in time.
+     *
+     * @param {string} key
+     * @param {string|number|boolean} value
+     */
+    api.segment = function(key, value) {
+        if (typeof key === 'string' && value !== null && value !== undefined) {
+            segments[key] = String(value);
+        }
+    };
+
+    // Rides the engagement beacon rather than sending its own request. A
+    // segment describes the visit, and the session takes the first value it
+    // is given for a key, so it does not matter which beacon brings it.
+    if (typeof api.extend === 'function') {
+        api.extend(function() {
+            var all = {};
+            var empty = true;
+            var key;
+
+            for (key in window.craftAnalyticsSegments) {
+                all[key] = String(window.craftAnalyticsSegments[key]);
+                empty = false;
+            }
+
+            for (key in segments) {
+                all[key] = segments[key];
+                empty = false;
+            }
+
+            return empty ? {} : { sg: JSON.stringify(all) };
+        });
+    }
 
     // ------------------------------------------------------------- scroll
 

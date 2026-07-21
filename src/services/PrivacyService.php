@@ -141,6 +141,13 @@ class PrivacyService extends Component
             $warnings[] = Craft::t('craft-analytics', 'Consented visitors are linked to their Craft user account, which makes the data directly identifiable rather than pseudonymous.');
         }
 
+        $suppliedIds = $consentAvailable
+            && Plugin::getInstance()->getConsent()->hasEventHandlers(ConsentService::EVENT_DEFINE_VISITOR_ID);
+
+        if ($suppliedIds) {
+            $warnings[] = Craft::t('craft-analytics', 'A module on this site supplies its own identifier for consented visitors. That is no longer a random value meaningful only inside this plugin - it can be joined to the site\'s own records, which makes the consented data directly identifiable rather than pseudonymous.');
+        }
+
         if (!$settings->honourGpc) {
             $warnings[] = Craft::t('craft-analytics', 'Global Privacy Control is being ignored. GPC is treated as a valid opt-out under several privacy laws, and disregarding it is a legal risk.');
         }
@@ -156,9 +163,11 @@ class PrivacyService extends Component
         return [
             'banner' => $consentAvailable,
             'cookies' => $consentAvailable,
-            'identifiers' => $consentAvailable
-                ? Craft::t('craft-analytics', 'A rotating pseudonymous hash for everyone; a random first-party ID for visitors who consent.')
-                : Craft::t('craft-analytics', 'A rotating pseudonymous hash, and nothing else.'),
+            'identifiers' => match (true) {
+                $suppliedIds => Craft::t('craft-analytics', 'A rotating pseudonymous hash for everyone; for visitors who consent, an identifier supplied by this site\'s own code.'),
+                $consentAvailable => Craft::t('craft-analytics', 'A rotating pseudonymous hash for everyone; a random first-party ID for visitors who consent.'),
+                default => Craft::t('craft-analytics', 'A rotating pseudonymous hash, and nothing else.'),
+            },
             'lawfulBasis' => $consentAvailable
                 ? Craft::t('craft-analytics', 'Consent for the identified layer; legitimate interests (or none required) for the anonymous statistics.')
                 : Craft::t('craft-analytics', 'No personal data is processed once the salt rotates, so no lawful basis is engaged for the statistics.'),

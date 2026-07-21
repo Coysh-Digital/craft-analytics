@@ -409,6 +409,7 @@ class CaptureService extends Component
             kind: Hit::KIND_EVENT,
             eventName: $name,
             eventValue: $value,
+            segments: $hit->segments,
         );
 
         $event = new TrackEvent($hit);
@@ -454,7 +455,7 @@ class CaptureService extends Component
         // and the hit is as anonymous as it was in Lite.
         $consent = Plugin::getInstance()->getConsent();
         $visitorId = $consent->resolve($request, $siteId)->isGranted()
-            ? $consent->visitorId($request)
+            ? $consent->resolvedVisitorId($request, $siteId)
             : null;
 
         $plugin = Plugin::getInstance();
@@ -480,6 +481,9 @@ class CaptureService extends Component
                 : null,
             countryCode: $geo['country'],
             region: $geo['region'],
+            // Whatever the site's own code says this visit is. Empty unless a
+            // module declared segments, which is the ordinary case.
+            segments: $plugin->getSegments()->resolve($request, $siteId),
         );
     }
 

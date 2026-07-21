@@ -30,6 +30,7 @@ use coyshdigital\craftanalytics\services\PrivacyDocumentService;
 use coyshdigital\craftanalytics\services\PrivacyService;
 use coyshdigital\craftanalytics\services\ReportMailer;
 use coyshdigital\craftanalytics\services\SaltService;
+use coyshdigital\craftanalytics\services\SegmentRegistry;
 use coyshdigital\craftanalytics\services\StatsService;
 use coyshdigital\craftanalytics\session\SessionStore;
 use coyshdigital\craftanalytics\uniques\ExactUniqueCounter;
@@ -83,6 +84,7 @@ use yii\base\Event;
  * @property-read CaptureService $capture
  * @property-read ChannelClassifier $channels
  * @property-read DeviceParser $deviceParser
+ * @property-read SegmentRegistry $segments
  */
 class Plugin extends BasePlugin
 {
@@ -94,7 +96,7 @@ class Plugin extends BasePlugin
     public const PERMISSION_EXPORT = 'craftAnalytics:export';
     public const PERMISSION_MANAGE_SETTINGS = 'craftAnalytics:manageSettings';
 
-    public string $schemaVersion = '1.3.0';
+    public string $schemaVersion = '1.4.0';
     public bool $hasCpSettings = true;
     public bool $hasCpSection = true;
 
@@ -140,6 +142,7 @@ class Plugin extends BasePlugin
                 'contentStats' => ContentStatsService::class,
                 'conversionStats' => ConversionStatsService::class,
                 'reportMailer' => ReportMailer::class,
+                'segments' => SegmentRegistry::class,
             ],
         ];
     }
@@ -270,6 +273,18 @@ class Plugin extends BasePlugin
     }
 
     /**
+     * The segments a site's own module has declared, if any.
+     *
+     * Empty on every install that has not written the code to fill it, which
+     * is the point: this is an extension surface, not a feature.
+     */
+    public function getSegments(): SegmentRegistry
+    {
+        /** @var SegmentRegistry */
+        return $this->get('segments');
+    }
+
+    /**
      * The configured unique-visitor counter.
      *
      * `auto` prefers Redis when the site already has it (native, mergeable,
@@ -351,6 +366,12 @@ class Plugin extends BasePlugin
 
         $item['label'] = Craft::t('craft-analytics', 'Analytics');
         $item['icon'] = '@coyshdigital/craftanalytics/resources/icon-mask.svg';
+        // Only once a module has declared something to put on it. An empty
+        // screen for a feature nobody wired up is furniture.
+        $segments = $this->getSegments()->isEnabled()
+            ? ['segments' => ['label' => Craft::t('craft-analytics', 'Segments'), 'url' => 'craft-analytics/segments']]
+            : [];
+
         $item['subnav'] = [
             'dashboard' => ['label' => Craft::t('craft-analytics', 'Dashboard'), 'url' => 'craft-analytics'],
             'realtime' => ['label' => Craft::t('craft-analytics', 'Real-time'), 'url' => 'craft-analytics/realtime'],
@@ -360,6 +381,7 @@ class Plugin extends BasePlugin
             'devices' => ['label' => Craft::t('craft-analytics', 'Devices'), 'url' => 'craft-analytics/devices'],
             'campaigns' => ['label' => Craft::t('craft-analytics', 'Campaigns'), 'url' => 'craft-analytics/campaigns'],
             'geo' => ['label' => Craft::t('craft-analytics', 'Locations'), 'url' => 'craft-analytics/geo'],
+            ...$segments,
             'events' => ['label' => Craft::t('craft-analytics', 'Events'), 'url' => 'craft-analytics/events'],
             'goals' => ['label' => Craft::t('craft-analytics', 'Goals'), 'url' => 'craft-analytics/goals'],
             'funnels' => ['label' => Craft::t('craft-analytics', 'Funnels'), 'url' => 'craft-analytics/funnels'],
@@ -704,6 +726,7 @@ class Plugin extends BasePlugin
                 $event->rules['craft-analytics/campaigns'] = 'craft-analytics/pro-reports/campaigns';
                 $event->rules['craft-analytics/geo'] = 'craft-analytics/pro-reports/geo';
                 $event->rules['craft-analytics/events'] = 'craft-analytics/pro-reports/events';
+                $event->rules['craft-analytics/segments'] = 'craft-analytics/pro-reports/segments';
                 $event->rules['craft-analytics/content'] = 'craft-analytics/content/index';
                 $event->rules['craft-analytics/content/section/<sectionId:\d+>'] = 'craft-analytics/content/section';
                 $event->rules['craft-analytics/content/author/<authorId:\d+>'] = 'craft-analytics/content/author';

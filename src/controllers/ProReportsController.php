@@ -76,6 +76,27 @@ class ProReportsController extends BaseCpController
     }
 
     /**
+     * Whatever the site's own module decided to segment its visitors by.
+     *
+     * The screen only has a nav item when something is declared, but the
+     * route stays reachable — a bookmarked URL should explain itself rather
+     * than 404.
+     */
+    public function actionSegments(): Response
+    {
+        $site = $this->currentSite();
+        $range = $this->range();
+        $registry = Plugin::getInstance()->getSegments();
+
+        return $this->renderProTemplate('segments', $site, $range, [
+            'title' => 'Segments',
+            'segments' => $this->stats()->segments($this->siteId($site), $range),
+            'enabled' => $registry->isEnabled(),
+            'dimensionCap' => Plugin::getInstance()->getSettings()->dimensionCap,
+        ]);
+    }
+
+    /**
      * @param array<string,mixed> $variables
      */
     private function renderProTemplate(

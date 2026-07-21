@@ -123,13 +123,37 @@ Terms are lower-cased and trimmed so one search stays one search. Whether a
 search found anything is something only your site knows; report it yourself
 with `craftAnalytics.event('search:zero-results')`.
 
+## Segments
+
+Traffic broken down by whatever your own site knows about a visit - the plan
+somebody is on, whether they were signed in, which role they hold. Sessions,
+views, bounce rate and average duration for each group.
+
+This one has no settings. It appears only once a module on the site declares
+what to segment by, and the **Segments** nav item is absent until then. Doing
+that is a few lines in your module: see [Extending](../developers/extending.md).
+
+It stores counters, not people. A segment value is a dimension shared by
+everybody who matches it, so a visit in a segment costs one row per day
+however many pages it covered - and nothing on the screen can be traced back
+to an individual, because nothing about an individual was kept.
+
+Two things the screen says itself, worth knowing before you read it:
+
+- **The tables do not add up to your total sessions.** A visit counts in every
+  segment it belongs to. "Plan" and "Role" are two questions about the same
+  visits, not two sets of visits.
+- **A visitor is whatever they were when they arrived.** Somebody who signs in
+  halfway through a visit is still counted as a guest for that session, which
+  is the honest answer to where the session came from.
+
 ## The scripts
 
 | File | Loaded when | Size (gzipped) |
 |---|---|---|
-| `tracker.js` | always | **1,536 bytes** (budget 2,048) |
+| `tracker.js` | always | **1,837 bytes** (budget 2,048) |
 | `consent.js` | Pro **and** consent enabled | 1,258 bytes |
-| `pro.js` | Pro **and** events enabled | 1,686 bytes |
+| `pro.js` | Pro **and** events or segments enabled | 2,380 bytes |
 
 Split deliberately: a Lite site downloads only `tracker.js`, and pays nothing
 for features it doesn't have. Only `tracker.js` is under the C3 budget,

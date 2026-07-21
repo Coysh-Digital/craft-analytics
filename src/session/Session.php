@@ -54,6 +54,14 @@ final class Session
         public array $goals = [],
         /** Deepest scroll bucket reached anywhere in the session, 0–100. */
         public int $maxScroll = 0,
+        /**
+         * The segments the site put on this visit, at most
+         * SegmentRegistry::MAX_PER_HIT of them — so this stays a handful of
+         * short strings rather than something that grows with the browsing.
+         *
+         * @var array<string,string>
+         */
+        public array $segments = [],
     ) {
     }
 
@@ -90,6 +98,7 @@ final class Session
             'rg' => $this->region,
             'g' => $this->goals,
             'ms' => $this->maxScroll,
+            'sg' => $this->segments,
         ];
     }
 
@@ -119,6 +128,27 @@ final class Session
                 is_array($data['g'] ?? null) ? $data['g'] : [],
             )),
             maxScroll: (int)($data['ms'] ?? 0),
+            segments: self::decodeSegments($data['sg'] ?? null),
         );
+    }
+
+    /**
+     * @return array<string,string>
+     */
+    private static function decodeSegments(mixed $raw): array
+    {
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $segments = [];
+
+        foreach ($raw as $key => $value) {
+            if (is_string($key) && is_scalar($value)) {
+                $segments[$key] = (string)$value;
+            }
+        }
+
+        return $segments;
     }
 }

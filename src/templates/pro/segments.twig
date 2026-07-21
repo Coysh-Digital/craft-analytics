@@ -1,0 +1,67 @@
+{% extends 'craft-analytics/_layout.twig' %}
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% block report %}
+    {% if not isPro %}
+        {% include 'craft-analytics/_partials/pro-gate.twig' with {
+            title: 'Segments'|t('craft-analytics'),
+            description: 'Break your traffic down by whatever your own site knows about a visit - the plan they are on, whether they were signed in, which role they hold - without storing anything about the person.'|t('craft-analytics'),
+        } only %}
+    {% elseif not enabled %}
+        {{ ca.empty(
+            'No segments declared'|t('craft-analytics'),
+            'Segments come from your own module. Register them on the registerSegments event and this screen fills itself in - see the Extending page in the docs.'|t('craft-analytics')
+        ) }}
+    {% elseif not segments.groups|length %}
+        {{ ca.empty(
+            'Nothing yet'|t('craft-analytics'),
+            'Segments are recorded when a session closes, so they appear after the drain has run.'|t('craft-analytics')
+        ) }}
+    {% else %}
+        {% for group in segments.groups %}
+            {% set maxSessions = max(group.rows|map(r => r.sessions)) %}
+            <div class="ca-card">
+                <div class="ca-card-head">
+                    <h2 class="ca-card-title">{{ group.label }}</h2>
+                </div>
+                <div class="ca-card-body ca-table-scroll">
+                    <table class="ca-table">
+                        <thead>
+                        <tr>
+                            <th>{{ group.label }}</th>
+                            <th class="ca-num">{{ 'Sessions'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Views'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Bounce rate'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Avg. duration'|t('craft-analytics') }}</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for row in group.rows %}
+                            <tr>
+                                {{ ca.barCell(row.value, row.sessions, maxSessions, null) }}
+                                <td class="ca-num">{{ row.sessions|number_format }}</td>
+                                <td class="ca-num">{{ row.views|number_format }}</td>
+                                <td class="ca-num ca-muted">{{ row.bounceRate|number_format(1) }}%</td>
+                                <td class="ca-num ca-muted">{{ ca.duration(row.avgDurationMs) }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% endfor %}
+
+        {% if segments.other %}
+            <p class="ca-footnote">
+                {{ '{count} sessions fell beyond the daily cap of {cap} distinct segment values and were folded into a shared “__other__” bucket. That normally means a segment is being given far more values than it was meant to have.'|t('craft-analytics', {
+                    count: segments.other|number_format,
+                    cap: dimensionCap|number_format,
+                }) }}
+            </p>
+        {% endif %}
+
+        <p class="ca-footnote">
+            {{ 'A visit counts in every segment it belongs to, so these tables deliberately do not add up to your total sessions. Each row is a counter - nothing here records who anybody was.'|t('craft-analytics') }}
+        </p>
+    {% endif %}
+{% endblock %}

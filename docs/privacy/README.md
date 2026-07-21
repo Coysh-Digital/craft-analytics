@@ -127,6 +127,16 @@ So a subject request touches exactly two things: the consented journeys layer
 and the consent log. On a default install, both are empty - there is nothing
 to export, and that is the point.
 
+**If a module on your site supplies its own visitor IDs, this changes.** The
+[extension API](../developers/extending.md) lets your own code hand the plugin
+its identifier for a consented visitor - a customer or member number - instead
+of the random one we issue. That is a deliberate choice with a consequence:
+the consented layer stops being pseudonymous and becomes directly
+identifiable, because the ID joins to the rest of your business by design. The
+export and erase commands then take that ID, which is the practical upside;
+the privacy panel raises a warning as soon as a handler is attached, which is
+the part to show your DPO.
+
 **Erasure keeps the consent record by default.** It is the evidence that the
 now-erased processing was lawful; destroying it on request would leave the site
 unable to answer the first question a regulator asks. `--include-consent-log`

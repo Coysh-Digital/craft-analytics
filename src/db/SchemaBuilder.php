@@ -227,6 +227,34 @@ final class SchemaBuilder
     }
 
     /**
+     * Site-declared segments (Pro).
+     *
+     * Session-grained, like sources and geo: a segment describes the visitor
+     * for a visit, so counting it per pageview would multiply one fact by
+     * however many pages they read. Everything a segment report needs -
+     * sessions, views, bounce rate, average duration - falls out of a closed
+     * session for free, which is why there is no per-hit table here.
+     *
+     * Growth is cardinality x time like every other rollup: a segment with
+     * three values costs three rows a day whether the site had ten visits or
+     * ten million.
+     */
+    public static function createSegmentTable(Migration $m): void
+    {
+        $m->createTable(Table::SEGMENTS_ROLLUP, [
+            'id' => $m->primaryKey(),
+            'siteId' => $m->integer()->notNull(),
+            'date' => $m->date()->notNull(),
+            'segmentDimId' => $m->integer()->notNull(),
+            'sessions' => $m->integer()->notNull()->defaultValue(0),
+            'views' => $m->integer()->notNull()->defaultValue(0),
+            'bounces' => $m->integer()->notNull()->defaultValue(0),
+            'durationMs' => $m->bigInteger()->notNull()->defaultValue(0),
+        ]);
+        $m->createIndex(null, Table::SEGMENTS_ROLLUP, ['siteId', 'date', 'segmentDimId'], true);
+    }
+
+    /**
      * Crawler activity.
      *
      * One row per crawler per day, and only when `trackCrawlers` is on. This
@@ -345,8 +373,11 @@ final class SchemaBuilder
         $m->createTable(Table::CONSENT_LOG, [
             'id' => $m->primaryKey(),
             'siteId' => $m->integer()->notNull(),
-            // The consented visitor id, when one exists.
-            'visitorId' => $m->char(32),
+            // The consented visitor id, when one exists. Wider than the 32
+            // hex characters we issue, because a site can supply its own
+            // (ConsentService::EVENT_DEFINE_VISITOR_ID) and a customer number
+            // is not a hash.
+            'visitorId' => $m->string(64),
             // The Tier-1 rotating hash, for decisions made before/without a
             // visitor id (a denial, typically). Unlinkable once the salt
             // rotates, which is the point.
@@ -367,7 +398,7 @@ final class SchemaBuilder
         // its own retention, and must be individually erasable.
         $m->createTable(Table::JOURNEYS, [
             'id' => $m->primaryKey(),
-            'visitorId' => $m->char(32)->notNull(),
+            'visitorId' => $m->string(64)->notNull(),
             'siteId' => $m->integer()->notNull(),
             'sessionId' => $m->char(32)->notNull(),
             'sequence' => $m->integer()->notNull()->defaultValue(0),
@@ -423,6 +454,7 @@ final class SchemaBuilder
             [Table::OUTBOUND_ROLLUP, 'targetDimId'],
             [Table::OUTBOUND_ROLLUP, 'pathDimId'],
             [Table::CRAWLERS_ROLLUP, 'crawlerDimId'],
+            [Table::SEGMENTS_ROLLUP, 'segmentDimId'],
             [Table::JOURNEYS, 'pathDimId'],
             [Table::JOURNEYS, 'eventDimId'],
         ];
@@ -435,6 +467,7 @@ final class SchemaBuilder
     public static function allTables(): array
     {
         return [
+            Table::SEGMENTS_ROLLUP,
             Table::CRAWLERS_ROLLUP,
             Table::FUNNEL_STEP_ROLLUP,
             Table::FUNNEL_STEPS,
