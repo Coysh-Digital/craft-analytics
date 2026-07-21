@@ -36,36 +36,94 @@ php craft craft-analytics/geo/status</pre>
                 </div>
                 <div class="ca-card-body">
                     <div id="ca-geo-map" style="width: 100%; height: 340px"></div>
+                    {# Replaced by the map once it draws. If the map library
+                       did not load - a cpresources publishing problem, or a
+                       content security policy blocking it - this is what stays
+                       on the screen, because a card that is simply blank tells
+                       nobody anything. #}
+                    <p id="ca-geo-map-fallback" class="ca-footnote" hidden>
+                        {{ 'The map could not be drawn because its script did not load. The country figures below are unaffected. Check that the plugin resources under cpresources are being published and are not blocked.'|t('craft-analytics') }}
+                    </p>
                 </div>
             </div>
 
             {% js %}
                 (function () {
                     var el = document.getElementById('ca-geo-map');
-                    if (!el || typeof jsVectorMap === 'undefined') return;
+                    var fallback = document.getElementById('ca-geo-map-fallback');
+
+                    if (!el) return;
+
+                    function giveUp(reason) {
+                        el.hidden = true;
+                        if (fallback) fallback.hidden = false;
+                        // Says so out loud, so the next person to look at a
+                        // blank card has somewhere to start.
+                        if (window.console) console.warn('craft-analytics: the Locations map could not be drawn - ' + reason);
+                    }
+
+                    if (typeof jsVectorMap === 'undefined') {
+                        return giveUp('jsvectormap.min.js did not load.');
+                    }
 
                     var values = {{ countryValues|json_encode|raw }};
 
-                    new jsVectorMap({
-                        selector: '#ca-geo-map',
-                        map: 'world_merc',
-                        zoomButtons: false,
-                        showTooltip: true,
-                        series: {
-                            regions: [{
-                                values: values,
-                                scale: ['#dbe4fb', '#2563eb'],
-                                normalizeFunction: 'polynomial',
-                            }],
-                        },
-                        regionStyle: {
-                            initial: { fill: '#e5e7eb' },
-                        },
-                        onRegionTooltipShow: function (event, tooltip, code) {
-                            var sessions = values[code] || 0;
-                            tooltip.text(tooltip.text() + ': ' + sessions.toLocaleString() + ' {{ 'sessions'|t('craft-analytics') }}');
-                        },
-                    });
+                    // jsvectormap's scale is a lookup table, not a gradient:
+                    // it fetches scale[value], so handing it session counts
+                    // asks for scale[4213], gets undefined, and leaves the
+                    // country with no fill at all - which paints it black,
+                    // SVG's default. So the counts are bucketed here and the
+                    // bucket is what the map is given.
+                    //
+                    // Buckets start at 1 because setValues() skips falsy
+                    // ones, and a country in bucket 0 would go black for
+                    // exactly the same reason.
+                    var palette = ['#dbe4fb', '#bfd0f7', '#93b4f2', '#5f8de9', '#3b6fe0', '#2563eb'];
+                    var scale = {};
+                    var buckets = {};
+                    var max = 0;
+                    var code;
+
+                    for (code in values) {
+                        if (values[code] > max) max = values[code];
+                    }
+
+                    for (var i = 0; i < palette.length; i++) {
+                        scale[i + 1] = palette[i];
+                    }
+
+                    for (code in values) {
+                        // Square-rooted, so one dominant country does not
+                        // flatten everywhere else into the palest shade.
+                        var share = max > 0 ? Math.sqrt(values[code] / max) : 0;
+                        buckets[code] = 1 + Math.round(share * (palette.length - 1));
+                    }
+
+                    try {
+                        new jsVectorMap({
+                            selector: '#ca-geo-map',
+                            map: 'world_merc',
+                            zoomButtons: false,
+                            showTooltip: true,
+                            series: {
+                                regions: [{
+                                    values: buckets,
+                                    scale: scale,
+                                }],
+                            },
+                            regionStyle: {
+                                initial: { fill: '#e5e7eb' },
+                            },
+                            onRegionTooltipShow: function (event, tooltip, code) {
+                                var sessions = values[code] || 0;
+                                tooltip.text(tooltip.text() + ': ' + sessions.toLocaleString() + ' {{ 'sessions'|t('craft-analytics') }}');
+                            },
+                        });
+                    } catch (e) {
+                        // Most likely world-merc.js not loading, which leaves
+                        // the library present but the map data missing.
+                        giveUp(e && e.message ? e.message : 'the map data is unavailable.');
+                    }
                 })();
             {% endjs %}
         {% endif %}

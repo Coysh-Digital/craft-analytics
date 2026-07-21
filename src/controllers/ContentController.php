@@ -52,12 +52,21 @@ class ContentController extends BaseCpController
     /**
      * The entries inside one section — the drill-down from the section table.
      */
-    public function actionSection(): Response
+    /**
+     * The entries in one section - the drill-down from the section table.
+     *
+     * The id arrives as an action argument rather than a request param, and
+     * has to: Craft's Request::resolve() hands a matched route's tokens
+     * straight to runAction() and never merges them into the query params, so
+     * getRequiredParam() cannot see one and throws a 400 on a URL that is
+     * perfectly valid. Same reason GoalsController::actionEdit() takes its
+     * uid this way.
+     */
+    public function actionSection(int $sectionId): Response
     {
         $site = $this->currentSite();
         $siteId = $this->siteId($site);
         $range = $this->range();
-        $sectionId = (int)$this->request->getRequiredParam('sectionId');
         $section = Craft::$app->getEntries()->getSectionById($sectionId);
 
         if ($section === null) {
@@ -80,13 +89,14 @@ class ContentController extends BaseCpController
 
     /**
      * The entries by one author — the drill-down from the author table.
+     *
+     * An action argument, for the reason spelled out on actionSection().
      */
-    public function actionAuthor(): Response
+    public function actionAuthor(int $authorId): Response
     {
         $site = $this->currentSite();
         $siteId = $this->siteId($site);
         $range = $this->range();
-        $authorId = (int)$this->request->getRequiredParam('authorId');
         $author = Craft::$app->getUsers()->getUserById($authorId);
 
         if ($author === null) {

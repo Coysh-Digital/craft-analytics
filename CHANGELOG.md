@@ -1,5 +1,24 @@
 # Release Notes for Craft Analytics
 
+## 1.4.1 - 2026-07-21
+
+### Fixed
+
+- Clicking a section or an author on the Content report returned a 400,
+  "Request missing required param", instead of the drill-down. Both actions
+  read the id from the request, but Craft hands a matched route's tokens
+  straight to the action and never puts them in the request - so the id was
+  never there to find. They take it as an argument now, the way the goal and
+  funnel editors already did.
+- The world map on the Locations report drew every country that had traffic in
+  black rather than shading it by session volume. The map library's `scale` is
+  a lookup table rather than a gradient, so it was being asked for the colour
+  of "4,213 sessions", finding nothing, and leaving the country with no fill
+  at all. Sessions are now bucketed into six shades.
+- If the map's script cannot be loaded at all, the Locations report now says
+  so on the screen and in the console, instead of leaving an empty card with
+  no explanation. The country and region tables are unaffected either way.
+
 ## 1.4.0 - 2026-07-21
 
 ### Added
