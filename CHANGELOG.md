@@ -1,5 +1,21 @@
 # Release Notes for Craft Analytics
 
+## 1.4.2 - 2026-07-21
+
+### Fixed
+
+- The world map on the Locations report drew nothing on sites behind
+  Cloudflare Rocket Loader, while the country and region tables below it were
+  fine. Rocket Loader rewrites inline scripts and defers them, and on an
+  authenticated control panel it frequently never runs them at all - so the
+  map library and its data loaded over the network, the code that draws the
+  map never executed, and the card sat empty with nothing in the console to
+  say why. The map is now drawn by a published script that reads its figures
+  from a JSON block, neither of which Rocket Loader touches. Nothing needs
+  turning off at the CDN, and the map looks and behaves exactly as before.
+- If the block holding the map's figures ever goes missing, the report now
+  says so rather than drawing an empty grey world that looks deliberate.
+
 ## 1.4.1 - 2026-07-21
 
 ### Fixed
