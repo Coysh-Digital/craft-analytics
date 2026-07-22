@@ -39,6 +39,23 @@ class IdentityService extends Component
     }
 
     /**
+     * Whether a value is a visitor hash this build can actually use.
+     *
+     * The single statement of the format. Everything downstream — the spool
+     * reader, the rollup sink, the sketch — asks this rather than restating
+     * the rule, so a change to HASH_BYTES moves the whole pipeline at once
+     * instead of leaving a mismatch to detonate deep inside a commit.
+     *
+     * Values written by a build with a different HASH_BYTES are exactly the
+     * case this guards: they are unusable here, and must be dropped where
+     * dropping is cheap.
+     */
+    public static function isValidHash(string $hash): bool
+    {
+        return strlen($hash) === self::HASH_BYTES * 2 && ctype_xdigit($hash);
+    }
+
+    /**
      * Session key for a visitor hash. Sessions live only in the hot layer and
      * are never written to a visitor's device (C4).
      */

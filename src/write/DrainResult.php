@@ -14,4 +14,10 @@ final class DrainResult
     public int $buckets = 0;
     public int $closedSessions = 0;
     public int $malformedLines = 0;
+
+    /** Batches that threw. Counted whether they were retried or quarantined. */
+    public int $failedBatches = 0;
+
+    /** Batches parked after failing too often; their hits are not counted. */
+    public int $quarantinedBatches = 0;
 }

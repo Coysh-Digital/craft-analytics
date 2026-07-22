@@ -179,10 +179,9 @@ test('a batch interrupted after commit is dropped, not counted twice', function(
         ->and(file_exists($file))->toBeFalse();
 });
 
-test('a failing sink rolls the batch back and leaves it to retry intact', function() {
-    makeSpool($this->spoolDir, [makeHit('/pricing'), makeHit('/about')]);
-
-    $failing = new class extends NullRollupSink {
+function failingSink(): NullRollupSink
+{
+    return new class extends NullRollupSink {
         public function flush(
             array $buckets,
             array $closedSessions,
@@ -191,8 +190,18 @@ test('a failing sink rolls the batch back and leaves it to retry intact', functi
             throw new \RuntimeException('sink is down');
         }
     };
+}
 
-    expect(fn() => makeDrainer($this, $failing)->run())->toThrow(\RuntimeException::class);
+test('a failing sink rolls the batch back and leaves it to retry intact', function() {
+    makeSpool($this->spoolDir, [makeHit('/pricing'), makeHit('/about')]);
+
+    // The failure is reported, not thrown: a caller who drains ten batches
+    // should not lose the other nine to this one.
+    $failed = makeDrainer($this, failingSink())->run();
+
+    expect($failed->failedBatches)->toBe(1)
+        ->and($failed->quarantinedBatches)->toBe(0)
+        ->and($failed->hits)->toBe(0);
 
     // Nothing committed, and the claimed file is still there.
     $committed = TestDb::connection()->createCommand('SELECT COUNT(*) FROM ' . Table::DRAIN_LOG)->queryScalar();
@@ -205,6 +214,65 @@ test('a failing sink rolls the batch back and leaves it to retry intact', functi
         ->and($this->sink->flushedViews)->toBe(2);
 });
 
+test('a batch that keeps failing is quarantined instead of blocking the queue', function() {
+    makeSpool($this->spoolDir, [makeHit('/pricing')]);
+
+    // Three failures is the allowance; transient faults get their retries.
+    for ($i = 0; $i < 3; $i++) {
+        $result = makeDrainer($this, failingSink())->run();
+        expect($result->failedBatches)->toBe(1);
+    }
+
+    expect($result->quarantinedBatches)->toBe(1)
+        ->and(glob($this->spoolDir . '/*.processing'))->toBeEmpty()
+        ->and(glob($this->spoolDir . '/*.failed'))->toHaveCount(1);
+
+    // The queue is moving again: a later batch commits rather than sitting
+    // behind the poisoned one forever.
+    makeSpool($this->spoolDir, [makeHit('/about')]);
+    $next = makeDrainer($this)->run();
+
+    expect($next->hits)->toBe(1)
+        ->and($next->quarantinedBatches)->toBe(0);
+});
+
+test('a quarantined batch is parked, not lost, and can be retried', function() {
+    makeSpool($this->spoolDir, [makeHit('/pricing'), makeHit('/about')]);
+
+    for ($i = 0; $i < 3; $i++) {
+        makeDrainer($this, failingSink())->run();
+    }
+
+    $drainer = makeDrainer($this);
+    expect($drainer->failedBatches())->toHaveCount(1)
+        ->and($drainer->retryFailed())->toBe(1);
+
+    // Once the cause is fixed the hits are counted — none were thrown away.
+    $result = makeDrainer($this)->run();
+
+    expect($result->hits)->toBe(2)
+        ->and($this->sink->flushedViews)->toBe(2)
+        ->and(glob($this->spoolDir . '/*.failed'))->toBeEmpty();
+});
+
+test('a transient failure does not count against a later batch', function() {
+    makeSpool($this->spoolDir, [makeHit('/pricing')]);
+
+    // Two failures, then success: the allowance resets, so the next batch to
+    // stumble is not quarantined on its first failure.
+    makeDrainer($this, failingSink())->run();
+    makeDrainer($this, failingSink())->run();
+    makeDrainer($this)->run();
+
+    expect(glob($this->spoolDir . '/*.attempts'))->toBeEmpty();
+
+    makeSpool($this->spoolDir, [makeHit('/about')]);
+    $result = makeDrainer($this, failingSink())->run();
+
+    expect($result->failedBatches)->toBe(1)
+        ->and($result->quarantinedBatches)->toBe(0);
+});
+
 test('malformed lines are discarded without taking the batch down', function() {
     makeSpool($this->spoolDir, [makeHit('/pricing')]);
     file_put_contents($this->spoolDir . '/spool.ndjson', "not json at all\n{\"si\":0}\n", FILE_APPEND);
@@ -214,6 +282,120 @@ test('malformed lines are discarded without taking the batch down', function() {
     expect($result->hits)->toBe(1)
         ->and($result->malformedLines)->toBe(2)
         ->and($this->sink->flushedViews)->toBe(1);
+});
+
+test('a hash the sketch cannot take is dropped at the boundary, not mid-commit', function() {
+    makeSpool($this->spoolDir, [makeHit('/pricing', 'aaaaaaaaaaaaaaaa')]);
+
+    // Every shape of wrong: too short, too long, right length but not hex.
+    // A build with a different HASH_BYTES mints exactly the first of these.
+    foreach (['deadbeef', 'aaaaaaaaaaaaaaaaa', 'ZZZZZZZZZZZZZZZZ', ''] as $bad) {
+        file_put_contents(
+            $this->spoolDir . '/spool.ndjson',
+            makeHit('/about', $bad)->encode() . "\n",
+            FILE_APPEND,
+        );
+    }
+
+    $result = makeDrainer($this)->run();
+
+    expect($result->malformedLines)->toBe(4)
+        ->and($result->failedBatches)->toBe(0)
+        // The good hit still commits — one bad line costs one line.
+        ->and($result->hits)->toBe(1)
+        ->and($this->sink->flushedViews)->toBe(1);
+});
+
+/**
+ * The real sink, with the sketch driver — the combination the wedge needed,
+ * and the default on any site without Redis.
+ */
+function sketchSink(Settings $settings): coyshdigital\craftanalytics\rollup\DbRollupSink
+{
+    $db = TestDb::connection();
+
+    return new coyshdigital\craftanalytics\rollup\DbRollupSink([
+        'db' => $db,
+        'counter' => new coyshdigital\craftanalytics\uniques\HllUniqueCounter(['settings' => $settings]),
+        'capper' => new coyshdigital\craftanalytics\rollup\DimensionCapper([
+            'db' => $db,
+            'settings' => $settings,
+            'dimensions' => new coyshdigital\craftanalytics\services\DimensionsService(['db' => $db]),
+        ]),
+        'channels' => new coyshdigital\craftanalytics\services\ChannelClassifier(),
+        'devices' => new coyshdigital\craftanalytics\services\DeviceParser(),
+        'pro' => new coyshdigital\craftanalytics\rollup\ProRollupWriter([
+            'db' => $db,
+            'settings' => $settings,
+            'isPro' => false,
+        ]),
+    ]);
+}
+
+test('a poisoned session in the hot layer does not wedge the drain', function() {
+    $now = time();
+    $sessions = new SessionStore(['settings' => $this->settings, 'cache' => $this->cache, 'siteIds' => [1]]);
+
+    // A session cached by an earlier build, whose hash this build cannot use.
+    // It is already durable in the hot layer and every drain re-stages it, so
+    // throwing on it inside the commit stopped the pipeline for good — no
+    // amount of retrying could clear it.
+    $sessions->apply(
+        coyshdigital\craftanalytics\session\SessionDelta::fromHit(makeHit('/pricing', 'deadbeef', $now - 7200)),
+        'batch-old',
+    );
+
+    makeSpool($this->spoolDir, [makeHit('/about', 'bbbbbbbbbbbbbbbb', $now - 7200)]);
+
+    $result = makeDrainer($this, sketchSink($this->settings))->run($now);
+
+    expect($result->failedBatches)->toBe(0)
+        ->and($result->hits)->toBe(1)
+        // Both sessions close: the poisoned one is folded in, minus only the
+        // unique it could not contribute.
+        ->and($result->closedSessions)->toBe(2)
+        ->and(glob($this->spoolDir . '/*.processing'))->toBeEmpty();
+
+    // The batch committed, and the poison is gone rather than waiting to be
+    // re-staged by the next run.
+    $committed = TestDb::connection()->createCommand('SELECT COUNT(*) FROM ' . Table::DRAIN_LOG)->queryScalar();
+    expect((int)$committed)->toBe(1);
+
+    $second = makeDrainer($this, sketchSink($this->settings))->run($now);
+
+    expect($second->failedBatches)->toBe(0)
+        ->and($sessions->activeSessions(1, $now))->toBeEmpty();
+});
+
+test('a corrupt sketch on a rollup row is rebuilt rather than replayed forever', function() {
+    $now = time();
+    $settings = $this->settings;
+
+    // First drain writes a good sketch onto the sessions row.
+    makeSpool($this->spoolDir, [makeHit('/pricing', 'aaaaaaaaaaaaaaaa', $now - 7200)]);
+    makeDrainer($this, sketchSink($settings))->run($now);
+
+    $db = TestDb::connection();
+    $row = (new yii\db\Query())->from(Table::SESSIONS_ROLLUP)->one($db);
+    expect($row)->not->toBeNull();
+
+    // A truncated write, an interrupted restore, a precision change — all land
+    // here. It is in the database, so clearing the cache cannot fix it.
+    $db->createCommand()->update(
+        Table::SESSIONS_ROLLUP,
+        ['uniques' => new yii\db\PdoValue('garbage', PDO::PARAM_LOB)],
+        ['id' => $row['id']],
+    )->execute();
+
+    makeSpool($this->spoolDir, [makeHit('/other', 'bbbbbbbbbbbbbbbb', $now - 7200)]);
+    $result = makeDrainer($this, sketchSink($settings))->run($now);
+
+    // The row's unique estimate restarts; every other figure keeps counting.
+    expect($result->failedBatches)->toBe(0)
+        ->and($result->closedSessions)->toBe(1);
+
+    $after = (new yii\db\Query())->from(Table::SESSIONS_ROLLUP)->one($db);
+    expect((int)$after['sessions'])->toBe(2);
 });
 
 test('sessions are built from a batch and closed once idle', function() {

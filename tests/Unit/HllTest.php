@@ -150,6 +150,29 @@ test('mergeAll tolerates empty and null blobs', function() {
     expect($merged->count())->toBe(50);
 });
 
+test('mergeAll skips what it cannot read rather than failing the range', function() {
+    $skipped = [];
+    $merged = Hll::mergeAll(
+        [
+            sketchOf(50)->serialize(),
+            'not a sketch at all',
+            // The likelier fault by far: a row written before hllPrecision
+            // was changed. Unmergeable, but no reason to lose the range.
+            sketchOf(50, 99, 14)->serialize(),
+            sketchOf(50, 500)->serialize(),
+        ],
+        Hll::DEFAULT_PRECISION,
+        static function(InvalidArgumentException $e) use (&$skipped) {
+            $skipped[] = $e->getMessage();
+        },
+    );
+
+    // The two readable sketches still answer, and the caller was told what
+    // was dropped rather than it happening silently.
+    expect($skipped)->toHaveCount(2)
+        ->and(abs($merged->count() - 100) / 100)->toBeLessThan(errorBound(Hll::DEFAULT_PRECISION));
+});
+
 test('a sketch survives serialisation unchanged', function(int $n) {
     $original = sketchOf($n);
     $restored = Hll::deserialize($original->serialize());

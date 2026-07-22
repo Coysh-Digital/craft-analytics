@@ -261,10 +261,22 @@ final class Hll
      * Merges a set of serialised sketches — how a date range's uniques are
      * answered.
      *
+     * Skips what it cannot read rather than throwing. A range spans many rows
+     * and one of them may be corrupt, truncated, or — much more likely — left
+     * at a precision the operator has since changed away from. Refusing the
+     * whole range because one row of it is unreadable would take out every
+     * unique figure in the reports, and the nightly compaction with them, for
+     * a fault that costs one bucket. `$onUnreadable` is how the caller says
+     * so out loud.
+     *
      * @param iterable<string|null> $blobs
+     * @param ?callable(\InvalidArgumentException):void $onUnreadable
      */
-    public static function mergeAll(iterable $blobs, int $precision = self::DEFAULT_PRECISION): self
-    {
+    public static function mergeAll(
+        iterable $blobs,
+        int $precision = self::DEFAULT_PRECISION,
+        ?callable $onUnreadable = null,
+    ): self {
         $merged = new self($precision);
 
         foreach ($blobs as $blob) {
@@ -272,7 +284,16 @@ final class Hll
                 continue;
             }
 
-            $merged->merge(self::deserialize($blob));
+            try {
+                // Both steps can reject the blob: deserialize on a damaged
+                // header or payload, merge on a precision that no longer
+                // matches the configured one.
+                $merged->merge(self::deserialize($blob));
+            } catch (\InvalidArgumentException $e) {
+                if ($onUnreadable !== null) {
+                    $onUnreadable($e);
+                }
+            }
         }
 
         return $merged;

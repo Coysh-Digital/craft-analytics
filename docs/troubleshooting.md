@@ -33,6 +33,34 @@ A `spool.ndjson` that grows when you load a page means capture is fine and the
 problem is the drain. An empty directory means nothing is being captured -
 read on.
 
+**Are batches piling up?** In the same directory, files ending `.processing`
+are batches the drain has claimed but not finished, and files ending `.failed`
+are batches it has given up on. One or two `.processing` files during a run is
+normal. A growing pile of either is not:
+
+```bash
+ls storage/runtime/craft-analytics/spool/*.processing storage/runtime/craft-analytics/spool/*.failed
+```
+
+`drain/run` reports both, and exits non-zero when anything failed, so a cron
+that mails on failure will tell you. The cause is in the Craft logs.
+
+## A batch was quarantined
+
+A batch that fails three times running is moved aside to a `.failed` file so it
+cannot block the batches behind it. Its hits are not counted, but they are not
+deleted either - the file is still there.
+
+Once you have fixed whatever caused it, put them back:
+
+```bash
+php craft craft-analytics/drain/retry
+php craft craft-analytics/drain/run
+```
+
+Retrying is safe. A batch keeps its identity across a retry, so one that had in
+fact partly committed is recognised and dropped rather than counted twice.
+
 ## Nothing is being captured
 
 **Are you testing with curl?** That would explain it. `curl` sends no

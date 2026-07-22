@@ -145,7 +145,18 @@ class Compactor extends Component
                 }
 
                 if ($hasSketch) {
-                    $sketch = Hll::mergeAll($sketches[$key], $this->settings()->hllPrecision);
+                    // Tolerant on purpose: compaction rewrites a whole day at
+                    // once, so one unreadable hourly sketch must not be able
+                    // to stop the day — or every day after it — from ever
+                    // compacting.
+                    $sketch = Hll::mergeAll(
+                        $sketches[$key],
+                        $this->settings()->hllPrecision,
+                        static fn(\InvalidArgumentException $e) => Craft::warning(
+                            'Skipped an unreadable sketch while compacting ' . $table . ': ' . $e->getMessage(),
+                            __METHOD__,
+                        ),
+                    );
                     $row['uniques'] = $sketches[$key] === []
                         ? null
                         : new \yii\db\PdoValue($sketch->serialize(), \PDO::PARAM_LOB);

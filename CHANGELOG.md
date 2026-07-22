@@ -1,5 +1,41 @@
 # Release Notes for Craft Analytics
 
+## 1.4.3 - 2026-07-22
+
+### Fixed
+
+- A single unusable record could stop the drain permanently, and silently. A
+  visitor hash that wasn't 16 hex characters was only rejected deep inside the
+  commit, by the sketch that counts unique visitors - too late to skip, and
+  inside a transaction. The batch rolled back, its file stayed claimed, and
+  every later run picked it up, failed at the same line, and got no further.
+  Nothing surfaced it: the site kept serving, the spool kept growing, and the
+  reports simply stopped advancing. The only way out was clearing the data
+  cache, which is not something the error suggested and which discarded every
+  open session with it. Affects sites using the sketch counter, which is the
+  default wherever Redis is absent.
+- Visitor hashes are now checked when they are read off the spool, where a
+  counter for discarded lines already existed, and anything unusable that
+  reaches the rollup writer some other way is dropped with a warning rather
+  than thrown. Losing one visitor from one bucket's estimate is a rounding
+  error; losing every write after it is an outage.
+- A corrupt unique-visitor sketch on a rollup row wedged the drain the same
+  way, and worse - being in the database, clearing the cache did not fix it. A
+  sketch that cannot be read is now rebuilt from scratch for that row.
+- Changing `hllPrecision` on a site with existing data broke every unique
+  figure in the reports and stopped the nightly compaction, because sketches
+  written at the old precision cannot be merged with new ones. Unreadable
+  sketches are now skipped when answering a range, and rebuilt as each row is
+  next written.
+- A batch that fails is no longer retried forever. It gets three attempts, so
+  a deadlock or a dropped connection costs nothing, and is then moved aside to
+  a `.failed` file so the batches behind it can commit. Nothing is deleted:
+  `craft-analytics/drain/retry` puts quarantined batches back once the cause
+  is fixed, and a retried batch keeps its identity so it cannot be double
+  counted.
+- `drain/run` now reports failed and quarantined batches and exits non-zero
+  when there are any, so a cron job says something instead of failing quietly.
+
 ## 1.4.2 - 2026-07-21
 
 ### Fixed

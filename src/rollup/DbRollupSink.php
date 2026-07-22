@@ -8,6 +8,7 @@ use coyshdigital\craftanalytics\enums\DimensionType;
 use coyshdigital\craftanalytics\Plugin;
 use coyshdigital\craftanalytics\services\ChannelClassifier;
 use coyshdigital\craftanalytics\services\DeviceParser;
+use coyshdigital\craftanalytics\services\IdentityService;
 use coyshdigital\craftanalytics\session\Session;
 use coyshdigital\craftanalytics\uniques\UniqueCounterInterface;
 use coyshdigital\craftanalytics\uniques\UniqueScope;
@@ -20,7 +21,10 @@ use yii\db\Query;
  * Writes a drained batch into the rollup tables.
  *
  * Called inside the drain's transaction, so anything thrown here rolls the
- * whole batch back and it is retried intact on the next run.
+ * whole batch back and it is retried intact on the next run. Which is the
+ * reason a record this cannot use is dropped with a warning rather than
+ * thrown: it would fail identically on every retry, and the batch would never
+ * commit. Throw only for faults a retry could actually clear.
  *
  * Everything is an upsert against a unique key, so a busy page's thousandth
  * view of the hour updates the same row as its first (C2). Dimension values
@@ -239,6 +243,7 @@ class DbRollupSink extends Component implements RollupSinkInterface
     private function recordUniques(string $table, array $keys, UniqueScope $scope, array $hashes): void
     {
         $counter = $this->counter();
+        $hashes = $this->usableHashes($table, $hashes);
 
         if (!$counter->storesOnRow()) {
             $counter->record($scope, $hashes, null);
@@ -256,6 +261,36 @@ class DbRollupSink extends Component implements RollupSinkInterface
         $this->db()->createCommand()
             ->update($table, ['uniques' => new \yii\db\PdoValue($blob, \PDO::PARAM_LOB)], $keys)
             ->execute();
+    }
+
+    /**
+     * Drops hashes no counter driver can accept.
+     *
+     * This is the backstop for a bad value that reached the hot layer rather
+     * than the spool — a session cached by a build with a different hash
+     * width, say. Such a session is already durable in the cache and is
+     * re-staged by every drain, so throwing on it wedges the pipeline
+     * permanently. Losing one visitor from a bucket's unique estimate is a
+     * rounding error against losing every write that follows.
+     *
+     * @param string[] $hashes
+     * @return string[]
+     */
+    private function usableHashes(string $table, array $hashes): array
+    {
+        $usable = array_values(array_filter($hashes, IdentityService::isValidHash(...)));
+        $dropped = count($hashes) - count($usable);
+
+        if ($dropped > 0) {
+            Craft::warning(sprintf(
+                'Skipped %d unusable visitor hash(es) while rolling up %s. '
+                . 'These were most likely written by a different plugin version; the rollup is otherwise intact.',
+                $dropped,
+                $table,
+            ), __METHOD__);
+        }
+
+        return $usable;
     }
 
     /**

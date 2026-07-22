@@ -10,6 +10,7 @@ use coyshdigital\craftanalytics\rollup\Aggregator;
 use coyshdigital\craftanalytics\rollup\GoalMatcher;
 use coyshdigital\craftanalytics\rollup\JourneyRecorder;
 use coyshdigital\craftanalytics\rollup\RollupSinkInterface;
+use coyshdigital\craftanalytics\services\IdentityService;
 use coyshdigital\craftanalytics\session\Session;
 use coyshdigital\craftanalytics\session\SessionDelta;
 use coyshdigital\craftanalytics\session\SessionStore;
@@ -35,10 +36,34 @@ use yii\db\Query;
  *    last touched them and the batch that closed them, so a replay before
  *    the commit is absorbed, and a session closed by an already-committed
  *    batch is discarded instead of being counted again.
+ *
+ * Those three make replay safe, which is what makes the fourth affordable:
+ *
+ * 4. **Bounded retries, then quarantine.** A batch that throws is retried,
+ *    because most failures are transient. A batch that keeps throwing is
+ *    moved aside rather than retried forever - it would otherwise hold every
+ *    later batch behind it and stop the pipeline for good, which is exactly
+ *    what an unprocessable record used to do.
  */
 class Drainer extends Component
 {
     private const CLAIMED_SUFFIX = '.processing';
+
+    /** Where a batch goes once retrying it has stopped being worth it. */
+    private const FAILED_SUFFIX = '.failed';
+
+    /** Sidecar recording how many times a claimed batch has thrown. */
+    private const ATTEMPTS_SUFFIX = '.attempts';
+
+    /**
+     * Failures a batch gets before it is quarantined.
+     *
+     * More than one because the commonest failures — a deadlock, a dropped
+     * connection — are transient and the batch is perfectly good. Not
+     * unlimited because the rest are not: a batch that cannot be processed
+     * retried forever is an outage, since every later batch queues behind it.
+     */
+    private const MAX_ATTEMPTS = 3;
 
     public ?Connection $db = null;
     public ?RollupSinkInterface $sink = null;
@@ -59,10 +84,26 @@ class Drainer extends Component
         $result = new DrainResult();
 
         foreach ($this->claim() as $file) {
-            $this->process($file, $now, $result);
+            // One bad batch costs that batch. Letting it out of here would
+            // strand its file as claimed-but-unfinished, and every subsequent
+            // run would reclaim it, fail on it again, and never reach the
+            // batches queued behind it.
+            try {
+                $this->process($file, $now, $result);
+            } catch (\Throwable $e) {
+                $this->recordFailure($file, $e, $result);
+            }
         }
 
-        $this->closeIdleSessions($now, $result);
+        try {
+            $this->closeIdleSessions($now, $result);
+        } catch (\Throwable $e) {
+            // No file to quarantine: the fault is a session in the hot layer,
+            // which the next run re-stages under a fresh batch id. Report it
+            // rather than taking the run's completed batches down with it.
+            $result->failedBatches++;
+            Craft::error('Failed to close idle sessions: ' . $e->getMessage(), __METHOD__);
+        }
 
         return $result;
     }
@@ -99,7 +140,7 @@ class Drainer extends Component
         $batchId = basename($file, self::CLAIMED_SUFFIX);
 
         if ($this->isCommitted($batchId)) {
-            @unlink($file);
+            $this->discard($file);
             $result->skippedBatches++;
 
             return;
@@ -110,7 +151,7 @@ class Drainer extends Component
 
         if ($hits === []) {
             $this->commit($batchId, [], []);
-            @unlink($file);
+            $this->discard($file);
 
             return;
         }
@@ -141,12 +182,125 @@ class Drainer extends Component
             $this->sessions()->delete($session);
         }
 
-        @unlink($file);
+        $this->discard($file);
 
         $result->batches++;
         $result->hits += count($hits);
         $result->buckets += $aggregator->bucketCount();
         $result->closedSessions += count($closed);
+    }
+
+    /**
+     * Drops a finished batch and the failure record it may have accumulated,
+     * so an earlier transient failure can't count against a later batch that
+     * happens to reuse the name.
+     */
+    private function discard(string $file): void
+    {
+        @unlink($file);
+        $this->forgetAttempts($file);
+    }
+
+    /**
+     * Drops a batch's failure record, if it ever earned one. Most never do,
+     * so the existence check is the common path rather than the exception.
+     */
+    private function forgetAttempts(string $file): void
+    {
+        $path = $file . self::ATTEMPTS_SUFFIX;
+
+        if (is_file($path)) {
+            @unlink($path);
+        }
+    }
+
+    /**
+     * Counts a batch's failure, and quarantines it once retrying has stopped
+     * being worth it.
+     *
+     * Quarantine renames rather than deletes: the batch is parked where it can
+     * no longer block the queue, but its hits are still on disk and
+     * `drain/retry` puts them back. The file keeps its name up to the suffix,
+     * so a retried batch presents the same identity to `drain_log` and cannot
+     * be counted twice if it had in fact partly committed.
+     */
+    private function recordFailure(string $file, \Throwable $e, DrainResult $result): void
+    {
+        $result->failedBatches++;
+        $attempts = $this->countAttempt($file);
+
+        if ($attempts < self::MAX_ATTEMPTS) {
+            Craft::error(sprintf(
+                'Drain batch %s failed (attempt %d of %d), and will be retried: %s',
+                basename($file, self::CLAIMED_SUFFIX),
+                $attempts,
+                self::MAX_ATTEMPTS,
+                $e->getMessage(),
+            ), __METHOD__);
+
+            return;
+        }
+
+        @rename($file, substr($file, 0, -strlen(self::CLAIMED_SUFFIX)) . self::FAILED_SUFFIX);
+        $this->forgetAttempts($file);
+        $result->quarantinedBatches++;
+
+        Craft::error(sprintf(
+            'Drain batch %s failed %d times and has been quarantined; its hits are not counted. '
+            . 'Run craft-analytics/drain/retry once the cause is fixed. Last error: %s',
+            basename($file, self::CLAIMED_SUFFIX),
+            $attempts,
+            $e->getMessage(),
+        ), __METHOD__);
+    }
+
+    /**
+     * Records one more failure against a claimed batch, and returns the total.
+     *
+     * Kept in a sidecar rather than in the file's name because the name *is*
+     * the batch identity — renaming to count attempts would make a replay look
+     * like a new batch and defeat the commit marker.
+     */
+    private function countAttempt(string $file): int
+    {
+        $path = $file . self::ATTEMPTS_SUFFIX;
+        $attempts = (is_file($path) ? (int)file_get_contents($path) : 0) + 1;
+        @file_put_contents($path, (string)$attempts);
+
+        return $attempts;
+    }
+
+    /**
+     * Puts quarantined batches back in the queue.
+     *
+     * @return int how many were requeued
+     */
+    public function retryFailed(): int
+    {
+        $dir = $this->spool()->spoolDir();
+        $requeued = 0;
+
+        foreach (glob($dir . DIRECTORY_SEPARATOR . '*' . self::FAILED_SUFFIX) ?: [] as $file) {
+            $claimed = substr($file, 0, -strlen(self::FAILED_SUFFIX)) . self::CLAIMED_SUFFIX;
+
+            if (@rename($file, $claimed)) {
+                // A fresh allowance: the operator has said the cause is fixed.
+                $this->forgetAttempts($claimed);
+                $requeued++;
+            }
+        }
+
+        return $requeued;
+    }
+
+    /**
+     * Batches parked by {@see recordFailure()}, waiting on an operator.
+     *
+     * @return string[]
+     */
+    public function failedBatches(): array
+    {
+        return glob($this->spool()->spoolDir() . DIRECTORY_SEPARATOR . '*' . self::FAILED_SUFFIX) ?: [];
     }
 
     /**
@@ -286,7 +440,10 @@ class Drainer extends Component
 
             $hit = Hit::decode($line);
 
-            if ($hit === null || $hit->siteId === 0 || $hit->visitorHash === '') {
+            // The hash is checked here, not where it is finally used: a line
+            // the sketch cannot accept is worth one increment of a counter at
+            // the boundary, and is worth nothing at all inside a transaction.
+            if ($hit === null || $hit->siteId === 0 || !IdentityService::isValidHash($hit->visitorHash)) {
                 $malformed++;
                 continue;
             }
