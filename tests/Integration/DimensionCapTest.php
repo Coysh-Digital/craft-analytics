@@ -35,6 +35,7 @@ beforeEach(function() {
     ]);
     $this->sink = new DbRollupSink([
         'db' => $db,
+        'settings' => $this->settings,
         'counter' => new HllUniqueCounter(['settings' => new Settings()]),
         'capper' => $this->capper,
         'channels' => new ChannelClassifier(),

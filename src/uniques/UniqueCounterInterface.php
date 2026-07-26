@@ -48,4 +48,33 @@ interface UniqueCounterInterface
      *                                        store counters themselves)
      */
     public function estimate(array $scopes, iterable $sketches = []): int;
+
+    /**
+     * Folds a day's hourly counters into its daily one.
+     *
+     * Nightly compaction rewrites 24 hourly rollup rows into one row with
+     * `hour = -1`, and readers build their scopes **from the stored row** - so
+     * after compaction they ask for `…:-1:…`. A driver that keys its own
+     * storage recorded under the real hours and has nothing under that key,
+     * which is why this exists: without it, every unique figure older than
+     * `hourlyWindowDays` silently reads zero.
+     *
+     * Called inside the compaction transaction, so it must be idempotent (a
+     * re-run merges the same counters again, which for a union is a no-op) and
+     * must not destroy the hourly counters - a rollback would leave the day
+     * with neither. Dropping those is {@see discardCompacted()}'s job.
+     *
+     * @param UniqueScope[] $hourly
+     */
+    public function compact(UniqueScope $daily, array $hourly): void;
+
+    /**
+     * Drops hourly counters whose fold into the daily one has committed.
+     *
+     * Cleanup, called after the transaction: safe to skip, safe to repeat.
+     * The same commit-then-tidy split the drain uses for its spool files.
+     *
+     * @param UniqueScope[] $hourly
+     */
+    public function discardCompacted(array $hourly): void;
 }

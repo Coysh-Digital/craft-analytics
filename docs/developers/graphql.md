@@ -25,7 +25,11 @@ scope:
   - 'sites.054f4ae9-…:read'
 ```
 
-You need the site scope too, or Craft refuses the query before it reaches us.
+You need the site scope too, and it is enforced per query: a schema may only
+read analytics for sites it has `sites.<uid>:read` on. Asking for a site it
+doesn't have returns `Analytics for that site are not in this schema` - the
+same answer a site that doesn't exist gets, so the endpoint can't be used to
+enumerate them.
 
 ## craftAnalyticsTotals
 
@@ -55,8 +59,9 @@ You need the site scope too, or Craft refuses the query before it reaches us.
 }
 ```
 
-**Arguments:** `siteId` (defaults to the primary site), `period` (`today`,
-`yesterday`, `7d`, `30d`, `90d`, `12mo` - defaults to `30d`).
+**Arguments:** `siteId` (must be a site this schema can read; defaults to the
+primary site, or the first readable one), `period` (`today`, `yesterday`,
+`7d`, `30d`, `90d`, `12mo` - defaults to `30d`).
 
 ## craftAnalyticsTopPages
 

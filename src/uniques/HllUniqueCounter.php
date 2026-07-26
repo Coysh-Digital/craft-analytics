@@ -54,6 +54,18 @@ class HllUniqueCounter extends Component implements UniqueCounterInterface
     }
 
     /**
+     * Nothing to do: this driver's sketches live in the rollup rows, and the
+     * compactor merges those itself before it writes the daily row.
+     */
+    public function compact(UniqueScope $daily, array $hourly): void
+    {
+    }
+
+    public function discardCompacted(array $hourly): void
+    {
+    }
+
+    /**
      * Reads the sketch already on the row, or starts a new one if it cannot be
      * read.
      *

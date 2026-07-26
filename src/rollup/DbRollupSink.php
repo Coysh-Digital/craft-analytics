@@ -5,6 +5,7 @@ namespace coyshdigital\craftanalytics\rollup;
 use coyshdigital\craftanalytics\db\Table;
 use coyshdigital\craftanalytics\db\Upsert;
 use coyshdigital\craftanalytics\enums\DimensionType;
+use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\Plugin;
 use coyshdigital\craftanalytics\services\ChannelClassifier;
 use coyshdigital\craftanalytics\services\DeviceParser;
@@ -38,6 +39,9 @@ class DbRollupSink extends Component implements RollupSinkInterface
     public ?ChannelClassifier $channels = null;
     public ?DeviceParser $devices = null;
     public ?ProRollupWriter $pro = null;
+
+    /** Settings override; defaults to the plugin's. Set in tests. */
+    public ?Settings $settings = null;
 
     public function flush(array $buckets, array $closedSessions, ?InteractionBuckets $interactions = null): void
     {
@@ -159,7 +163,14 @@ class DbRollupSink extends Component implements RollupSinkInterface
 
     private function writeSource(Session $session, string $date, int $hour, bool $isBounce): void
     {
-        $channel = $this->channels()->classify($session->referrer);
+        // A tagged arrival is Campaign, whatever the referrer header said - the
+        // same fact the campaigns rollup is about to record, so the two screens
+        // agree. Gated on `enableCampaigns` for the same reason ProRollupWriter
+        // is: a site that has turned campaigns off should not find a Campaign
+        // channel in its sources report.
+        $hasCampaign = $this->settings()->enableCampaigns && $session->campaigns !== [];
+
+        $channel = $this->channels()->classify($session->referrer, $hasCampaign);
         $host = ChannelClassifier::host($session->referrer);
 
         $refHostDimId = $host === null
@@ -342,6 +353,11 @@ class DbRollupSink extends Component implements RollupSinkInterface
     private function channels(): ChannelClassifier
     {
         return $this->channels ??= Plugin::getInstance()->getChannels();
+    }
+
+    private function settings(): Settings
+    {
+        return $this->settings ??= Plugin::getInstance()->getSettings();
     }
 
     private function devices(): DeviceParser

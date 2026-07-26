@@ -316,6 +316,7 @@ function sketchSink(Settings $settings): coyshdigital\craftanalytics\rollup\DbRo
 
     return new coyshdigital\craftanalytics\rollup\DbRollupSink([
         'db' => $db,
+        'settings' => $settings,
         'counter' => new coyshdigital\craftanalytics\uniques\HllUniqueCounter(['settings' => $settings]),
         'capper' => new coyshdigital\craftanalytics\rollup\DimensionCapper([
             'db' => $db,

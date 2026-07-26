@@ -32,6 +32,7 @@ beforeEach(function() {
     $this->dimensions = new DimensionsService(['db' => $db]);
     $this->sink = new DbRollupSink([
         'db' => $db,
+        'settings' => $this->settings,
         'counter' => new HllUniqueCounter(['settings' => $this->settings]),
         'capper' => new DimensionCapper([
             'db' => $db,
@@ -232,6 +233,60 @@ test('direct traffic is recorded without a referrer dimension', function() {
 
     expect((int)$row['channel'])->toBe(Channel::Direct->value)
         ->and((int)$row['refHostDimId'])->toBe(0);
+});
+
+test('a tagged session is Campaign in sources, not Direct', function() {
+    $start = mktime(10, 0, 0, 7, 16, 2026);
+
+    // An email campaign: tagged URL, no referrer header. Without the campaign
+    // being consulted this lands in Direct, and the sources report then
+    // contradicts the campaigns report about the same visit.
+    flushHits($this, [], [new Session(
+        siteId: 1, sessionKey: 'k', visitorHash: 'aaaaaaaaaaaaaaaa',
+        startedAt: $start, lastSeenAt: $start + 30, pageviews: 2,
+        entryPath: '/', lastPath: '/pricing', referrer: '',
+        campaigns: [['s' => 'newsletter', 'm' => 'email', 'c' => 'july']],
+    )]);
+
+    $row = (new Query())->from(Table::SOURCES_ROLLUP)->one(TestDb::connection());
+
+    expect((int)$row['channel'])->toBe(Channel::Campaign->value)
+        ->and((int)$row['refHostDimId'])->toBe(0);
+});
+
+test('a tagged session that arrived from a search engine is still Campaign', function() {
+    $start = mktime(10, 0, 0, 7, 16, 2026);
+
+    // The tag is the site owner saying where this came from; it outranks the
+    // referrer header, and the host is still recorded alongside it.
+    flushHits($this, [], [new Session(
+        siteId: 1, sessionKey: 'k', visitorHash: 'aaaaaaaaaaaaaaaa',
+        startedAt: $start, lastSeenAt: $start + 30, pageviews: 2,
+        entryPath: '/', lastPath: '/pricing',
+        referrer: 'https://www.google.com/search?q=x',
+        campaigns: [['s' => 'google', 'm' => 'cpc']],
+    )]);
+
+    $row = (new Query())->from(Table::SOURCES_ROLLUP)->one(TestDb::connection());
+
+    expect((int)$row['channel'])->toBe(Channel::Campaign->value)
+        ->and((int)$row['refHostDimId'])->not->toBe(0);
+});
+
+test('with campaigns disabled a tagged session falls back to its referrer', function() {
+    $start = mktime(10, 0, 0, 7, 16, 2026);
+    $this->settings->enableCampaigns = false;
+
+    flushHits($this, [], [new Session(
+        siteId: 1, sessionKey: 'k', visitorHash: 'aaaaaaaaaaaaaaaa',
+        startedAt: $start, lastSeenAt: $start + 30, pageviews: 2,
+        entryPath: '/', lastPath: '/pricing', referrer: '',
+        campaigns: [['s' => 'newsletter', 'm' => 'email']],
+    )]);
+
+    $row = (new Query())->from(Table::SOURCES_ROLLUP)->one(TestDb::connection());
+
+    expect((int)$row['channel'])->toBe(Channel::Direct->value);
 });
 
 test('the element id is recorded so entry stats need no second lookup', function() {

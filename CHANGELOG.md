@@ -1,5 +1,66 @@
 # Release Notes for Craft Analytics
 
+## 1.5.0 - 2026-07-26
+
+> **Before you upgrade.** Retention was only being enforced on four of the
+> fourteen aggregate tables, so on most sites the Pro rollups have been
+> accumulating past the period the Privacy screen states. The first garbage
+> collection after this release applies `rollupRetentionMonths` (default 26) to
+> all of them, and that deletion is permanent. Sites younger than the retention
+> period lose nothing. If you want to keep more than 26 months, raise the
+> setting **before** the next `craft-analytics/gc/run`, and take a backup if the
+> data matters.
+
+### Fixed
+
+- Unique visitors read zero for every day older than `hourlyWindowDays` on the
+  `redis` and `exact` counter drivers. Nightly compaction rewrites a day's 24
+  hourly rows into one row at `hour = -1`, and the reports build the counter
+  key they ask for from the stored row - so from that night on they asked for a
+  key that had never been written, and Redis and the membership table both
+  answered nothing. The sketch driver was never affected, because its state is
+  the blob on the row compaction already merged. Compaction now folds the
+  hourly counters into the daily one for every driver. Affects any site whose
+  cache is Redis, which is what `auto` picks.
+- Campaign traffic was reported as Direct on the Sources and Channels screens.
+  The channel classifier could return Campaign but was never told whether the
+  visit arrived tagged, so a `utm_`-tagged arrival with no referrer fell
+  through to Direct - and the Sources screen then contradicted the Campaigns
+  screen about the same visit.
+- Retention was only enforced on four of the fourteen aggregate tables. Ten of
+  them were kept indefinitely while the Privacy screen went on stating a
+  retention period: campaigns, geo, events, scroll, search, outbound, segments,
+  crawlers, goals and funnel steps. Site search terms are the sharp end of
+  that, being free text a visitor typed. The table list now lives beside the
+  schema, and a test reads the real schema and fails if a date-keyed table is
+  missing from it.
+- `craftanalytics_eventsrollup` was never compacted, so it kept 24 rows a day
+  per event and path forever - the one rollup whose growth tracked traffic
+  rather than cardinality.
+
+### Security
+
+- CSV exports no longer let a recorded value act as a spreadsheet formula.
+  Paths, referrer hosts, event names and search terms are all values somebody
+  else chose, and several arrive through the public beacon, so a visitor could
+  request a path beginning `=` and wait for it to be exported and opened in
+  Excel. JSON exports were never affected.
+- The GraphQL analytics queries now check the schema's per-site scope. A token
+  granted `craftAnalytics.read` could read any site on the install by passing a
+  `siteId`, bypassing the site scoping applied everywhere else.
+- The consent endpoint is now rate limited and rejects posts carrying a
+  cross-origin `Origin` header. It is CSRF-exempt by necessity - it is posted
+  to from pages that may have come from a cache - but unlike the beacon a
+  forged request there writes a row into the consent evidence log or deletes
+  somebody's journeys.
+
+### Changed
+
+- `UniqueCounterInterface` gains `compact()` and `discardCompacted()`, which is
+  how the counters that live outside the rollup row now survive compaction.
+  This only matters if you had implemented the interface yourself, which is not
+  a documented extension point; the three shipped drivers are unaffected.
+
 ## 1.4.3 - 2026-07-22
 
 ### Fixed

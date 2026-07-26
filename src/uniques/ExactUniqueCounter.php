@@ -84,6 +84,56 @@ class ExactUniqueCounter extends Component implements UniqueCounterInterface
             ->count('DISTINCT [[visitorHash]]', $this->db());
     }
 
+    /**
+     * Re-files the day's hourly membership rows under its daily scope key.
+     *
+     * Copy rather than rename: a visitor seen in three hours has three rows,
+     * and an UPDATE would collide on the (scopeKey, visitorHash) unique index
+     * the moment the second one landed. Upserting the distinct hashes is both
+     * collision-free and idempotent, so a re-run after a rolled-back
+     * compaction costs nothing.
+     *
+     * @param UniqueScope[] $hourly
+     */
+    public function compact(UniqueScope $daily, array $hourly): void
+    {
+        if ($hourly === []) {
+            return;
+        }
+
+        $db = $this->db();
+
+        $hashes = (new Query())
+            ->select('visitorHash')
+            ->distinct()
+            ->from(Table::UNIQUE_MEMBERS)
+            ->where(['scopeKey' => array_map(static fn(UniqueScope $scope) => $scope->key(), $hourly)])
+            ->column($db);
+
+        foreach ($hashes as $hash) {
+            $db->createCommand()->upsert(Table::UNIQUE_MEMBERS, [
+                'scopeKey' => $daily->key(),
+                'siteId' => $daily->siteId,
+                'date' => $daily->date,
+                'visitorHash' => (string)$hash,
+            ], false)->execute();
+        }
+    }
+
+    /**
+     * @param UniqueScope[] $hourly
+     */
+    public function discardCompacted(array $hourly): void
+    {
+        if ($hourly === []) {
+            return;
+        }
+
+        $this->db()->createCommand()->delete(Table::UNIQUE_MEMBERS, [
+            'scopeKey' => array_map(static fn(UniqueScope $scope) => $scope->key(), $hourly),
+        ])->execute();
+    }
+
     private function db(): Connection
     {
         return $this->db ??= Craft::$app->getDb();

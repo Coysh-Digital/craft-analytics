@@ -2,6 +2,7 @@
 
 namespace coyshdigital\craftanalytics\controllers;
 
+use coyshdigital\craftanalytics\helpers\RateLimit;
 use coyshdigital\craftanalytics\ingest\Hit;
 use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\Plugin;
@@ -83,7 +84,7 @@ class BeaconController extends Controller
             $site->id,
         );
 
-        if ($this->isRateLimited($visitorHash, $settings)) {
+        if (RateLimit::exceeded('beacon', $visitorHash, $settings->beaconRateLimit)) {
             return $this->noContent();
         }
 
@@ -143,32 +144,6 @@ class BeaconController extends Controller
         ));
 
         return $this->noContent();
-    }
-
-    /**
-     * Counts beacons per visitor per minute.
-     *
-     * Keyed on the salted visitor hash, not on an address — there is no IP
-     * here to key on, by design.
-     */
-    private function isRateLimited(string $visitorHash, Settings $settings): bool
-    {
-        $cache = Craft::$app->getCache();
-
-        if ($cache === null) {
-            return false;
-        }
-
-        $key = 'ca:rl:' . $visitorHash . ':' . floor(time() / 60);
-        $count = (int)$cache->get($key);
-
-        if ($count >= $settings->beaconRateLimit) {
-            return true;
-        }
-
-        $cache->set($key, $count + 1, 120);
-
-        return false;
     }
 
     /**

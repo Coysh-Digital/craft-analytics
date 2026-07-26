@@ -7,6 +7,7 @@ use coyshdigital\craftanalytics\db\Table;
 use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\Plugin;
 use coyshdigital\craftanalytics\rollup\Compactor;
+use coyshdigital\craftanalytics\uniques\UniqueCounterInterface;
 use Craft;
 use yii\base\Component;
 use yii\db\Connection;
@@ -24,6 +25,9 @@ class GcService extends Component
     public ?Connection $db = null;
     public ?Settings $settings = null;
 
+    /** Unique-counter override, handed to the compactor. Set in tests. */
+    public ?UniqueCounterInterface $counter = null;
+
     /**
      * @return array<string,int> what was done, for the console command
      */
@@ -32,7 +36,11 @@ class GcService extends Component
         $now ??= time();
 
         return [
-            'compactedDays' => (new Compactor(['db' => $this->db, 'settings' => $this->settings]))->run($now),
+            'compactedDays' => (new Compactor([
+                'db' => $this->db,
+                'settings' => $this->settings,
+                'counter' => $this->counter,
+            ]))->run($now),
             'expiredRollups' => $this->deleteExpiredRollups($now),
             'expiredMembers' => $this->deleteExpiredUniqueMembers($now),
             'expiredJourneys' => $this->deleteExpiredJourneys($now),
@@ -80,18 +88,18 @@ class GcService extends Component
     /**
      * Enforces the retention window. This is the promise in the privacy
      * notice, so it runs on data age rather than on anything discretionary.
+     *
+     * The table list lives in SchemaBuilder beside the schema that creates
+     * them, for the same reason dimensionReferences() does: a rollup added
+     * without an entry here is a rollup kept forever, silently, while the
+     * Privacy screen goes on quoting a retention period.
      */
     private function deleteExpiredRollups(int $now): int
     {
         $cutoff = $this->retentionCutoff($now);
         $deleted = 0;
 
-        foreach ([
-            Table::PAGES_ROLLUP,
-            Table::SESSIONS_ROLLUP,
-            Table::SOURCES_ROLLUP,
-            Table::DEVICES_ROLLUP,
-        ] as $table) {
+        foreach (SchemaBuilder::expiringRollups() as $table) {
             $deleted += $this->db()->createCommand()
                 ->delete($table, ['<', 'date', $cutoff])
                 ->execute();
