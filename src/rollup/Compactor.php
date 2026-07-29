@@ -6,6 +6,8 @@ use coyshdigital\craftanalytics\db\Table;
 use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\Plugin;
 use coyshdigital\craftanalytics\uniques\Hll;
+use coyshdigital\craftanalytics\uniques\UniqueCounterInterface;
+use coyshdigital\craftanalytics\uniques\UniqueScope;
 use Craft;
 use yii\base\Component;
 use yii\db\Connection;
@@ -34,6 +36,9 @@ class Compactor extends Component
     public ?Connection $db = null;
     public ?Settings $settings = null;
 
+    /** Unique-counter override; defaults to the configured driver. */
+    public ?UniqueCounterInterface $counter = null;
+
     /**
      * Compacts every day now outside the hourly window.
      *
@@ -44,7 +49,15 @@ class Compactor extends Component
         $cutoff = $this->cutoffDate($now ?? time());
         $compacted = 0;
 
-        foreach ([Table::PAGES_ROLLUP, Table::SESSIONS_ROLLUP, Table::SOURCES_ROLLUP] as $table) {
+        foreach ([
+            Table::PAGES_ROLLUP,
+            Table::SESSIONS_ROLLUP,
+            Table::SOURCES_ROLLUP,
+            // The only Pro rollup with an hour column, and so the only one
+            // that grew 24 rows a day per (event, path) with nothing ever
+            // folding them down.
+            Table::EVENTS_ROLLUP,
+        ] as $table) {
             $compacted += $this->compactTable($table, $cutoff);
         }
 
@@ -89,7 +102,13 @@ class Compactor extends Component
         $db = $this->db();
         $groupColumns = self::groupColumns($table);
         $counterColumns = self::counterColumns($table);
+        $decimalColumns = array_fill_keys(self::decimalCounters($table), true);
         $hasSketch = self::hasSketch($table);
+
+        // Hourly counters whose fold into the daily one has been staged, to be
+        // dropped once the row rewrite below has actually committed.
+        /** @var UniqueScope[] $foldedScopes */
+        $foldedScopes = [];
 
         $transaction = $db->beginTransaction();
 
@@ -120,7 +139,12 @@ class Compactor extends Component
                 }
 
                 foreach ($counterColumns as $column) {
-                    $merged[$key][$column] += (int)$row[$column];
+                    // Cast per column, not uniformly: `sumValue` is a decimal
+                    // holding money, and adding it as an int would round every
+                    // event's value down to the pound on compaction day.
+                    $merged[$key][$column] += $decimalColumns[$column] ?? false
+                        ? (float)$row[$column]
+                        : (int)$row[$column];
                 }
 
                 if ($hasSketch) {
@@ -164,6 +188,19 @@ class Compactor extends Component
 
                 unset($row['id']);
                 $db->createCommand()->insert($table, $row)->execute();
+
+                // The sketch on the row is only half the story. Drivers that
+                // key their own storage (Redis, exact) recorded under the real
+                // hours, and every reader from here on asks for `hour = -1` —
+                // so unless their counters are folded too, this day's uniques
+                // read zero from tonight onwards.
+                $scopes = self::uniqueScopes($table, $grouped[$key]);
+
+                if ($scopes !== null) {
+                    [$daily, $hourly] = $scopes;
+                    $this->counter()->compact($daily, $hourly);
+                    array_push($foldedScopes, ...$hourly);
+                }
             }
 
             $db->createCommand()->delete($table, [
@@ -177,6 +214,56 @@ class Compactor extends Component
             $transaction->rollBack();
             throw $e;
         }
+
+        // Past the commit the fold is durable, so the hourly counters are just
+        // storage now. Dropping them is cleanup: safe to skip, safe to redo.
+        try {
+            $this->counter()->discardCompacted($foldedScopes);
+        } catch (\Throwable $e) {
+            Craft::warning(
+                'Compacted ' . $table . ' but could not drop the hourly unique counters: '
+                . $e->getMessage() . ' The figures are correct; the counters expire on their own.',
+                __METHOD__,
+            );
+        }
+    }
+
+    /**
+     * The unique-counter scopes a compacted group covers: the daily one the
+     * readers will ask for, and the hourly ones its counters are spread
+     * across.
+     *
+     * Null for tables that keep no unique counters at all, which is every
+     * table but pages and sessions.
+     *
+     * @param array<int,array<string,mixed>> $rows the hourly rows being merged
+     * @return array{0: UniqueScope, 1: UniqueScope[]}|null
+     */
+    private static function uniqueScopes(string $table, array $rows): ?array
+    {
+        $kind = match ($table) {
+            Table::PAGES_ROLLUP => UniqueScope::KIND_PAGE,
+            Table::SESSIONS_ROLLUP => UniqueScope::KIND_SESSION,
+            default => null,
+        };
+
+        if ($kind === null || $rows === []) {
+            return null;
+        }
+
+        $siteId = (int)$rows[0]['siteId'];
+        $date = (string)$rows[0]['date'];
+        // Sessions are counted per site-hour with no dimension; pages are
+        // counted per path. Must match what DbRollupSink recorded under.
+        $dimId = $table === Table::PAGES_ROLLUP ? (int)$rows[0]['pathDimId'] : null;
+
+        return [
+            new UniqueScope($kind, $siteId, $date, self::DAILY_HOUR, $dimId),
+            array_map(
+                static fn(array $row) => new UniqueScope($kind, $siteId, $date, (int)$row['hour'], $dimId),
+                array_values($rows),
+            ),
+        ];
     }
 
     private static function readBlob(mixed $value): ?string
@@ -215,6 +302,7 @@ class Compactor extends Component
         return match ($table) {
             Table::PAGES_ROLLUP => ['siteId', 'date', 'pathDimId'],
             Table::SOURCES_ROLLUP => ['siteId', 'date', 'channel', 'refHostDimId'],
+            Table::EVENTS_ROLLUP => ['siteId', 'date', 'eventNameDimId', 'pathDimId'],
             default => ['siteId', 'date'],
         };
     }
@@ -247,8 +335,19 @@ class Compactor extends Component
         return match ($table) {
             Table::PAGES_ROLLUP => ['views', 'totalDwellMs', 'entrances', 'exits', 'bounces'],
             Table::SOURCES_ROLLUP => ['sessions', 'bounces'],
+            Table::EVENTS_ROLLUP => ['count', 'sumValue'],
             default => ['sessions', 'bounces', 'totalDurationMs', 'totalPageviews'],
         };
+    }
+
+    /**
+     * Which of a table's counters are decimals rather than integers.
+     *
+     * @return string[]
+     */
+    private static function decimalCounters(string $table): array
+    {
+        return $table === Table::EVENTS_ROLLUP ? ['sumValue'] : [];
     }
 
     private static function hasSketch(string $table): bool
@@ -259,6 +358,11 @@ class Compactor extends Component
     private function settings(): Settings
     {
         return $this->settings ??= Plugin::getInstance()->getSettings();
+    }
+
+    private function counter(): UniqueCounterInterface
+    {
+        return $this->counter ??= Plugin::getInstance()->getUniqueCounter();
     }
 
     private function db(): Connection

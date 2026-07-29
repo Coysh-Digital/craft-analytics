@@ -83,9 +83,14 @@ capped.
 - **Hourly → daily.** Days older than `hourlyWindowDays` (default 7) compact
   from 24 rows to 1. Lossless: counters add and sketches merge, so the daily
   uniques figure is the true union, not a sum. Idempotent and safe to
-  interrupt.
+  interrupt. Applies to pages, sessions, sources and events - the four tables
+  that keep an hourly grain. Drivers that hold their unique counters outside
+  the row (`redis`, `exact`) have those folded to the daily grain at the same
+  time, so a compacted day keeps its unique figure whichever driver is in use.
 - **Retention.** Rollups are deleted past `rollupRetentionMonths` (default and
-  hard cap 26).
+  hard cap 26). This covers **every** aggregate table, Lite and Pro alike:
+  pages, sessions, sources, devices, crawlers, campaigns, geo, events, scroll,
+  search, outbound, segments, goals and funnel steps.
 - **Unique membership rows** (`exact` driver) are dropped once the salt that
   produced their hashes is gone - after that they cannot be matched to
   anything, by us or anyone.

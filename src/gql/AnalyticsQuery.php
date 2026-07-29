@@ -6,15 +6,23 @@ use coyshdigital\craftanalytics\models\DateRange;
 use coyshdigital\craftanalytics\Plugin;
 use Craft;
 use craft\gql\base\Query;
+use craft\helpers\Gql as GqlHelper;
+use craft\models\Site;
+use GraphQL\Error\UserError;
 use GraphQL\Type\Definition\Type;
 
 /**
  * The GraphQL queries.
  *
- * Behind a schema scope, so a public token cannot read a site's traffic
- * unless somebody deliberately granted it. What can be read is aggregate
- * either way (C6) - the scope is about not publishing your numbers, not
- * about protecting visitors, who have nothing here to protect.
+ * Behind two scopes, and it needs both: `craftAnalytics.read` to read
+ * analytics at all, and the ordinary `sites.{uid}` scope for the site being
+ * asked about. The second is the one that is easy to forget, and forgetting it
+ * means a token scoped to one site reads every site on the install by passing
+ * a `siteId` - see siteId() below.
+ *
+ * What can be read is aggregate either way (C6) - the scope is about not
+ * publishing your numbers, not about protecting visitors, who have nothing
+ * here to protect.
  */
 class AnalyticsQuery extends Query
 {
@@ -71,7 +79,8 @@ class AnalyticsQuery extends Query
             'siteId' => [
                 'name' => 'siteId',
                 'type' => Type::int(),
-                'description' => 'The site to report on. Defaults to the primary site.',
+                'description' => 'The site to report on. Must be a site this schema can read. '
+                    . 'Defaults to the primary site, or the first readable one.',
             ],
             'period' => [
                 'name' => 'period',
@@ -82,10 +91,52 @@ class AnalyticsQuery extends Query
     }
 
     /**
+     * The site to report on, once the schema has been asked whether it may.
+     *
+     * `craftAnalytics.read` says a token may read analytics; it does not say
+     * *whose*. Without this, one grant let a token read every site on the
+     * install by passing a `siteId`, straight past the per-site scoping Craft
+     * applies to everything else - and past the equivalent check the CP does
+     * in BaseCpController::allowedSites().
+     *
      * @param array<string,mixed> $arguments
      */
     private static function siteId(array $arguments): int
     {
-        return (int)($arguments['siteId'] ?? Craft::$app->getSites()->getPrimarySite()->id);
+        $sites = Craft::$app->getSites();
+
+        if (isset($arguments['siteId'])) {
+            $site = $sites->getSiteById((int)$arguments['siteId']);
+
+            // Unreadable and non-existent get the same answer, so the schema
+            // can't be used to enumerate which site IDs exist.
+            if ($site === null || !self::canReadSite($site)) {
+                throw new UserError('Analytics for that site are not in this schema.');
+            }
+
+            return (int)$site->id;
+        }
+
+        // No site asked for: the primary one, unless the schema can't read it,
+        // in which case the first one it can. A token scoped to a single site
+        // shouldn't have to name it.
+        $primary = $sites->getPrimarySite();
+
+        if (self::canReadSite($primary)) {
+            return (int)$primary->id;
+        }
+
+        foreach ($sites->getAllSites() as $site) {
+            if (self::canReadSite($site)) {
+                return (int)$site->id;
+            }
+        }
+
+        throw new UserError('This schema cannot read analytics for any site.');
+    }
+
+    private static function canReadSite(Site $site): bool
+    {
+        return GqlHelper::canSchema('sites.' . $site->uid);
     }
 }

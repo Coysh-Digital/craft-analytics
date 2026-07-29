@@ -461,6 +461,66 @@ final class SchemaBuilder
     }
 
     /**
+     * Every aggregate rollup the retention window applies to.
+     *
+     * The counterpart to dimensionReferences(), and it exists for the same
+     * reason: the GC decided what to expire from a hardcoded list of four
+     * tables, so every rollup added after those four was kept forever while
+     * the Privacy screen went on stating a retention period as a fact. Search
+     * terms are the sharp end of that - they are free text a visitor typed,
+     * and people search their own name and email address.
+     *
+     * Tables *not* here have their own retention rule, which is deliberate and
+     * tighter than this one: see RetentionCoverageTest, which reads the real
+     * schema and fails on any date-keyed table that is in neither list.
+     *
+     * @return string[]
+     */
+    public static function expiringRollups(): array
+    {
+        return [
+            // Lite.
+            Table::PAGES_ROLLUP,
+            Table::SESSIONS_ROLLUP,
+            Table::SOURCES_ROLLUP,
+            Table::DEVICES_ROLLUP,
+            Table::CRAWLERS_ROLLUP,
+            // Pro.
+            Table::CAMPAIGNS_ROLLUP,
+            Table::GEO_ROLLUP,
+            Table::EVENTS_ROLLUP,
+            Table::SCROLL_ROLLUP,
+            Table::SEARCH_ROLLUP,
+            Table::OUTBOUND_ROLLUP,
+            Table::SEGMENTS_ROLLUP,
+            Table::GOALS_ROLLUP,
+            Table::FUNNEL_STEP_ROLLUP,
+        ];
+    }
+
+    /**
+     * Date-keyed tables the aggregate retention window deliberately skips,
+     * with the rule that governs them instead.
+     *
+     * Named rather than merely absent, so that "this table has no retention"
+     * and "this table has a different retention" cannot be confused - which is
+     * exactly the confusion that let the Pro rollups accumulate unbounded.
+     *
+     * @return array<string,string> table => the rule that applies
+     */
+    public static function retainedElsewhere(): array
+    {
+        return [
+            // Pruned two salt rotations back: once the salt that produced these
+            // hashes is destroyed they cannot be matched to anything.
+            Table::UNIQUE_MEMBERS => 'GcService::deleteExpiredUniqueMembers() (salt rotation)',
+            // First-seen date only; these are deleted when nothing references
+            // them, not when they age.
+            Table::DIMENSIONS => 'GcService::deleteOrphanedDimensions() (reference counting)',
+        ];
+    }
+
+    /**
      * @return string[] every plugin table, newest-dependency first so they
      *                  can be dropped in order
      */

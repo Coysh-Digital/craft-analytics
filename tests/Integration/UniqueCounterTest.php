@@ -9,7 +9,6 @@ use coyshdigital\craftanalytics\uniques\HllUniqueCounter;
 use coyshdigital\craftanalytics\uniques\RedisUniqueCounter;
 use coyshdigital\craftanalytics\uniques\UniqueCounterInterface;
 use coyshdigital\craftanalytics\uniques\UniqueScope;
-use yii\redis\Connection as RedisConnection;
 
 /**
  * Every driver must satisfy the same contract, above all: a range is the
@@ -29,41 +28,6 @@ function scope(string $date, int $dimId = 1): UniqueScope
 {
     return new UniqueScope(UniqueScope::KIND_PAGE, 1, $date, -1, $dimId);
 }
-
-function redisConnection(): ?RedisConnection
-{
-    $dsn = getenv('CRAFT_ANALYTICS_TEST_REDIS_HOST');
-
-    if ($dsn === false || $dsn === '') {
-        return null;
-    }
-
-    $connection = new RedisConnection([
-        'hostname' => $dsn,
-        'port' => (int)(getenv('CRAFT_ANALYTICS_TEST_REDIS_PORT') ?: 6379),
-        'database' => 15,
-    ]);
-    $connection->open();
-    $connection->executeCommand('FLUSHDB');
-
-    return $connection;
-}
-
-/**
- * @return array<string,callable(): UniqueCounterInterface|null>
- */
-dataset('counters', [
-    'hll' => [fn() => new HllUniqueCounter(['settings' => new Settings()])],
-    'exact' => [fn() => new ExactUniqueCounter(['db' => TestDb::connection(), 'settings' => new Settings()])],
-    'redis' => [function() {
-        $connection = redisConnection();
-
-        return $connection === null ? null : new RedisUniqueCounter([
-            'redis' => $connection,
-            'settings' => new Settings(),
-        ]);
-    }],
-]);
 
 beforeEach(function() {
     if (!TestDb::available()) {

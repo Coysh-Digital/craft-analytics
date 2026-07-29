@@ -2,6 +2,7 @@
 
 namespace coyshdigital\craftanalytics\controllers;
 
+use coyshdigital\craftanalytics\helpers\Csv;
 use coyshdigital\craftanalytics\models\DateRange;
 use coyshdigital\craftanalytics\Plugin;
 use craft\models\Site;
@@ -197,25 +198,7 @@ class ExportController extends BaseCpController
      */
     private function asCsv(array $rows, string $filename): Response
     {
-        $handle = fopen('php://temp', 'r+');
-
-        if ($handle === false) {
-            throw new \RuntimeException('Could not open a stream for the export.');
-        }
-
-        if ($rows !== []) {
-            fputcsv($handle, array_keys($rows[0]), ',', '"', '\\');
-
-            foreach ($rows as $row) {
-                fputcsv($handle, array_values($row), ',', '"', '\\');
-            }
-        }
-
-        rewind($handle);
-        $csv = (string)stream_get_contents($handle);
-        fclose($handle);
-
-        return $this->response->sendContentAsFile($csv, $filename . '.csv', [
+        return $this->response->sendContentAsFile(Csv::encode($rows), $filename . '.csv', [
             'mimeType' => 'text/csv',
         ]);
     }

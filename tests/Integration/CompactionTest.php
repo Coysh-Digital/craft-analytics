@@ -8,6 +8,7 @@ use coyshdigital\craftanalytics\rollup\Compactor;
 use coyshdigital\craftanalytics\services\GcService;
 use coyshdigital\craftanalytics\tests\TestDb;
 use coyshdigital\craftanalytics\uniques\Hll;
+use coyshdigital\craftanalytics\uniques\HllUniqueCounter;
 use yii\db\Query;
 
 beforeEach(function() {
@@ -20,7 +21,11 @@ beforeEach(function() {
     (new Install(['db' => $db]))->up();
 
     $this->settings = new Settings(['hourlyWindowDays' => 7]);
-    $this->compactor = new Compactor(['db' => $db, 'settings' => $this->settings]);
+    $this->compactor = new Compactor([
+        'db' => $db,
+        'settings' => $this->settings,
+        'counter' => new HllUniqueCounter(['settings' => $this->settings]),
+    ]);
 });
 
 /**
@@ -219,11 +224,63 @@ test('sessions rollups compact too', function() {
         ->and((int)$rows[0]['totalPageviews'])->toBe(24);
 });
 
+test('event rollups compact too, and keep the pence', function() {
+    $old = '2026-06-01';
+    $db = TestDb::connection();
+
+    // The same event on the same page across three hours. Before this table
+    // was compacted it kept 24 rows a day per (event, path), forever - the one
+    // rollup whose growth tracked traffic rather than cardinality.
+    foreach ([9, 10, 11] as $hour) {
+        $db->createCommand()->insert(Table::EVENTS_ROLLUP, [
+            'siteId' => 1, 'date' => $old, 'hour' => $hour,
+            'eventNameDimId' => 1, 'pathDimId' => 2,
+            'count' => 4, 'sumValue' => '12.35',
+        ])->execute();
+    }
+
+    $this->compactor->run(mktime(12, 0, 0, 7, 16, 2026));
+
+    $rows = (new Query())->from(Table::EVENTS_ROLLUP)->all($db);
+
+    expect($rows)->toHaveCount(1)
+        ->and((int)$rows[0]['hour'])->toBe(Compactor::DAILY_HOUR)
+        ->and((int)$rows[0]['count'])->toBe(12)
+        // 37.05, not 36: summing a decimal as an integer would drop the pence
+        // from every event value on the night the day compacted.
+        ->and(round((float)$rows[0]['sumValue'], 2))->toBe(37.05);
+});
+
+test('events on different names or paths stay on their own daily rows', function() {
+    $old = '2026-06-01';
+    $db = TestDb::connection();
+
+    // Same hour, three different (event, path) pairs: the group columns are
+    // the unique key minus hour, so these must not collapse into one another.
+    foreach ([[1, 2], [1, 3], [9, 2]] as [$nameDimId, $pathDimId]) {
+        foreach ([9, 10] as $hour) {
+            $db->createCommand()->insert(Table::EVENTS_ROLLUP, [
+                'siteId' => 1, 'date' => $old, 'hour' => $hour,
+                'eventNameDimId' => $nameDimId, 'pathDimId' => $pathDimId,
+                'count' => 1, 'sumValue' => 0,
+            ])->execute();
+        }
+    }
+
+    $this->compactor->run(mktime(12, 0, 0, 7, 16, 2026));
+
+    $rows = (new Query())->from(Table::EVENTS_ROLLUP)->all($db);
+
+    expect($rows)->toHaveCount(3)
+        ->and(array_map(static fn(array $r): int => (int)$r['count'], $rows))->toBe([2, 2, 2]);
+});
+
 test('GC deletes rollups past the retention window', function() {
     $now = mktime(12, 0, 0, 7, 16, 2026);
     $gc = new GcService([
         'db' => TestDb::connection(),
         'settings' => new Settings(['rollupRetentionMonths' => 3]),
+        'counter' => new HllUniqueCounter(['settings' => new Settings()]),
     ]);
 
     writeHourlyPage('2026-01-01', 9, 10, [1]);  // ~6 months old

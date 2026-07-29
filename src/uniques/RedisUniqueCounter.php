@@ -78,6 +78,41 @@ class RedisUniqueCounter extends Component implements UniqueCounterInterface
         return (int)$this->connection()->executeCommand('PFCOUNT', $keys);
     }
 
+    /**
+     * `PFMERGE` the day's hourly counters into its daily key.
+     *
+     * A union, so re-running it changes nothing — which is what makes it safe
+     * to call inside a transaction that might roll back. The hourly keys are
+     * left alone here and dropped by discardCompacted() once the row rewrite
+     * has committed.
+     */
+    public function compact(UniqueScope $daily, array $hourly): void
+    {
+        if ($hourly === []) {
+            return;
+        }
+
+        $target = self::KEY_PREFIX . $daily->key();
+        $sources = array_map(static fn(UniqueScope $scope) => self::KEY_PREFIX . $scope->key(), $hourly);
+
+        // Destination first, and included as a source: merging into a key that
+        // already holds an earlier pass must not discard what is in it.
+        $this->connection()->executeCommand('PFMERGE', array_merge([$target, $target], $sources));
+        $this->connection()->executeCommand('EXPIRE', [$target, $this->ttlSeconds()]);
+    }
+
+    public function discardCompacted(array $hourly): void
+    {
+        if ($hourly === []) {
+            return;
+        }
+
+        $this->connection()->executeCommand('DEL', array_map(
+            static fn(UniqueScope $scope) => self::KEY_PREFIX . $scope->key(),
+            $hourly,
+        ));
+    }
+
     private function ttlSeconds(): int
     {
         $months = ($this->settings ??= Plugin::getInstance()->getSettings())->rollupRetentionMonths;

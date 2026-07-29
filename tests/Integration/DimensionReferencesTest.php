@@ -6,6 +6,7 @@ use coyshdigital\craftanalytics\migrations\Install;
 use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\services\GcService;
 use coyshdigital\craftanalytics\tests\TestDb;
+use coyshdigital\craftanalytics\uniques\HllUniqueCounter;
 
 /**
  * The GC deletes dimensions nothing references. It decides "nothing" from
@@ -32,7 +33,11 @@ beforeEach(function() {
     TestDb::dropTables(SchemaBuilder::allTables());
     (new Install(['db' => TestDb::connection()]))->up();
 
-    $this->gc = new GcService(['db' => TestDb::connection(), 'settings' => new Settings()]);
+    $this->gc = new GcService([
+        'db' => TestDb::connection(),
+        'settings' => new Settings(),
+        'counter' => new HllUniqueCounter(['settings' => new Settings()]),
+    ]);
 });
 
 test('every dimension column in the schema is known to the GC', function() {
