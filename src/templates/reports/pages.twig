@@ -1,7 +1,35 @@
 {% extends 'craft-analytics/_layout.twig' %}
 {% import 'craft-analytics/_partials/macros.twig' as ca %}
+{% import 'craft-analytics/_partials/chart.twig' as chart %}
 
 {% block report %}
+    {% if compareChart %}
+        <div class="ca-card">
+            <div class="ca-card-head">
+                <h2 class="ca-card-title">{{ 'Pages compared'|t('craft-analytics') }}</h2>
+                <div class="ca-legend">
+                    {% for dataset in compareChart.datasets %}
+                        <span>
+                            <i class="ca-swatch" style="background: var(--ca-{{ dataset.token }})"></i>{{ dataset.label }}
+                        </span>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="ca-card-body">
+                {{ chart.chart('ca-compare', compareChart, {
+                    label: 'Daily views for the selected pages.'|t('craft-analytics'),
+                    caption: 'Daily views for the selected pages'|t('craft-analytics'),
+                    labelHeading: 'Date'|t('craft-analytics'),
+                }) }}
+            </div>
+            <div class="ca-card-body" style="padding-top: 0">
+                <p class="ca-footnote" style="margin: 0">
+                    <a href="{{ url(currentPath, currentParams|merge({ compare: null })) }}">{{ 'Clear comparison'|t('craft-analytics') }}</a>
+                </p>
+            </div>
+        </div>
+    {% endif %}
+
     <div class="ca-card">
         <div class="ca-card-head">
             <h2 class="ca-card-title">{{ 'Pages'|t('craft-analytics') }}</h2>
@@ -26,9 +54,20 @@
         <div class="ca-card-body ca-table-scroll">
             {% if pages|length %}
                 {% set maxViews = max(pages|map(p => p.views)) %}
+                {# The whole table is one GET form: ticking rows and pressing
+                   Compare reloads the screen with `compare[]` in the query, so
+                   the comparison is a link someone can bookmark or send on. #}
+                <form method="get" id="ca-compare-form">
+                    <input type="hidden" name="site" value="{{ site.handle }}">
+                    <input type="hidden" name="range" value="{{ range.preset }}">
+                    {% if pathInclude %}<input type="hidden" name="q" value="{{ pathInclude }}">{% endif %}
+                    {% if pathExclude %}<input type="hidden" name="exclude" value="{{ pathExclude }}">{% endif %}
                 <table class="ca-table">
                     <thead>
                     <tr>
+                        <th class="ca-check-cell">
+                            <span class="ca-visually-hidden-table">{{ 'Compare'|t('craft-analytics') }}</span>
+                        </th>
                         <th>{{ 'Page'|t('craft-analytics') }}</th>
                         <th class="ca-num">{{ 'Views'|t('craft-analytics') }}</th>
                         <th class="ca-num">{{ 'Entrances'|t('craft-analytics') }}</th>
@@ -40,11 +79,25 @@
                     <tbody>
                     {% for page in pages %}
                         <tr>
+                            <td class="ca-check-cell">
+                                {% if page.path != '__other__' %}
+                                    <input type="checkbox" name="compare[]" value="{{ page.path }}"
+                                           {{ page.path in compare ? 'checked' : '' }}
+                                           aria-label="{{ 'Compare {path}'|t('craft-analytics', { path: page.path }) }}">
+                                {% endif %}
+                            </td>
+                            {# The label opens this page's own screen. __other__
+                               stays unlinked: it is an aggregate bucket, not a
+                               page, and there is nothing to drill into. The
+                               entry editor keeps its own link beside it. #}
                             {{ ca.barCell(page.path, page.views, maxViews,
-                                page.path == '__other__' ? null : (editUrls[page.elementId] ?? null),
+                                page.path == '__other__'
+                                    ? null
+                                    : url('craft-analytics/pages/detail', currentParams|merge({ path: page.path })),
                                 page.path == '__other__'
                                     ? 'Not a real page - paths beyond the daily cap of {cap} distinct pages are folded in here. No views are lost.'|t('craft-analytics', { cap: dimensionCap|number_format })
-                                    : null
+                                    : null,
+                                page.path == '__other__' ? null : (editUrls[page.elementId] ?? null)
                             ) }}
                             <td class="ca-num">{{ page.views|number_format }}</td>
                             <td class="ca-num ca-muted">{{ page.entrances|number_format }}</td>
@@ -55,6 +108,14 @@
                     {% endfor %}
                     </tbody>
                 </table>
+
+                <div class="ca-compare-bar">
+                    <button type="submit" class="btn submit">{{ 'Compare selected'|t('craft-analytics') }}</button>
+                    <span class="ca-muted">
+                        {{ 'Pick up to {limit} pages to plot against each other.'|t('craft-analytics', { limit: compareLimit }) }}
+                    </span>
+                </div>
+                </form>
             {% elseif pathInclude or pathExclude %}
                 {{ ca.empty(
                     'No pages match this filter'|t('craft-analytics'),

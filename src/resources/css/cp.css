@@ -5,18 +5,85 @@
  * so it inherits the CP's typography, spacing and any future theming rather
  * than sitting on top of it looking like a guest.
  *
- * Chart colours are Craft's blue-600 and teal-600. That pair is validated for
- * colour-vision deficiency (CVD ΔE 20.7) and both clear 3:1 against the pane
- * surface. Series are also direct-labelled and every chart has a table
- * underneath, so identity is never carried by colour alone.
+ * Every chart colour is declared once, below, and read from there by both CSS
+ * and JavaScript: ca-charts.js resolves a series' colour by looking up its
+ * `--ca-*` custom property on the page. There is deliberately no hex in any
+ * .twig or .js file. Before this existed, #2563eb was written out in four
+ * places - a token here, two gradient stops, a tooltip swatch and a sparkline
+ * stroke - and Craft's own --blue-600 is that same value, which made five.
+ *
+ * Series are direct-labelled in a server-rendered legend and named in every
+ * tooltip, and each chart ships a table carrying the same numbers, so identity
+ * never rests on colour alone.
+ *
+ * COLOUR-VISION VALIDATION. Figures below are the worst-case pairwise CIEDE2000
+ * across normal, protanopic, deuteranopic and tritanopic vision (Machado et al.
+ * 2009 simulation at severity 1.0), and WCAG contrast against the white pane:
+ *
+ *   two-series pair (views/uniques)   ΔE 13.74   min contrast 3.74:1
+ *   categorical ramp, all five        ΔE 14.14   min contrast 3.03:1
+ *
+ * The categorical ramp stops at five - four series plus a grey reserved for a
+ * folded "Other" - because that is where it stops being checkable. Adding a
+ * sixth colour from Craft's palette drops the worst case to ΔE 11.45, and any
+ * six that scores better does so only by using near-black shades that read as
+ * one dark smear on a chart. So charts fold to four series plus Other rather
+ * than widening the palette, and this claim stays true for the number of
+ * colours actually shipped.
  */
 
 .ca {
-    --ca-views: #2563eb;
-    --ca-uniques: #0d9488;
-    --ca-views-soft: rgba(37, 99, 235, 0.14);
-    --ca-bar: rgba(37, 99, 235, 0.16);
-    --ca-bar-strong: rgba(37, 99, 235, 0.32);
+    /* Nothing this plugin renders may push the control panel sideways.
+       Everything genuinely wider than the pane - a 24-column heatmap, a
+       six-column table - already scrolls inside its own .ca-table-scroll, so
+       there is nothing here to reach by scrolling the page instead; what
+       remains are the visually-hidden data tables, whose clipped boxes still
+       report their full width to the document on a narrow viewport.
+
+       `clip` rather than `hidden` on purpose: it stops the propagation without
+       creating a scroll container, so position:sticky and scrollIntoView on
+       anything inside still behave. */
+    overflow-x: clip;
+
+    /* Aliased onto Craft's tokens rather than restating their values, so these
+       follow the CP's palette - including, when Craft ships one, its dark
+       theme. Craft 5.10 has no CP dark mode today. */
+    --ca-views: var(--blue-600);
+    --ca-uniques: var(--teal-600);
+
+    /* Derived, not restated: these were three more literal copies of
+       blue-600's channels, which is three more places to miss if the series
+       colour ever changes. */
+    --ca-views-soft: color-mix(in srgb, var(--ca-views) 14%, transparent);
+    --ca-bar: color-mix(in srgb, var(--ca-views) 16%, transparent);
+    --ca-bar-strong: color-mix(in srgb, var(--ca-views) 32%, transparent);
+
+    /* Categorical: stacked areas, page comparisons, the device doughnut.
+       -5 is reserved for the "Other" bucket and is the only neutral. */
+    --ca-series-1: var(--blue-600);
+    --ca-series-2: var(--teal-550);
+    --ca-series-3: var(--orange-600);
+    --ca-series-4: var(--red-700);
+    --ca-series-5: var(--gray-700);
+
+    /* Sequential, for the heatmap: one hue ordered by lightness, which is the
+       one ramp shape that survives every CVD type by construction. -0 is the
+       "nothing happened" cell and is a neutral, not the palest blue, so an
+       empty hour does not read as a quiet one. */
+    --ca-heat-0: var(--gray-050);
+    --ca-heat-1: var(--blue-100);
+    --ca-heat-2: var(--blue-200);
+    --ca-heat-3: var(--blue-300);
+    --ca-heat-4: var(--blue-400);
+    --ca-heat-5: var(--blue-600);
+    --ca-heat-6: var(--blue-800);
+
+    --ca-axis: var(--medium-text-color);
+    --ca-grid: var(--hairline-color);
+    --ca-tooltip-bg: var(--gray-800);
+    --ca-tooltip-fg: var(--white);
+    --ca-surface: var(--white);
+
     --ca-radius: 6px;
 }
 
@@ -152,6 +219,10 @@
     border: 1px solid var(--hairline-color);
     border-radius: var(--ca-radius);
     margin-bottom: 24px;
+    /* Without this a card refuses to shrink below its widest child, and a
+       wide table or a 560px heatmap pushes the whole page sideways instead of
+       scrolling inside its own .ca-table-scroll. */
+    min-width: 0;
 }
 
 .ca-card-head {
@@ -161,6 +232,8 @@
     gap: 12px;
     padding: 14px 18px;
     border-bottom: 1px solid var(--hairline-color);
+    /* A four-series legend beside a title has nowhere to go on a phone. */
+    flex-wrap: wrap;
 }
 
 .ca-card-title {
@@ -176,6 +249,7 @@
 
 .ca-legend {
     display: flex;
+    flex-wrap: wrap;
     gap: 14px;
     font-size: 12px;
     color: var(--medium-text-color);
@@ -196,98 +270,168 @@
     flex: none;
 }
 
+/* Chart.js is configured with maintainAspectRatio:false, which means the canvas
+   takes its size from this box. The explicit height is load-bearing, not
+   cosmetic: without one, the canvas and the layout engine size each other in a
+   loop and the chart grows without bound. .ca-grid-2 is exactly the kind of
+   container that triggers it. */
 .ca-chart {
+    position: relative;
+    height: 260px;
+    margin: 0;
+}
+
+.ca-chart canvas {
+    display: block;
+}
+
+.ca-chart-sm {
+    height: 180px;
+}
+
+/* A chart beside its own direct-labelled legend: the doughnut on Devices. */
+.ca-split {
+    display: flex;
+    gap: 28px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.ca-split-chart {
+    flex: 0 0 200px;
+    max-width: 100%;
+}
+
+.ca-split-legend {
+    flex: 0 1 300px;
+    display: grid;
+    gap: 7px;
+    min-width: 0;
+}
+
+.ca-legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+}
+
+.ca-legend-row b {
+    margin-left: auto;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- heatmap */
+
+/* A table, because that is what a labelled 7x24 grid is. Nothing here is a
+   canvas, so it keeps keyboard navigation, header associations, printing and
+   copy-paste that a drawn heatmap would have to reimplement. */
+.ca-heatmap {
+    border-collapse: separate;
+    border-spacing: 2px;
+    table-layout: fixed;
+    width: 100%;
+    min-width: 560px;
+}
+
+/* Each cell is its own containing block. The screen-reader labels inside them
+   are position:absolute, and without this they resolve against the page
+   instead - escaping the scroll container and dragging the document's
+   scrollable width out to the table's full 560px on a phone. */
+.ca-heatmap th,
+.ca-heatmap td {
     position: relative;
 }
 
-.ca-chart svg {
-    display: block;
-    width: 100%;
-    height: auto;
-    overflow: visible;
+.ca-heatmap th {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--ca-axis);
+    font-variant-numeric: tabular-nums;
+    padding: 0;
+    text-align: center;
 }
 
-.ca-grid line {
-    stroke: var(--hairline-color);
-    stroke-width: 1;
+.ca-heatmap th[scope="row"] {
+    width: 34px;
+    text-align: right;
+    padding-right: 6px;
 }
 
-.ca-axis text {
-    fill: var(--medium-text-color);
-    font-size: 11px;
+.ca-heatmap td {
+    height: 20px;
+    border-radius: 2px;
+    background: var(--ca-heat-0);
+}
+
+.ca-heatmap td[data-bucket="1"], .ca-heat-chip[data-bucket="1"] { background: var(--ca-heat-1); }
+.ca-heatmap td[data-bucket="2"], .ca-heat-chip[data-bucket="2"] { background: var(--ca-heat-2); }
+.ca-heatmap td[data-bucket="3"], .ca-heat-chip[data-bucket="3"] { background: var(--ca-heat-3); }
+.ca-heatmap td[data-bucket="4"], .ca-heat-chip[data-bucket="4"] { background: var(--ca-heat-4); }
+.ca-heatmap td[data-bucket="5"], .ca-heat-chip[data-bucket="5"] { background: var(--ca-heat-5); }
+.ca-heatmap td[data-bucket="6"], .ca-heat-chip[data-bucket="6"] { background: var(--ca-heat-6); }
+
+.ca-heat-key {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+    margin-top: 12px;
+    font-size: 12px;
+}
+
+.ca-heat-chip {
+    width: 14px;
+    height: 12px;
+    border-radius: 2px;
+    background: var(--ca-heat-0);
+}
+
+.ca-heat-peak {
+    margin-left: auto;
     font-variant-numeric: tabular-nums;
 }
 
-.ca-line {
-    fill: none;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
-
-.ca-dot {
-    r: 3.5;
-    stroke: var(--white);
-    stroke-width: 2;
+/* The secondary destination on a ranked row: the label goes to the analytics,
+   this goes to the entry. Quiet until the row is hovered, so a column of them
+   does not compete with the paths themselves. */
+.ca-row-edit {
     opacity: 0;
+    margin-left: 4px;
     transition: opacity 0.1s;
 }
 
-.ca-hover-band {
-    fill: transparent;
-    cursor: crosshair;
-}
-
-.ca-hover-band:hover ~ .ca-crosshair,
-.ca-hover-band.is-active ~ .ca-crosshair {
+tr:hover .ca-row-edit,
+.ca-row-edit:focus {
     opacity: 1;
 }
 
-.ca-crosshair {
-    stroke: var(--gray-400);
-    stroke-width: 1;
-    stroke-dasharray: 3 3;
-    opacity: 0;
-    pointer-events: none;
+/* A path is a URL, not prose: it should not be broken across lines mid-segment
+   or wrapped in the middle of a word. */
+.ca-path {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    word-break: break-all;
 }
 
-.ca-tooltip {
-    position: absolute;
-    z-index: 10;
-    pointer-events: none;
-    background: var(--gray-800);
-    color: var(--white);
-    border-radius: 5px;
-    padding: 8px 10px;
-    font-size: 12px;
-    line-height: 1.5;
-    white-space: nowrap;
-    opacity: 0;
-    transform: translate(-50%, -100%);
-    transition: opacity 0.1s;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+/* The comparison picker on the Pages report. */
+.ca-check-cell {
+    width: 28px;
+    padding-right: 0 !important;
+    text-align: center;
 }
 
-.ca-tooltip.is-visible {
-    opacity: 1;
+.ca-check-cell input {
+    margin: 0;
+    vertical-align: middle;
 }
 
-.ca-tooltip-date {
-    font-weight: 600;
-    margin-bottom: 3px;
-}
-
-.ca-tooltip-row {
+.ca-compare-bar {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-variant-numeric: tabular-nums;
-}
-
-.ca-tooltip-row b {
-    font-weight: 600;
-    margin-left: auto;
-    padding-left: 10px;
+    gap: 10px;
+    padding-top: 14px;
+    font-size: 12px;
 }
 
 /* ------------------------------------------------------------------ table */
@@ -486,11 +630,16 @@
 /* Wide content scrolls inside its own container; the page never does. A long
    unbroken URL in a table cell would otherwise push the whole screen sideways,
    so this must hold at every width, not only on mobile. */
-.ca-table-scroll { overflow-x: auto; }
+/* position:relative so the visually-hidden labels inside these tables, which
+   are position:absolute, resolve against this box and get clipped by it -
+   rather than against the page, where they extend its scrollable width. */
+.ca-table-scroll { overflow-x: auto; max-width: 100%; position: relative; }
 
 @media (max-width: 600px) {
     .ca-kpi-value { font-size: 22px; }
     .ca-hero { font-size: 34px; }
+    .ca-chart { height: 200px; }
+    .ca-chart-sm { height: 160px; }
 }
 
 /* --------------------------------------------------------------- privacy */
@@ -711,6 +860,14 @@
 
 /* The table under a chart: available to screen readers and to anyone who
    wants the numbers, without repeating them visually. */
+/* The accessible twin of a chart: present for a screen reader, absent to the
+   eye.
+
+   This must go on a block wrapper, never on the <table> itself. A table's
+   height is a minimum rather than a maximum, so `height: 1px` does not clamp
+   it: an absolutely positioned 366-row table stays 12,000px tall and drags the
+   page's scroll height out with it, invisibly. Wrapping keeps the table's
+   semantics intact and lets the wrapper actually clip. */
 .ca-visually-hidden-table {
     position: absolute;
     width: 1px;
@@ -719,6 +876,7 @@
     margin: -1px;
     overflow: hidden;
     clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
     white-space: nowrap;
     border: 0;
 }

@@ -40,6 +40,58 @@ jobs:
             printf("PASS: %.0f%% of budget used.\n", $gz / 2048 * 100);
           '
 
+  cp-assets:
+    name: CP asset budget and provenance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Verify vendored files against PROVENANCE.md
+        run: |
+          php -r '
+            $dir = "src/resources/cp/js/vendor";
+            preg_match_all(
+              "/^\|\s*`([^`]+)`\s*\|[^|]*\|[^|]*\|[^|]*\|\s*`([0-9a-f]{64})`\s*\|/m",
+              file_get_contents("$dir/PROVENANCE.md"), $rows, PREG_SET_ORDER
+            );
+            if (!$rows) { echo "FAIL: PROVENANCE.md lists no checksummed files.\n"; exit(1); }
+            $bad = 0;
+            foreach ($rows as [, $file, $expected]) {
+              $actual = is_file("$dir/$file") ? hash_file("sha256", "$dir/$file") : "missing";
+              printf("%-24s %s\n", $file, $actual === $expected ? "OK" : "MISMATCH ($actual)");
+              if ($actual !== $expected) { $bad++; }
+            }
+            if ($bad) {
+              echo "FAIL: a vendored file no longer matches PROVENANCE.md.\n";
+              echo "If that was a deliberate upgrade, update PROVENANCE.md and THIRD-PARTY-LICENSES.md.\n";
+              exit(1);
+            }
+            echo "PASS: every vendored file matches its recorded checksum.\n";
+          '
+      - name: Report and enforce the CP asset budgets
+        run: |
+          php -r '
+            // Nothing guarded CP asset weight before Chart.js arrived. These
+            // are ceilings on what the control panel downloads, not on the
+            // tracker: the 2 KB tracker budget (C3) is a separate job.
+            $budgets = [
+              "src/resources/cp/js/vendor/chart.umd.js" => 80000,
+              "src/resources/cp/js/ca-charts.js" => 8192,
+            ];
+            $bad = 0;
+            foreach ($budgets as $path => $budget) {
+              if (!is_file($path)) { printf("%s: not present, skipped\n", $path); continue; }
+              $gz = strlen(gzencode(file_get_contents($path), 9));
+              printf("%s: %d bytes gzipped (budget %d, %.0f%% used)\n",
+                basename($path), $gz, $budget, $gz / $budget * 100);
+              if ($gz > $budget) { printf("FAIL: %s is over budget.\n", basename($path)); $bad++; }
+            }
+            exit($bad ? 1 : 0);
+          '
+
   phpstan:
     name: Static analysis
     runs-on: ubuntu-latest

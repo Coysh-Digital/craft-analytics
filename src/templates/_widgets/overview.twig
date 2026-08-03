@@ -25,11 +25,11 @@
             {% endfor %}
         </div>
 
-        {% set spark = craft.craftAnalytics.sparkline(trend.views, 300, 40) %}
+        {% set spark = craft.craftAnalytics.sparklinePath(trend.views, 300, 40) %}
         {% if spark %}
             <svg class="ca-sparkline" style="height: 40px" viewBox="0 0 300 40" preserveAspectRatio="none" role="img"
                  aria-label="{{ 'Views over the selected period'|t('craft-analytics') }}">
-                <path d="{{ spark }}" fill="none" stroke="#2563eb" stroke-width="1.5"
+                <path d="{{ spark }}" fill="none" stroke="var(--ca-views)" stroke-width="1.5"
                       stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></path>
             </svg>
         {% endif %}

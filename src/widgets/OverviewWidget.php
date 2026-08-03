@@ -85,6 +85,11 @@ class OverviewWidget extends Widget
         $range = DateRange::fromPreset($this->range);
         $stats = Plugin::getInstance()->getStats();
 
+        // CSS only, and deliberately no ChartsAsset: this renders on Craft's
+        // own dashboard beside whatever else the user has put there, and the
+        // sparkline below is server-rendered SVG for that reason. Adding
+        // Chart.js here for consistency with the report screens would put 68 KB
+        // of JavaScript on the dashboard to draw a 300x40 line.
         Craft::$app->getView()->registerAssetBundle(CpAsset::class);
 
         return Craft::$app->getView()->renderTemplate('craft-analytics/_widgets/overview.twig', [

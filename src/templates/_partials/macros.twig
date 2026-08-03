@@ -53,13 +53,20 @@
 
 {# A table row whose bar is a background wash; the number is always spelled
    out beside it, so magnitude is never encoded by length alone. #}
-{% macro barCell(label, value, max, url, info) %}
+{% macro barCell(label, value, max, url, info, editUrl) %}
     <td class="ca-bar-cell">
         <div class="ca-bar-fill" style="width: {{ max > 0 ? (value / max * 100)|round(1) : 0 }}%"></div>
         <span class="ca-bar-label">
             {% if url %}<a href="{{ url }}">{{ label }}</a>{% else %}{{ label }}{% endif %}
             {% if info is defined and info %}
                 <span data-icon="info" title="{{ info }}" class="ca-muted"></span>
+            {% endif %}
+            {# A second destination for the same row: the label goes to the
+               analytics for it, this goes to the thing itself. Only rendered
+               where a row actually resolved to an element. #}
+            {% if editUrl is defined and editUrl %}
+                <a href="{{ editUrl }}" class="ca-muted ca-row-edit"
+                   title="{{ 'Edit this entry'|t('craft-analytics') }}" data-icon="edit"></a>
             {% endif %}
         </span>
     </td>

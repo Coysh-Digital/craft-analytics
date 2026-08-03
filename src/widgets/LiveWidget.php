@@ -49,6 +49,8 @@ class LiveWidget extends Widget
             return null;
         }
 
+        // CSS only. This widget draws no chart, so it has no business
+        // registering ChartsAsset — see OverviewWidget for the reasoning.
         Craft::$app->getView()->registerAssetBundle(CpAsset::class);
 
         return Craft::$app->getView()->renderTemplate('craft-analytics/_widgets/live.twig', [

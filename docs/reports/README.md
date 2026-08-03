@@ -16,14 +16,60 @@ the session cache. **No database queries at all**, which is a pleasant
 side-effect of keeping sessions in the hot layer. Refreshes every 15 seconds,
 and stops polling when the tab is hidden.
 
-**Pages** - views, entrances, exits, bounce rate and average time per page,
-linked to the entry where one matched.
+**Pages** - views, entrances, exits, bounce rate and average time per page.
+Each path links to its own screen (below); where the path matched a Craft
+entry, an edit link sits beside it. Tick up to four rows and press **Compare
+selected** to plot them against each other over time — the comparison lives in
+the URL, so it can be bookmarked or sent to someone.
+
+**A single page** - reached by clicking any path. Views and unique visitors
+over time, the headline numbers with period-on-period change, how people
+reached this page, how far down they read, and the events and outbound clicks
+recorded on it. Works for paths that are not Craft entries at all: a
+template-only route, a search results page, a URL that only ever 404'd.
+
+Two figures on that screen need reading carefully. **Entrances** counts
+sessions that *began* on this page, so a page people reach part-way through a
+visit will show few — that is the page's role, not a fault. **Bounce rate** is
+derived from entrances for the same reason, and shows `-` when there are none:
+a bounce is only ever counted against the page a session entered on.
+
+**How people reached this page** fills forward only. It is derived from the raw
+hits, which are aggregated away as they arrive, so it cannot be worked out
+retrospectively — the card states the date collection began. The referrer
+recorded is the one the *session* arrived by, not the previous page on your own
+site, so an interior page reports how the visit started.
 
 **Sources** - sessions by channel (direct / search / social / referral /
-campaign / internal) and by referring host. Only the *host* is ever stored,
-never the full referrer URL, which can carry search terms.
+campaign / internal) and by referring host, with a stacked chart of how that
+mix moved over the period. Only the *host* is ever stored, never the full
+referrer URL, which can carry search terms.
 
-**Devices** - device type, browser and operating system.
+**Devices** - device type, browser and operating system, with the device split
+as a doughnut.
+
+## When people visit
+
+The dashboard's heatmap plots day of the week against hour of the day. It
+covers the **hourly retention window only** — `hourlyWindowDays`, seven days by
+default — and says so on the card, because that is the period still held hour
+by hour. Older days are compacted to a single daily total to keep the tables
+proportional to cardinality rather than traffic, which leaves nothing to put on
+an hourly axis. Raise `hourlyWindowDays` for a longer heatmap, at 24 times the
+rows for the extra window.
+
+## Charts and accessibility
+
+Charts are drawn with Chart.js, vendored locally — there is no CDN request and
+nothing loads from outside your server. It is registered only on the screens
+that draw one; Craft's own entry editor and dashboard widgets use
+server-rendered SVG sparklines and download no JavaScript from this plugin.
+
+Every chart ships a table of the same numbers, hidden from view but present for
+a screen reader, and each series is named in the legend and in its tooltip — so
+nothing is ever identified by colour alone. If a chart cannot be drawn, that
+table becomes visible: a failure shows you the figures rather than an apology.
+Animation is disabled when the operating system asks for reduced motion.
 
 ## Where the content is
 

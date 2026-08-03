@@ -32,8 +32,14 @@ class HitApplier extends Component
         // so the id only needs to be unique, not stable.
         $batchId = 'single-' . bin2hex(random_bytes(8));
 
+        // Read before apply(): the session's referrer is how the visitor
+        // reached the site, and the hit's own referrer is only that for the
+        // first page of a visit. Nothing to look up yet on that first hit,
+        // which is exactly when the fallback is correct.
+        $session = $this->sessions()->get($hit->siteId, $hit->sessionKey);
+
         $aggregator = new Aggregator(null, Plugin::getInstance()->getSettings());
-        $aggregator->add($hit);
+        $aggregator->add($hit, $session !== null ? $session->referrer : $hit->referrer);
 
         $this->sessions()->apply(SessionDelta::fromHit($hit), $batchId);
 
@@ -41,7 +47,11 @@ class HitApplier extends Component
         $transaction = $db->beginTransaction();
 
         try {
-            $this->sink()->flush($aggregator->buckets(), []);
+            // The interactions have to travel too. Without them the `direct`
+            // and `queue` modes silently dropped every event, scroll depth,
+            // outbound click and site search: the aggregator collected them
+            // and nothing ever asked for them.
+            $this->sink()->flush($aggregator->buckets(), [], $aggregator->interactions);
             $transaction->commit();
         } catch (\Throwable $e) {
             $transaction->rollBack();

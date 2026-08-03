@@ -2,6 +2,7 @@
 
 namespace coyshdigital\craftanalytics\controllers;
 
+use coyshdigital\craftanalytics\charts\Heatmap;
 use coyshdigital\craftanalytics\helpers\ElementLinks;
 use coyshdigital\craftanalytics\Plugin;
 use yii\web\Response;
@@ -30,6 +31,8 @@ class DashboardController extends BaseCpController
         $previous = $stats->totals($siteId, $range->previous());
         $topPages = $stats->topPages($siteId, $range, 8);
 
+        $this->registerCharts();
+
         return $this->renderTemplate('craft-analytics/dashboard/index.twig', array_merge(
             $this->commonVariables($site, $range),
             [
@@ -54,6 +57,14 @@ class DashboardController extends BaseCpController
                 'sessionWindow' => $plugin->getSettings()->sessionWindow,
 
                 'trend' => $stats->trend($siteId, $range),
+
+                // Always the hourly-retention window, never the selected
+                // range - see StatsService::hourOfWeek(). The card says which
+                // window it got, so the limit reads as a policy rather than a
+                // chart that mysteriously went blank on "Last 90 days".
+                'heatmap' => Heatmap::grid($stats->hourOfWeek($siteId, $range)),
+                'heatmapFrom' => $stats->hourlyWindowFrom(),
+                'hourlyWindowDays' => $plugin->getSettings()->hourlyWindowDays,
                 'topPages' => $topPages,
                 'editUrls' => ElementLinks::editUrls(array_column($topPages, 'elementId')),
                 'channels' => $stats->channels($siteId, $range),

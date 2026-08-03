@@ -97,6 +97,7 @@ test('the GC expires every rollup past the retention window', function() {
     // Only the key columns are set: the point is the delete, not the counters.
     $rows = [
         Table::PAGES_ROLLUP => ['hour' => 10, 'pathDimId' => 1],
+        Table::PAGE_SOURCES_ROLLUP => ['pathDimId' => 1, 'channel' => 0, 'refHostDimId' => 0],
         Table::SESSIONS_ROLLUP => ['hour' => 10],
         Table::SOURCES_ROLLUP => ['hour' => 10, 'channel' => 0, 'refHostDimId' => 0],
         Table::DEVICES_ROLLUP => ['browserDimId' => 1, 'osDimId' => 2],

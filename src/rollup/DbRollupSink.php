@@ -55,8 +55,11 @@ class DbRollupSink extends Component implements RollupSinkInterface
 
         if ($interactions !== null && !$interactions->isEmpty()) {
             // Crawler counts are not a Pro feature: knowing what was excluded
-            // from your own numbers is not a premium concern.
+            // from your own numbers is not a premium concern. Nor is knowing
+            // how people reached a given page - the Sources report is Lite,
+            // and this is the same question asked one page at a time.
             $this->writeCrawlers($interactions);
+            $this->writePageSources($interactions);
             $this->pro()->writeInteractions($interactions);
         }
     }
@@ -79,6 +82,44 @@ class DbRollupSink extends Component implements RollupSinkInterface
                 ),
             ], [
                 'requests' => $crawler['requests'],
+            ]);
+        }
+    }
+
+    /**
+     * How people reached each page.
+     *
+     * Classified here rather than in the aggregator so that the one place
+     * which decides what "Search" or "Social" means is the same for this table
+     * and for the sources rollup - two screens disagreeing about a channel is
+     * worse than either being slightly wrong.
+     */
+    private function writePageSources(InteractionBuckets $interactions): void
+    {
+        foreach ($interactions->pageSources as $row) {
+            $channel = $this->channels()->classify($row['referrer'], false);
+            $host = ChannelClassifier::host($row['referrer']);
+
+            Upsert::counters($this->db(), Table::PAGE_SOURCES_ROLLUP, [
+                'siteId' => $row['siteId'],
+                'date' => $row['date'],
+                'pathDimId' => $this->capper()->resolve(
+                    $row['siteId'],
+                    $row['date'],
+                    DimensionType::Path,
+                    $row['path'],
+                ),
+                'channel' => $channel->value,
+                'refHostDimId' => $host === null
+                    ? 0
+                    : $this->capper()->resolve(
+                        $row['siteId'],
+                        $row['date'],
+                        DimensionType::ReferrerHost,
+                        $host,
+                    ),
+            ], [
+                'views' => $row['views'],
             ]);
         }
     }

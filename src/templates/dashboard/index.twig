@@ -42,6 +42,8 @@
 
         {% include 'craft-analytics/_partials/trend.twig' %}
 
+        {% include 'craft-analytics/_partials/heatmap.twig' %}
+
         <div class="ca-card">
             <div class="ca-card-head">
                 <h2 class="ca-card-title">{{ 'Top pages'|t('craft-analytics') }}</h2>
@@ -61,7 +63,13 @@
                         <tbody>
                         {% for page in topPages %}
                             <tr>
-                                {{ ca.barCell(page.path, page.views, maxViews, editUrls[page.elementId] ?? null) }}
+                                {{ ca.barCell(page.path, page.views, maxViews,
+                                    page.path == '__other__'
+                                        ? null
+                                        : url('craft-analytics/pages/detail', currentParams|merge({ path: page.path })),
+                                    null,
+                                    page.path == '__other__' ? null : (editUrls[page.elementId] ?? null)
+                                ) }}
                                 <td class="ca-num">{{ page.views|number_format }}</td>
                                 <td class="ca-num ca-muted">{{ page.avgDwellMs ? ca.duration(page.avgDwellMs) : '-' }}</td>
                             </tr>

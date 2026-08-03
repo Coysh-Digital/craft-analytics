@@ -1,7 +1,30 @@
 {% extends 'craft-analytics/_layout.twig' %}
 {% import 'craft-analytics/_partials/macros.twig' as ca %}
+{% import 'craft-analytics/_partials/chart.twig' as chart %}
 
 {% block report %}
+    {% if channelChart.datasets|length %}
+        <div class="ca-card">
+            <div class="ca-card-head">
+                <h2 class="ca-card-title">{{ 'Where traffic came from, over time'|t('craft-analytics') }}</h2>
+                <div class="ca-legend">
+                    {% for dataset in channelChart.datasets %}
+                        <span>
+                            <i class="ca-swatch" style="background: var(--ca-{{ dataset.token }})"></i>{{ dataset.label }}
+                        </span>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="ca-card-body">
+                {{ chart.chart('ca-channels', channelChart, {
+                    label: 'Sessions by channel over time, stacked.'|t('craft-analytics'),
+                    caption: 'Sessions by channel over time'|t('craft-analytics'),
+                    labelHeading: 'Date'|t('craft-analytics'),
+                }) }}
+            </div>
+        </div>
+    {% endif %}
+
     <div class="ca-card">
         <div class="ca-card-head">
             <h2 class="ca-card-title">{{ 'Channels'|t('craft-analytics') }}</h2>

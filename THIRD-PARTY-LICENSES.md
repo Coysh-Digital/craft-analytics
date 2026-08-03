@@ -10,6 +10,18 @@ project's IP rules — no GPL/AGPL/LGPL/EUPL/SSPL code may enter this codebase.
 | [jaybizzle/crawler-detect](https://github.com/JayBizzle/Crawler-Detect) | MIT | Bot/crawler user-agent filtering |
 | [maxmind-db/reader](https://github.com/maxmind/MaxMind-DB-Reader-php) | Apache-2.0 | Reading the local geolocation database (Pro) |
 
+Bundled front-end code — copied verbatim into `src/resources/cp/js/vendor/`
+rather than installed by Composer, because the control panel has no build step.
+Pinned versions, upstream paths and SHA-256 checksums are recorded in
+[`src/resources/cp/js/vendor/PROVENANCE.md`](src/resources/cp/js/vendor/PROVENANCE.md),
+and both a unit test and a CI job re-check those hashes:
+
+| Material | Licence | Used for |
+|---|---|---|
+| [Chart.js](https://github.com/chartjs/Chart.js) 4.5.1 | MIT — banner preserved in `chart.umd.js`, full text in `LICENSE.chartjs.txt` | Every chart in the control panel |
+| [jsvectormap](https://github.com/themustafaomar/jsvectormap) 1.7.0 | MIT — full text in `LICENSE.jsvectormap.txt` | The world map on the Locations report (Pro) |
+| jsvectormap `world_merc` map data | MIT, as part of the jsvectormap package | Same |
+
 Data, not code — installed by the operator, never shipped by us:
 
 | Material | Licence | Used for |

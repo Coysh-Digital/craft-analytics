@@ -1,0 +1,85 @@
+{# When traffic actually happens: day of week against hour of day.
+
+   A table, not a canvas. 168 cells with a row header and a column header is
+   what a table is for, and rendering it as one gives keyboard navigation,
+   header associations, printing, text zoom and copy-paste for free.
+
+   The card states its own coverage because it has to. Hourly rows are
+   compacted to a single daily row once a day falls outside `hourlyWindowDays`,
+   so this can only ever answer for the window that is still held at hourly
+   grain - regardless of the range selected above it. Saying so is the
+   difference between a documented limit and an apparent bug. #}
+
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% set dayNames = ['Sun'|t('craft-analytics'), 'Mon'|t('craft-analytics'), 'Tue'|t('craft-analytics'),
+                   'Wed'|t('craft-analytics'), 'Thu'|t('craft-analytics'), 'Fri'|t('craft-analytics'),
+                   'Sat'|t('craft-analytics')] %}
+
+<div class="ca-card">
+    <div class="ca-card-head">
+        <h2 class="ca-card-title">{{ 'When people visit'|t('craft-analytics') }}</h2>
+        <span class="ca-muted">{{ 'Since {date}'|t('craft-analytics', { date: heatmapFrom|date('j M') }) }}</span>
+    </div>
+    <div class="ca-card-body">
+        {% if heatmap.covered %}
+            <div class="ca-table-scroll">
+                <table class="ca-heatmap">
+                    <caption class="ca-visually-hidden-table">
+                        {{ 'Pageviews by day of the week and hour of the day.'|t('craft-analytics') }}
+                    </caption>
+                    <thead>
+                    <tr>
+                        <th scope="col"><span class="ca-visually-hidden-table">{{ 'Day'|t('craft-analytics') }}</span></th>
+                        {% for hour in 0..23 %}
+                            {# Every third hour is labelled; the rest are still
+                               announced, just not drawn, so the axis reads
+                               without 24 collided numbers. #}
+                            <th scope="col">
+                                {% if hour % 3 == 0 %}{{ '%02d'|format(hour) }}{% else %}
+                                    <span class="ca-visually-hidden-table">{{ '%02d:00'|format(hour) }}</span>
+                                {% endif %}
+                            </th>
+                        {% endfor %}
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for row in heatmap.cells %}
+                        <tr>
+                            <th scope="row">{{ dayNames[heatmap.dayIndexes[loop.index0]] }}</th>
+                            {% for cell in row %}
+                                {# The exact number is on every cell, so the
+                                   shade is never the only way to read it. #}
+                                <td data-bucket="{{ cell.bucket }}"
+                                    title="{{ '{day} {hour}:00 - {views} views'|t('craft-analytics', {
+                                        day: dayNames[heatmap.dayIndexes[loop.parent.loop.index0]],
+                                        hour: '%02d'|format(loop.index0),
+                                        views: cell.views|number_format,
+                                    }) }}">
+                                    <span class="ca-visually-hidden-table">{{ cell.views|number_format }}</span>
+                                </td>
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="ca-heat-key">
+                <span class="ca-muted">{{ 'Quieter'|t('craft-analytics') }}</span>
+                {% for bucket in 0..6 %}
+                    <i class="ca-heat-chip" data-bucket="{{ bucket }}"></i>
+                {% endfor %}
+                <span class="ca-muted">{{ 'Busier'|t('craft-analytics') }}</span>
+                <span class="ca-muted ca-heat-peak">
+                    {{ 'Busiest hour: {views} views'|t('craft-analytics', { views: heatmap.max|number_format }) }}
+                </span>
+            </div>
+        {% else %}
+            {{ ca.empty(
+                'No hourly detail to show'|t('craft-analytics'),
+                'Traffic is kept hour by hour for {days} days, then compacted to daily totals to keep the tables small. There is nothing in that window yet.'|t('craft-analytics', { days: hourlyWindowDays })
+            ) }}
+        {% endif %}
+    </div>
+</div>

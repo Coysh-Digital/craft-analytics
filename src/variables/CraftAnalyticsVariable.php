@@ -2,7 +2,8 @@
 
 namespace coyshdigital\craftanalytics\variables;
 
-use coyshdigital\craftanalytics\helpers\Chart;
+use coyshdigital\craftanalytics\charts\ChartData;
+use coyshdigital\craftanalytics\helpers\Sparkline;
 use coyshdigital\craftanalytics\models\DateRange;
 use coyshdigital\craftanalytics\Plugin;
 use coyshdigital\craftanalytics\services\StatsService;
@@ -127,42 +128,35 @@ class CraftAnalyticsVariable
     // ----------------------------------------------------- CP chart helpers
 
     /**
+     * The payload for the views-and-uniques chart, from a trend() result.
+     *
+     * Kept here rather than passed in by each controller so that
+     * `{% include '_partials/trend.twig' %}` still works anywhere a `trend`
+     * variable is in scope, which is how it was already being used.
+     *
+     * @param array{labels: string[], views: int[], uniques: int[], hourly: bool} $trend
+     * @return array<string,mixed>
+     */
+    public function trendChart(array $trend): array
+    {
+        return ChartData::trend($trend);
+    }
+
+    /**
+     * A sparkline path.
+     *
+     * Still server-rendered SVG, deliberately. The two callers - the entry
+     * editor's sidebar and the dashboard widget - render on Craft's own
+     * screens, where loading a charting library to draw a 200x30 line would be
+     * indefensible. This needs no JavaScript at all, so nothing about it can
+     * be broken by a script optimiser, a content security policy, or a
+     * cpresources publishing failure.
+     *
      * @param int[] $values
-     * @return array{line: string, area: string, points: array<int,array{x: float, y: float}>}
      */
-    public function series(array $values, float $width, float $height, int $max): array
+    public function sparklinePath(array $values, float $width = 120, float $height = 28): string
     {
-        return Chart::series($values, $width, $height, $max);
-    }
-
-    /**
-     * @return array{max: int, ticks: int[]}
-     */
-    public function scale(int $peak, int $tickCount = 4): array
-    {
-        return Chart::scale($peak, $tickCount);
-    }
-
-    /**
-     * @param int[] $values
-     */
-    public function sparkline(array $values, float $width = 120, float $height = 28): string
-    {
-        return Chart::sparkline($values, $width, $height);
-    }
-
-    /**
-     * @param string[] $labels
-     * @return array<int,string|null>
-     */
-    public function thinLabels(array $labels, int $maxLabels = 8): array
-    {
-        return Chart::thinLabels($labels, $maxLabels);
-    }
-
-    public function shortDate(string $date): string
-    {
-        return Chart::shortDate($date);
+        return Sparkline::path($values, $width, $height);
     }
 
     /**

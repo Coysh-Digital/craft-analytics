@@ -1,0 +1,68 @@
+{# The wrapper every Chart.js chart in the control panel is drawn into.
+
+   Four things ship together and none of them is optional:
+
+   - a canvas, labelled, for people who can see it;
+   - a `type="application/json"` block, which is how data reaches the chart -
+     Cloudflare Rocket Loader rewrites and defers inline scripts but leaves
+     JSON blocks and external files alone (see ca-charts.js);
+   - a table carrying the same numbers, visually hidden, because a canvas is
+     opaque to a screen reader and "there is a chart here" is not a report;
+   - a note, hidden, for when the chart cannot be drawn at all.
+
+   The table is built from the payload rather than passed in separately, so it
+   cannot drift from what the chart is plotting - which is the failure mode that
+   makes an accessible-alternative table worth less than no table at all. #}
+
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% macro chart(id, payload, options) %}
+    {% set options = options ?? {} %}
+    {% set datasets = payload.datasets ?? [] %}
+
+    <figure class="ca-chart {{ options.class ?? '' }}" data-ca-chart="{{ id }}">
+        <canvas id="{{ id }}" role="img" aria-label="{{ options.label }}"></canvas>
+
+        <script type="application/json" id="{{ id }}-data">
+            {{- payload|json_encode|raw -}}
+        </script>
+
+        {# Un-hidden by ca-charts.js when a chart fails, alongside the table
+           below it - so a failure shows the numbers, not an apology. #}
+        <p id="{{ id }}-fallback" class="ca-footnote" hidden>
+            {{ options.fallback ?? 'This chart could not be drawn. The same figures are in the table below.'|t('craft-analytics') }}
+        </p>
+    </figure>
+
+    {# `table: false` for a chart that sits beside a visible table of the same
+       numbers - a doughnut next to its own breakdown, say. Repeating them for
+       a screen reader there is noise, not access. Everywhere else the table
+       ships, and omitting it is not an option the caller should reach for. #}
+    {% if options.table ?? true %}
+    {# The hiding class goes on this wrapper, not on the table - see the CSS.
+       ca-charts.js strips it from here when a chart fails to draw. #}
+    <div class="ca-visually-hidden-table" id="{{ id }}-table">
+    <table class="ca-table">
+        <caption>{{ options.caption ?? options.label }}</caption>
+        <thead>
+        <tr>
+            <th>{{ options.labelHeading ?? 'Period'|t('craft-analytics') }}</th>
+            {% for dataset in datasets %}
+                <th class="ca-num">{{ dataset.label }}</th>
+            {% endfor %}
+        </tr>
+        </thead>
+        <tbody>
+        {% for i, label in payload.labels ?? [] %}
+            <tr>
+                <th scope="row">{{ (payload.full ?? [])[i] ?? label }}</th>
+                {% for dataset in datasets %}
+                    <td class="ca-num">{{ (dataset.data[i] ?? 0)|number_format }}</td>
+                {% endfor %}
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% endif %}
+{% endmacro %}

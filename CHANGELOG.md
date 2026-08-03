@@ -1,5 +1,73 @@
 # Release Notes for Craft Analytics
 
+## 1.6.0 - 2026-08-03
+
+> **What this adds to your database.** One new table,
+> `craftanalytics_pagesourcesrollup`, recording how visitors reached each page.
+> It fills forward only — there is nothing to backfill it from, because raw
+> hits are aggregated away as they arrive — so the new card says which date
+> collection started rather than implying a page had no referrers before then.
+> Row growth is bounded by `dimensionCap` like every other rollup, and it is
+> covered by `rollupRetentionMonths`.
+
+### Added
+
+- **A screen per page.** Clicking a path on the Pages report (or the
+  dashboard's top-pages card) now opens that page's own report: views and
+  unique visitors over time, entrances, exits, bounce rate and average time
+  with period-on-period change, how people reached it, how far down they read,
+  and the events and outbound clicks recorded on it. Paths that never resolved
+  to a Craft entry — a template-only route, a search results page — get the
+  same screen as everything else, which is the case the entry-editor link could
+  never cover.
+- **How people reached a given page.** No rollup could answer this: sources are
+  session-grained and carry no path, so the entry path was known when a session
+  closed and then discarded. The new table records it per pageview against the
+  *session's* referrer, so an interior page reports how the visit started
+  rather than which of your own pages preceded it.
+- **Charts.** Chart.js replaces the hand-rolled SVG on the plugin's own
+  screens, and there are more of them: a stacked area of traffic by channel
+  over time on Sources, a device-type doughnut on Devices, a day-of-week ×
+  hour-of-day heatmap on the Dashboard, and a comparison chart on Pages for
+  plotting up to four paths against each other. Every chart ships a table
+  carrying the same numbers for anyone who cannot see the canvas — including
+  the traffic chart, whose label had promised one since it was written.
+
+### Changed
+
+- Chart.js 4.5.1 is vendored under `src/resources/cp/js/vendor/`, with its
+  version, source and checksum recorded in `PROVENANCE.md` and its licence in
+  `THIRD-PARTY-LICENSES.md`. A unit test and a CI job both re-check those
+  checksums, so swapping a vendored file without recording it fails the build.
+  jsvectormap, which had been vendored since 1.4.0 with no version recorded
+  anywhere, is now identified (1.7.0), checksummed and listed too.
+- It is loaded only on the four screens that draw a chart. Craft's entry editor
+  and dashboard widgets keep their server-rendered SVG sparklines and download
+  no JavaScript from this plugin at all.
+- Chart colours are declared once, in `cp.css`, and read from there by both the
+  stylesheet and the chart code; `#2563eb` had been written out in four places.
+  The categorical palette is capped at four series plus a grey "Other" because
+  that is the widest set whose colour-vision separation still measures well —
+  the figures, and the method, are recorded in the stylesheet's header.
+
+### Fixed
+
+- Events, scroll depth, outbound clicks and site searches were silently
+  discarded in the `direct` and `queue` tracking modes. Both build the same
+  interaction buckets as the drain and then never passed them to the rollup
+  sink, so they were collected and dropped. Only `spool`, the default, was
+  recording them.
+- A chart's accessible data table could not be hidden by the existing
+  visually-hidden rule: a table's height is a minimum rather than a maximum, so
+  a 366-row table stayed 12,000px tall, invisible but dragging the page's
+  scroll height out with it. The rule now applies to a wrapper, which also
+  fixes the funnel table it was already used on.
+- The report screens could be scrolled sideways on a narrow viewport, by up to
+  most of a screen width, with nothing to see out there. Wide content - a
+  24-column heatmap, a six-column table - scrolls inside its own container as
+  it always did; it was the hidden data tables reporting their full width to
+  the page. Verified at 320, 375, 768 and 1400px.
+
 ## 1.5.0 - 2026-07-26
 
 > **Before you upgrade.** Retention was only being enforced on four of the
