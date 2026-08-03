@@ -1,0 +1,150 @@
+{% extends 'craft-analytics/_layout.twig' %}
+{% import 'craft-analytics/_partials/macros.twig' as ca %}
+
+{% block report %}
+    <p class="ca-footnote" style="margin-top: 0">
+        <a class="go" style="transform: scaleX(-1); display: inline-block"
+           href="{{ url('craft-analytics/pages', currentParams|filter((v, k) => k != 'path')) }}"></a>
+        <a href="{{ url('craft-analytics/pages', currentParams|filter((v, k) => k != 'path')) }}">
+            {{ 'All pages'|t('craft-analytics') }}
+        </a>
+    </p>
+
+    <div class="ca-card">
+        <div class="ca-card-head">
+            <h2 class="ca-card-title ca-path">{{ path }}</h2>
+            <span class="ca-muted">
+                {% if editUrls[totals.elementId] is defined and editUrls[totals.elementId] %}
+                    <a href="{{ editUrls[totals.elementId] }}">{{ 'Edit entry'|t('craft-analytics') }} &rarr;</a>
+                {% else %}
+                    {# Not every path is an entry: a template-only route, a
+                       search results page, a 404 that got traffic. #}
+                    {{ 'Not a Craft entry'|t('craft-analytics') }}
+                {% endif %}
+            </span>
+        </div>
+    </div>
+
+    {% if totals.views == 0 %}
+        {{ ca.empty(
+            'No traffic to this page for this period'|t('craft-analytics'),
+            'This page was not viewed in the selected date range. Try a longer period.'|t('craft-analytics')
+        ) }}
+    {% else %}
+        <div class="ca-kpis">
+            {{ ca.kpi('Pageviews'|t('craft-analytics'), totals.views, { delta: deltas.views }) }}
+
+            {{ ca.kpi('Unique visitors'|t('craft-analytics'), uniques, {
+                delta: deltas.uniques,
+                info: uniquesAccuracy,
+            }) }}
+
+            {{ ca.kpi('Entrances'|t('craft-analytics'), totals.entrances, {
+                delta: deltas.entrances,
+                info: 'Sessions that began on this page. A page people reach part-way through a visit will show few, which is not a fault.'|t('craft-analytics'),
+            }) }}
+
+            {{ ca.kpi('Exits'|t('craft-analytics'), totals.exits, {
+                delta: deltas.exits,
+                info: 'Sessions whose last page was this one.'|t('craft-analytics'),
+            }) }}
+
+            {{ ca.kpi('Bounce rate'|t('craft-analytics'), totals.bounceRate, {
+                raw: totals.entrances ? totals.bounceRate|number_format(1) ~ '%' : '-',
+                delta: totals.entrances ? deltas.bounceRate : null,
+                inverse: true,
+                info: 'Of the sessions that began here, the share that went no further. Bounces are only counted against the page a session entered on, so a page with no entrances has none to report.'|t('craft-analytics'),
+            }) }}
+
+            {{ ca.kpi('Avg. time on page'|t('craft-analytics'), totals.avgDwellMs, {
+                raw: ca.duration(totals.avgDwellMs),
+                delta: deltas.avgDwellMs,
+                info: 'Measured by the tracker.'|t('craft-analytics'),
+            }) }}
+        </div>
+
+        {% include 'craft-analytics/_partials/trend.twig' %}
+
+        <div class="ca-card">
+            <div class="ca-card-head">
+                <h2 class="ca-card-title">{{ 'How people reached this page'|t('craft-analytics') }}</h2>
+            </div>
+            <div class="ca-card-body ca-table-scroll">
+                {% if sources|length %}
+                    {% set maxSourceViews = max(sources|map(s => s.views)) %}
+                    <table class="ca-table">
+                        <thead>
+                        <tr>
+                            <th>{{ 'Referrer'|t('craft-analytics') }}</th>
+                            <th>{{ 'Channel'|t('craft-analytics') }}</th>
+                            <th class="ca-num">{{ 'Views'|t('craft-analytics') }}</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for source in sources %}
+                            <tr>
+                                {{ ca.barCell(source.host ?: 'None'|t('craft-analytics'), source.views, maxSourceViews, null) }}
+                                <td class="ca-muted">{{ source.channel }}</td>
+                                <td class="ca-num">{{ source.views|number_format }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p class="ca-muted">{{ 'Nothing recorded for this page in this period.'|t('craft-analytics') }}</p>
+                {% endif %}
+            </div>
+            {# This is the one figure on the screen that cannot be backfilled:
+               it is derived from raw hits, and those are aggregated away as
+               they arrive. Saying when collection started is the difference
+               between a known gap and an apparent one. #}
+            <div class="ca-card-body" style="padding-top: 0">
+                <p class="ca-footnote" style="margin: 0">
+                    {% if sourcesSince %}
+                        {{ 'How visitors arrived is recorded per page from {date} onwards. Views before then are counted, but their source was not kept.'|t('craft-analytics', { date: sourcesSince|date('j M Y') }) }}
+                    {% else %}
+                        {{ 'How visitors arrived is recorded per page from now on. It cannot be worked out for traffic that has already been counted.'|t('craft-analytics') }}
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        <div class="ca-grid-2">
+            {% if scroll %}
+                {% set reads = [
+                    { label: '25%', value: scroll.reached25 },
+                    { label: '50%', value: scroll.reached50 },
+                    { label: '75%', value: scroll.reached75 },
+                    { label: '100%', value: scroll.reached100 },
+                ] %}
+                {{ ca.listCard('How far people read'|t('craft-analytics'), reads, {
+                    labelHeading: 'Reached'|t('craft-analytics'),
+                    valueHeading: 'Views'|t('craft-analytics'),
+                    empty: 'No scroll depth recorded for this page.'|t('craft-analytics'),
+                }) }}
+            {% endif %}
+
+            {{ ca.listCard(
+                'Events on this page'|t('craft-analytics'),
+                events|map(e => { label: e.name, value: e.count }),
+                {
+                    labelHeading: 'Event'|t('craft-analytics'),
+                    valueHeading: 'Count'|t('craft-analytics'),
+                    empty: 'No events recorded on this page.'|t('craft-analytics'),
+                    placeholder: isPro ? null : 'Which custom events fired on this page.'|t('craft-analytics'),
+                }|filter(v => v is not null)
+            ) }}
+
+            {{ ca.listCard(
+                'Links clicked from this page'|t('craft-analytics'),
+                outbound|map(o => { label: o.url ?: o.host, value: o.count }),
+                {
+                    labelHeading: 'Destination'|t('craft-analytics'),
+                    valueHeading: 'Clicks'|t('craft-analytics'),
+                    empty: 'No outbound clicks recorded from this page.'|t('craft-analytics'),
+                    placeholder: isPro ? null : 'Which external links people followed from this page.'|t('craft-analytics'),
+                }|filter(v => v is not null)
+            ) }}
+        </div>
+    {% endif %}
+{% endblock %}

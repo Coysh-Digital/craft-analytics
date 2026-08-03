@@ -1,12 +1,36 @@
 {% extends 'craft-analytics/_layout.twig' %}
 {% import 'craft-analytics/_partials/macros.twig' as ca %}
 
-{% macro deviceTable(title, rows, emptyMessage) %}
+{% macro deviceTable(title, rows, emptyMessage, chart) %}
     {% import 'craft-analytics/_partials/macros.twig' as ca %}
+    {% import 'craft-analytics/_partials/chart.twig' as chartMacro %}
     <div class="ca-card">
         <div class="ca-card-head">
             <h2 class="ca-card-title">{{ title }}</h2>
         </div>
+        {# The chart and the table are the same figures, so the table is the
+           accessible version and the chart does not ship a second, hidden
+           copy of it. #}
+        {% if chart is defined and chart and rows|length %}
+            <div class="ca-card-body ca-split">
+                <div class="ca-split-chart">
+                    {{ chartMacro.chart('ca-device-types', chart, {
+                        label: 'Share of sessions by device type.'|t('craft-analytics'),
+                        class: 'ca-chart-sm',
+                        table: false,
+                    }) }}
+                </div>
+                <div class="ca-split-legend">
+                    {% for row in rows %}
+                        <div class="ca-legend-row">
+                            <i class="ca-swatch" style="background: var(--ca-series-{{ loop.index0 % 4 + 1 }})"></i>
+                            <span>{{ row.label }}</span>
+                            <b>{{ (chart.shares[loop.index0] ?? 0)|number_format(1) }}%</b>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
         <div class="ca-card-body ca-table-scroll">
             {% if rows|length %}
                 {% set maxSessions = max(rows|map(r => r.sessions)) %}
@@ -42,7 +66,8 @@
     {{ tables.deviceTable(
         'Device type'|t('craft-analytics'),
         deviceTypes,
-        'Sessions appear once they have closed and the drain has run.'|t('craft-analytics')
+        'Sessions appear once they have closed and the drain has run.'|t('craft-analytics'),
+        deviceChart
     ) }}
 
     {{ tables.deviceTable(

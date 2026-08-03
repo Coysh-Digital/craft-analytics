@@ -96,7 +96,10 @@ class Plugin extends BasePlugin
     public const PERMISSION_EXPORT = 'craftAnalytics:export';
     public const PERMISSION_MANAGE_SETTINGS = 'craftAnalytics:manageSettings';
 
-    public string $schemaVersion = '1.4.0';
+    // Bumped whenever a migration is added: Craft only runs them when the
+    // installed schema version is behind this one. 1.6.0 adds the page-sources
+    // rollup.
+    public string $schemaVersion = '1.6.0';
     public bool $hasCpSettings = true;
     public bool $hasCpSection = true;
 
@@ -556,6 +559,11 @@ class Plugin extends BasePlugin
                     $range = DateRange::fromPreset(DateRange::PRESET_30_DAYS);
                     $stats = $this->getStats()->elementStats($entry->siteId, $entry->id, $range);
 
+                    // CSS only, and deliberately no ChartsAsset: this is the
+                    // entry editor, a screen the plugin is a guest on. The
+                    // sparkline is server-rendered SVG so this panel adds no
+                    // JavaScript at all — nothing here can be broken by a
+                    // script optimiser, a CSP, or a publishing failure.
                     Craft::$app->getView()->registerAssetBundle(CpAsset::class);
 
                     $event->html .= Craft::$app->getView()->renderTemplate('craft-analytics/_partials/sidebar.twig', [
@@ -719,6 +727,13 @@ class Plugin extends BasePlugin
                 $event->rules['craft-analytics/realtime'] = 'craft-analytics/reports/realtime';
                 $event->rules['craft-analytics/realtime-data'] = 'craft-analytics/reports/realtime-data';
                 $event->rules['craft-analytics/pages'] = 'craft-analytics/reports/pages';
+                // The path travels as ?path=, not as a route token: paths
+                // contain slashes and query strings, and a token would have to
+                // encode around both. It also sidesteps the trap documented on
+                // ContentController::actionSection() - matched route tokens are
+                // handed to runAction() and never merged into the query params,
+                // so getRequiredParam() 400s on a perfectly valid URL.
+                $event->rules['craft-analytics/pages/detail'] = 'craft-analytics/reports/page';
                 $event->rules['craft-analytics/sources'] = 'craft-analytics/reports/sources';
                 $event->rules['craft-analytics/devices'] = 'craft-analytics/reports/devices';
                 $event->rules['craft-analytics/crawlers'] = 'craft-analytics/reports/crawlers';

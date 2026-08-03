@@ -92,7 +92,10 @@
                         {% endfor %}
                     </ol>
 
-                    <table class="ca-table ca-visually-hidden-table">
+                    {# Wrapper, not the table: a table ignores height:1px and stays
+                       full size, extending the page invisibly. See the CSS. #}
+                    <div class="ca-visually-hidden-table">
+                    <table class="ca-table">
                         <caption>{{ 'Funnel steps as a table'|t('craft-analytics') }}</caption>
                         <thead>
                         <tr>
@@ -113,6 +116,7 @@
                         {% endfor %}
                         </tbody>
                     </table>
+                    </div>
                 {% else %}
                     {{ ca.empty(
                         'Nobody entered this funnel in this period'|t('craft-analytics'),

@@ -156,9 +156,11 @@ class Drainer extends Component
             return;
         }
 
+        $acquisition = $this->acquisitionReferrers($hits);
+
         $aggregator = new Aggregator(null, $this->settings());
         foreach ($hits as $hit) {
-            $aggregator->add($hit);
+            $aggregator->add($hit, $acquisition[$hit->siteId . ':' . $hit->sessionKey] ?? $hit->referrer);
         }
 
         $deltas = $this->deltas($hits);
@@ -394,6 +396,39 @@ class Drainer extends Component
             ->from(Table::DRAIN_LOG)
             ->where(['batchId' => $batchId])
             ->exists($this->db());
+    }
+
+    /**
+     * How each session in this batch reached the site.
+     *
+     * A hit's own referrer only answers this for the first page of a visit;
+     * after that it is the previous page on this site, and classifying it
+     * would report every interior page as self-referred. The session already
+     * holds the referrer it arrived with, so an existing session wins and the
+     * hit's referrer is the fallback for a session this batch is starting.
+     *
+     * One store read per distinct session, not per hit — the same order as
+     * the deltas this batch is about to build anyway.
+     *
+     * @param Hit[] $hits
+     * @return array<string,string>
+     */
+    private function acquisitionReferrers(array $hits): array
+    {
+        $referrers = [];
+
+        foreach ($hits as $hit) {
+            $key = $hit->siteId . ':' . $hit->sessionKey;
+
+            if (array_key_exists($key, $referrers)) {
+                continue;
+            }
+
+            $session = $this->sessions()->get($hit->siteId, $hit->sessionKey);
+            $referrers[$key] = $session !== null ? $session->referrer : $hit->referrer;
+        }
+
+        return $referrers;
     }
 
     /**

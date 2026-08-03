@@ -30,7 +30,14 @@ class Aggregator
         $this->interactions = new InteractionBuckets();
     }
 
-    public function add(Hit $hit): void
+    /**
+     * @param string|null $acquisitionReferrer How the visitor reached the
+     *   site, from their session. Null falls back to the hit's own referrer,
+     *   which is the right answer for the first page of a visit and the wrong
+     *   one for every page after it - so callers that hold the session store
+     *   should look it up. See Drainer::acquisitionReferrers().
+     */
+    public function add(Hit $hit, ?string $acquisitionReferrer = null): void
     {
         [$date, $hour] = $this->dateAndHour($hit->timestamp);
 
@@ -68,6 +75,12 @@ class Aggregator
         );
 
         $bucket->add($hit->visitorHash, $hit->countView, $hit->dwellMs);
+
+        // Only real views: a beacon reporting dwell for a view the server
+        // already counted must not count its source twice either.
+        if ($hit->countView) {
+            $this->interactions->addPageSource($hit, $date, $acquisitionReferrer ?? $hit->referrer);
+        }
     }
 
     /**

@@ -289,7 +289,11 @@ class SeedController extends Controller
             }
 
             foreach ($hits as $hit) {
-                $aggregator->add($hit);
+                // The session's referrer, not the hit's: only the first page
+                // of a visit carries one above, which is how real capture
+                // behaves. Passing it for every hit is what the drain does,
+                // and without it every interior page would seed as Direct.
+                $aggregator->add($hit, $referrer);
             }
 
             $sessions[] = $this->sessionFor($hits, [

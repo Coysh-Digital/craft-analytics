@@ -8,6 +8,7 @@ use coyshdigital\craftanalytics\enums\DeviceType;
 use coyshdigital\craftanalytics\enums\DimensionType;
 use coyshdigital\craftanalytics\models\DateRange;
 use coyshdigital\craftanalytics\Plugin;
+use coyshdigital\craftanalytics\rollup\Compactor;
 use coyshdigital\craftanalytics\session\Session;
 use coyshdigital\craftanalytics\uniques\UniqueCounterInterface;
 use coyshdigital\craftanalytics\uniques\UniqueScope;
@@ -122,19 +123,23 @@ class StatsService extends Component
      *
      * @return array{labels: string[], views: int[], uniques: int[], hourly: bool}
      */
-    public function trend(int $siteId, DateRange $range): array
+    public function trend(int $siteId, DateRange $range, ?int $pathDimId = null): array
     {
         if ($range->isHourly()) {
-            return $this->hourlyTrend($siteId, $range);
+            return $this->hourlyTrend($siteId, $range, $pathDimId);
         }
 
-        $rows = (new Query())
+        $query = (new Query())
             ->select(['date', 'views' => 'SUM([[views]])'])
             ->from(Table::PAGES_ROLLUP)
             ->where(['siteId' => $siteId])
-            ->andWhere(['between', 'date', $range->from, $range->to])
-            ->groupBy('date')
-            ->all($this->db());
+            ->andWhere(['between', 'date', $range->from, $range->to]);
+
+        if ($pathDimId !== null) {
+            $query->andWhere(['pathDimId' => $pathDimId]);
+        }
+
+        $rows = $query->groupBy('date')->all($this->db());
 
         $viewsByDate = [];
         foreach ($rows as $row) {
@@ -150,7 +155,7 @@ class StatsService extends Component
             $views[] = $viewsByDate[$date] ?? 0;
             // Per-day uniques are merged within the day — correct — and are
             // deliberately not merged across days (see uniquesFor()).
-            $uniques[] = $this->uniquesForDate($siteId, $date);
+            $uniques[] = $this->uniquesForDate($siteId, $date, $pathDimId);
         }
 
         return ['labels' => $labels, 'views' => $views, 'uniques' => $uniques, 'hourly' => false];
@@ -159,14 +164,18 @@ class StatsService extends Component
     /**
      * @return array{labels: string[], views: int[], uniques: int[], hourly: bool}
      */
-    private function hourlyTrend(int $siteId, DateRange $range): array
+    private function hourlyTrend(int $siteId, DateRange $range, ?int $pathDimId = null): array
     {
-        $rows = (new Query())
+        $query = (new Query())
             ->select(['hour', 'views' => 'SUM([[views]])'])
             ->from(Table::PAGES_ROLLUP)
-            ->where(['siteId' => $siteId, 'date' => $range->from])
-            ->groupBy('hour')
-            ->all($this->db());
+            ->where(['siteId' => $siteId, 'date' => $range->from]);
+
+        if ($pathDimId !== null) {
+            $query->andWhere(['pathDimId' => $pathDimId]);
+        }
+
+        $rows = $query->groupBy('hour')->all($this->db());
 
         $byHour = [];
         foreach ($rows as $row) {
@@ -192,13 +201,18 @@ class StatsService extends Component
         return ['labels' => $labels, 'views' => $views, 'uniques' => $uniques, 'hourly' => true];
     }
 
-    private function uniquesForDate(int $siteId, string $date): int
+    private function uniquesForDate(int $siteId, string $date, ?int $pathDimId = null): int
     {
-        $rows = (new Query())
+        $query = (new Query())
             ->select(['uniques', 'hour', 'pathDimId'])
             ->from(Table::PAGES_ROLLUP)
-            ->where(['siteId' => $siteId, 'date' => $date])
-            ->all($this->db());
+            ->where(['siteId' => $siteId, 'date' => $date]);
+
+        if ($pathDimId !== null) {
+            $query->andWhere(['pathDimId' => $pathDimId]);
+        }
+
+        $rows = $query->all($this->db());
 
         $scopes = [];
         $sketches = [];
@@ -269,6 +283,49 @@ class StatsService extends Component
     }
 
     /**
+     * The topPages() row for one path, whether or not it is in the top 100.
+     *
+     * Returns zeros rather than null for a path with no traffic in the range:
+     * the page exists, it just had a quiet month, and an empty screen would
+     * imply the path was wrong.
+     *
+     * @return array{path: string, elementId: int|null, views: int, entrances: int, exits: int, bounces: int, avgDwellMs: int, bounceRate: float}
+     */
+    public function pageTotals(int $siteId, DateRange $range, int $pathDimId, string $path): array
+    {
+        $row = (new Query())
+            ->select([
+                'elementId' => 'MAX([[elementId]])',
+                'views' => 'SUM([[views]])',
+                'entrances' => 'SUM([[entrances]])',
+                'exits' => 'SUM([[exits]])',
+                'bounces' => 'SUM([[bounces]])',
+                'dwell' => 'SUM([[totalDwellMs]])',
+            ])
+            ->from(Table::PAGES_ROLLUP)
+            ->where(['siteId' => $siteId, 'pathDimId' => $pathDimId])
+            ->andWhere(['between', 'date', $range->from, $range->to])
+            ->one($this->db());
+
+        $views = (int)($row['views'] ?? 0);
+        $entrances = (int)($row['entrances'] ?? 0);
+
+        return [
+            'path' => $path,
+            'elementId' => isset($row['elementId']) && $row['elementId'] !== null ? (int)$row['elementId'] : null,
+            'views' => $views,
+            'entrances' => $entrances,
+            'exits' => (int)($row['exits'] ?? 0),
+            'bounces' => (int)($row['bounces'] ?? 0),
+            'avgDwellMs' => $views > 0 ? (int)round((int)($row['dwell'] ?? 0) / $views) : 0,
+            // Bounces are only ever written to the row of the page a session
+            // *entered* on, so a page that is rarely an entry page has no
+            // bounce rate to report - which is correct, not missing.
+            'bounceRate' => $entrances > 0 ? (int)($row['bounces'] ?? 0) / $entrances * 100 : 0.0,
+        ];
+    }
+
+    /**
      * @return array<int,array{channel: string, host: string, sessions: int, bounces: int, bounceRate: float}>
      */
     public function sources(int $siteId, DateRange $range, int $limit = 100): array
@@ -321,6 +378,128 @@ class StatsService extends Component
             ->all($this->db());
 
         return array_map(static fn(array $row): array => [
+            'channel' => (Channel::tryFrom((int)$row['channel']) ?? Channel::Direct)->label(),
+            'sessions' => (int)$row['sessions'],
+        ], $rows);
+    }
+
+    /**
+     * Daily views for several paths at once, for the comparison chart.
+     *
+     * The paths are matched against the dimensions table by value, so a path
+     * that was never recorded simply contributes nothing rather than erroring
+     * — but callers should still validate the list first: see the note on
+     * ReportsController::actionPages() about not turning this into a way to
+     * probe which paths exist.
+     *
+     * @param string[] $paths
+     * @return array<int,array{date: string, path: string, views: int}>
+     */
+    public function pathsTrend(int $siteId, DateRange $range, array $paths): array
+    {
+        if ($paths === []) {
+            return [];
+        }
+
+        $rows = (new Query())
+            ->select([
+                'date' => '[[p]].[[date]]',
+                'path' => '[[d]].[[value]]',
+                'views' => 'SUM([[p]].[[views]])',
+            ])
+            ->from(['p' => Table::PAGES_ROLLUP])
+            ->innerJoin(['d' => Table::DIMENSIONS], '[[d]].[[id]] = [[p]].[[pathDimId]]')
+            ->where(['[[p]].[[siteId]]' => $siteId])
+            ->andWhere(['[[d]].[[type]]' => DimensionType::Path->value])
+            ->andWhere(['[[d]].[[value]]' => array_values($paths)])
+            ->andWhere(['between', '[[p]].[[date]]', $range->from, $range->to])
+            ->groupBy(['[[p]].[[date]]', '[[d]].[[value]]'])
+            ->all($this->db());
+
+        return array_map(static fn(array $row): array => [
+            'date' => (string)$row['date'],
+            'path' => (string)$row['path'],
+            'views' => (int)$row['views'],
+        ], $rows);
+    }
+
+    /**
+     * How people reached one page.
+     *
+     * The referrer is the session's, not the pageview's, so an interior page
+     * reports how the visit started rather than which of your own pages
+     * preceded it.
+     *
+     * Fills forward only: nothing before this table existed can be recovered,
+     * because the raw hits it would come from were aggregated away as they
+     * arrived. The screen says so rather than showing an empty card.
+     *
+     * @return array<int,array{channel: string, host: string, views: int}>
+     */
+    public function pageSources(int $siteId, DateRange $range, int $pathDimId, int $limit = 20): array
+    {
+        $rows = (new Query())
+            ->select([
+                'channel' => '[[p]].[[channel]]',
+                'host' => '[[d]].[[value]]',
+                'views' => 'SUM([[p]].[[views]])',
+            ])
+            ->from(['p' => Table::PAGE_SOURCES_ROLLUP])
+            ->leftJoin(['d' => Table::DIMENSIONS], '[[d]].[[id]] = [[p]].[[refHostDimId]]')
+            ->where(['[[p]].[[siteId]]' => $siteId, '[[p]].[[pathDimId]]' => $pathDimId])
+            ->andWhere(['between', '[[p]].[[date]]', $range->from, $range->to])
+            ->groupBy(['[[p]].[[channel]]', '[[d]].[[value]]'])
+            ->orderBy(['views' => SORT_DESC])
+            ->limit($limit)
+            ->all($this->db());
+
+        return array_map(static fn(array $row): array => [
+            'channel' => (Channel::tryFrom((int)$row['channel']) ?? Channel::Direct)->label(),
+            'host' => (string)($row['host'] ?? ''),
+            'views' => (int)$row['views'],
+        ], $rows);
+    }
+
+    /**
+     * The first date this site has any page-source data for.
+     *
+     * The report needs it to say "collecting since ..." rather than implying
+     * a page had no traffic at all before the table existed.
+     */
+    public function pageSourcesSince(int $siteId): ?string
+    {
+        $date = (new Query())
+            ->select(['date'])
+            ->from(Table::PAGE_SOURCES_ROLLUP)
+            ->where(['siteId' => $siteId])
+            ->orderBy(['date' => SORT_ASC])
+            ->limit(1)
+            ->scalar($this->db());
+
+        return $date === false || $date === null ? null : (string)$date;
+    }
+
+    /**
+     * Sessions by channel, per day — the same answer as channels(), spread
+     * over time so a shift in the mix is visible rather than averaged away.
+     *
+     * Returns rows rather than a shaped series: zero-filling and folding the
+     * tail into "Other" are ChartData's job, and are tested there.
+     *
+     * @return array<int,array{date: string, channel: string, sessions: int}>
+     */
+    public function channelTrend(int $siteId, DateRange $range): array
+    {
+        $rows = (new Query())
+            ->select(['date', 'channel', 'sessions' => 'SUM([[sessions]])'])
+            ->from(Table::SOURCES_ROLLUP)
+            ->where(['siteId' => $siteId])
+            ->andWhere(['between', 'date', $range->from, $range->to])
+            ->groupBy(['date', 'channel'])
+            ->all($this->db());
+
+        return array_map(static fn(array $row): array => [
+            'date' => (string)$row['date'],
             'channel' => (Channel::tryFrom((int)$row['channel']) ?? Channel::Direct)->label(),
             'sessions' => (int)$row['sessions'],
         ], $rows);
@@ -556,9 +735,9 @@ class StatsService extends Component
     /**
      * @return array<int,array{name: string, count: int, value: float}>
      */
-    public function events(int $siteId, DateRange $range, int $limit = 200): array
+    public function events(int $siteId, DateRange $range, int $limit = 200, ?int $pathDimId = null): array
     {
-        $rows = (new Query())
+        $query = (new Query())
             ->select([
                 'name' => '[[d]].[[value]]',
                 'count' => 'SUM([[e]].[[count]])',
@@ -567,7 +746,15 @@ class StatsService extends Component
             ->from(['e' => Table::EVENTS_ROLLUP])
             ->innerJoin(['d' => Table::DIMENSIONS], '[[d]].[[id]] = [[e]].[[eventNameDimId]]')
             ->where(['[[e]].[[siteId]]' => $siteId])
-            ->andWhere(['between', '[[e]].[[date]]', $range->from, $range->to])
+            ->andWhere(['between', '[[e]].[[date]]', $range->from, $range->to]);
+
+        // The rollup has carried pathDimId all along; this is the first caller
+        // to ask for it rather than grouping it away.
+        if ($pathDimId !== null) {
+            $query->andWhere(['[[e]].[[pathDimId]]' => $pathDimId]);
+        }
+
+        $rows = $query
             ->groupBy('[[d]].[[value]]')
             ->orderBy(['count' => SORT_DESC])
             ->limit($limit)
@@ -583,9 +770,9 @@ class StatsService extends Component
     /**
      * @return array<int,array{host: string, url: string, count: int}>
      */
-    public function outbound(int $siteId, DateRange $range, int $limit = 200): array
+    public function outbound(int $siteId, DateRange $range, int $limit = 200, ?int $pathDimId = null): array
     {
-        $rows = (new Query())
+        $query = (new Query())
             ->select([
                 'host' => '[[h]].[[value]]',
                 'url' => '[[u]].[[value]]',
@@ -595,7 +782,16 @@ class StatsService extends Component
             ->innerJoin(['h' => Table::DIMENSIONS], '[[h]].[[id]] = [[o]].[[targetHostDimId]]')
             ->leftJoin(['u' => Table::DIMENSIONS], '[[u]].[[id]] = [[o]].[[targetDimId]]')
             ->where(['[[o]].[[siteId]]' => $siteId])
-            ->andWhere(['between', '[[o]].[[date]]', $range->from, $range->to])
+            ->andWhere(['between', '[[o]].[[date]]', $range->from, $range->to]);
+
+        // pathDimId is the last column of the unique index, so filtering on it
+        // alone scans the siteId+date range rather than seeking. Fine at
+        // rollup volumes, and worth knowing before it is used somewhere hotter.
+        if ($pathDimId !== null) {
+            $query->andWhere(['[[o]].[[pathDimId]]' => $pathDimId]);
+        }
+
+        $rows = $query
             ->groupBy(['[[h]].[[value]]', '[[u]].[[value]]'])
             ->orderBy(['count' => SORT_DESC])
             ->limit($limit)
@@ -643,9 +839,9 @@ class StatsService extends Component
      *
      * @return array<int,array{path: string, reached25: int, reached50: int, reached75: int, reached100: int}>
      */
-    public function scrollDepth(int $siteId, DateRange $range, int $limit = 100): array
+    public function scrollDepth(int $siteId, DateRange $range, int $limit = 100, ?int $pathDimId = null): array
     {
-        $rows = (new Query())
+        $query = (new Query())
             ->select([
                 'path' => '[[d]].[[value]]',
                 'bucket' => '[[s]].[[bucket]]',
@@ -654,7 +850,13 @@ class StatsService extends Component
             ->from(['s' => Table::SCROLL_ROLLUP])
             ->innerJoin(['d' => Table::DIMENSIONS], '[[d]].[[id]] = [[s]].[[pathDimId]]')
             ->where(['[[s]].[[siteId]]' => $siteId])
-            ->andWhere(['between', '[[s]].[[date]]', $range->from, $range->to])
+            ->andWhere(['between', '[[s]].[[date]]', $range->from, $range->to]);
+
+        if ($pathDimId !== null) {
+            $query->andWhere(['[[s]].[[pathDimId]]' => $pathDimId]);
+        }
+
+        $rows = $query
             ->groupBy(['[[d]].[[value]]', '[[s]].[[bucket]]'])
             ->all($this->db());
 
@@ -919,6 +1121,56 @@ class StatsService extends Component
         }
 
         return is_resource($value) ? (string)stream_get_contents($value) : (string)$value;
+    }
+
+    /**
+     * Views by date and hour, for the day-of-week x hour-of-day heatmap.
+     *
+     * Clamped to the hourly-retention window regardless of the range asked
+     * for, and this is the whole subtlety of the method. The compactor folds a
+     * day's 24 hourly rows into one row at hour -1 once it falls outside
+     * `hourlyWindowDays` (7 by default), so a heatmap built over 30 or 90 days
+     * would read almost entirely zero and look exactly like a broken chart
+     * rather than like a retention policy. The caller is told what window it
+     * actually got, via hourlyWindowFrom(), so the screen can say so.
+     *
+     * @return array<int,array{date: string, hour: int, views: int}>
+     */
+    public function hourOfWeek(int $siteId, DateRange $range): array
+    {
+        $from = max($range->from, $this->hourlyWindowFrom());
+
+        if ($from > $range->to) {
+            // The whole selected range is older than the hourly window.
+            return [];
+        }
+
+        $rows = (new Query())
+            ->select(['date', 'hour', 'views' => 'SUM([[views]])'])
+            ->from(Table::PAGES_ROLLUP)
+            ->where(['siteId' => $siteId])
+            ->andWhere(['between', 'date', $from, $range->to])
+            ->andWhere(['!=', 'hour', Compactor::DAILY_HOUR])
+            ->groupBy(['date', 'hour'])
+            ->all($this->db());
+
+        return array_map(static fn(array $row): array => [
+            'date' => (string)$row['date'],
+            'hour' => (int)$row['hour'],
+            'views' => (int)$row['views'],
+        ], $rows);
+    }
+
+    /**
+     * The oldest date still held at hourly grain.
+     *
+     * Delegates to the compactor rather than recomputing the cutoff, so the
+     * date the heatmap claims to cover cannot drift from the date the
+     * compactor actually compacts at.
+     */
+    public function hourlyWindowFrom(?int $now = null): string
+    {
+        return (new Compactor())->cutoffDate($now ?? time());
     }
 
     private function counter(): UniqueCounterInterface

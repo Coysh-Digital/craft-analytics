@@ -15,6 +15,7 @@ final class Table
     public const DRAIN_LOG = '{{%craftanalytics_drainlog}}';
 
     public const PAGES_ROLLUP = '{{%craftanalytics_pagesrollup}}';
+    public const PAGE_SOURCES_ROLLUP = '{{%craftanalytics_pagesourcesrollup}}';
     public const SESSIONS_ROLLUP = '{{%craftanalytics_sessionsrollup}}';
     public const SOURCES_ROLLUP = '{{%craftanalytics_sourcesrollup}}';
     public const DEVICES_ROLLUP = '{{%craftanalytics_devicesrollup}}';

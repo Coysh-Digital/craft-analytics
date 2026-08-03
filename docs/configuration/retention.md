@@ -89,8 +89,8 @@ capped.
   time, so a compacted day keeps its unique figure whichever driver is in use.
 - **Retention.** Rollups are deleted past `rollupRetentionMonths` (default and
   hard cap 26). This covers **every** aggregate table, Lite and Pro alike:
-  pages, sessions, sources, devices, crawlers, campaigns, geo, events, scroll,
-  search, outbound, segments, goals and funnel steps.
+  pages, page sources, sessions, sources, devices, crawlers, campaigns, geo,
+  events, scroll, search, outbound, segments, goals and funnel steps.
 - **Unique membership rows** (`exact` driver) are dropped once the salt that
   produced their hashes is gone - after that they cannot be matched to
   anything, by us or anyone.

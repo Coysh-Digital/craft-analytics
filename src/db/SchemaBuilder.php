@@ -73,6 +73,8 @@ final class SchemaBuilder
         $m->createIndex(null, Table::PAGES_ROLLUP, ['siteId', 'date', 'hour', 'pathDimId'], true);
         $m->createIndex(null, Table::PAGES_ROLLUP, ['siteId', 'elementId', 'date']);
 
+        self::createPageSourcesTable($m);
+
         $m->createTable(Table::SESSIONS_ROLLUP, [
             'id' => $m->primaryKey(),
             'siteId' => $m->integer()->notNull(),
@@ -252,6 +254,47 @@ final class SchemaBuilder
             'durationMs' => $m->bigInteger()->notNull()->defaultValue(0),
         ]);
         $m->createIndex(null, Table::SEGMENTS_ROLLUP, ['siteId', 'date', 'segmentDimId'], true);
+    }
+
+    /**
+     * Where the traffic to a given page came from.
+     *
+     * The one thing the other rollups genuinely could not answer. Sources are
+     * session-grained and carry no path at all, so "how did people get to
+     * /pricing" had no row anywhere to read: the entry path was known when a
+     * session closed and simply thrown away.
+     *
+     * Counted per *pageview*, not per session, and that is the point. Keying
+     * on the session's entry path would only ever describe pages people
+     * landed on, and the pages worth asking this about are usually the ones
+     * reached part-way through a visit.
+     *
+     * Daily rather than hourly, unlike SOURCES_ROLLUP. Path x channel x
+     * referrer is already the widest key here, and an hour column would
+     * multiply it by 24 to answer a question - "was it Google at 3am?" -
+     * nobody asks. It also means the compactor has nothing to do here.
+     *
+     * Growth is bounded by the dimension cap: Path and ReferrerHost are both
+     * capped types, so the widest this can get is cap x cap x channels per
+     * day, with everything past the cap folded into __other__.
+     */
+    public static function createPageSourcesTable(Migration $m): void
+    {
+        $m->createTable(Table::PAGE_SOURCES_ROLLUP, [
+            'id' => $m->primaryKey(),
+            'siteId' => $m->integer()->notNull(),
+            'date' => $m->date()->notNull(),
+            'pathDimId' => $m->integer()->notNull(),
+            'channel' => $m->smallInteger()->notNull(),
+            'refHostDimId' => $m->integer()->notNull()->defaultValue(0),
+            'views' => $m->integer()->notNull()->defaultValue(0),
+        ]);
+        $m->createIndex(
+            null,
+            Table::PAGE_SOURCES_ROLLUP,
+            ['siteId', 'date', 'pathDimId', 'channel', 'refHostDimId'],
+            true,
+        );
     }
 
     /**
@@ -437,6 +480,8 @@ final class SchemaBuilder
     {
         return [
             [Table::PAGES_ROLLUP, 'pathDimId'],
+            [Table::PAGE_SOURCES_ROLLUP, 'pathDimId'],
+            [Table::PAGE_SOURCES_ROLLUP, 'refHostDimId'],
             [Table::SOURCES_ROLLUP, 'refHostDimId'],
             [Table::DEVICES_ROLLUP, 'browserDimId'],
             [Table::DEVICES_ROLLUP, 'osDimId'],
@@ -481,6 +526,7 @@ final class SchemaBuilder
         return [
             // Lite.
             Table::PAGES_ROLLUP,
+            Table::PAGE_SOURCES_ROLLUP,
             Table::SESSIONS_ROLLUP,
             Table::SOURCES_ROLLUP,
             Table::DEVICES_ROLLUP,
@@ -545,6 +591,7 @@ final class SchemaBuilder
             Table::UNIQUE_MEMBERS,
             Table::DEVICES_ROLLUP,
             Table::SOURCES_ROLLUP,
+            Table::PAGE_SOURCES_ROLLUP,
             Table::SESSIONS_ROLLUP,
             Table::PAGES_ROLLUP,
             Table::DRAIN_LOG,

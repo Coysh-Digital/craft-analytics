@@ -27,6 +27,35 @@ final class InteractionBuckets
     /** @var array<string,array{siteId: int, date: string, name: string, requests: int}> */
     public array $crawlers = [];
 
+    /** @var array<string,array{siteId: int, date: string, path: string, referrer: string, views: int}> */
+    public array $pageSources = [];
+
+    /**
+     * How the visitor reached the site, counted against the page they were
+     * looking at.
+     *
+     * The referrer stored here is the *session's* - how they arrived - not the
+     * hit's own, which for anything past the first page is just the previous
+     * page on this site. Classifying that would report every interior page as
+     * self-referred, which is true and useless.
+     *
+     * Daily grain, no hour: see the table's docblock.
+     */
+    public function addPageSource(Hit $hit, string $date, string $referrer): void
+    {
+        $key = implode('|', [$hit->siteId, $date, $hit->path, $referrer]);
+
+        $this->pageSources[$key] ??= [
+            'siteId' => $hit->siteId,
+            'date' => $date,
+            'path' => $hit->path,
+            'referrer' => $referrer,
+            'views' => 0,
+        ];
+
+        $this->pageSources[$key]['views']++;
+    }
+
     /**
      * A crawler's requests for a day. Daily grain and no path: the question
      * is "is Googlebot here and how hard", not which URLs it liked.
@@ -139,6 +168,7 @@ final class InteractionBuckets
             && $this->scroll === []
             && $this->outbound === []
             && $this->searches === []
-            && $this->crawlers === [];
+            && $this->crawlers === []
+            && $this->pageSources === [];
     }
 }

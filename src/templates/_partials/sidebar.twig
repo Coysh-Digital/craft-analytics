@@ -17,11 +17,11 @@
             </div>
         </div>
 
-        {% set path = craft.craftAnalytics.sparkline(stats.series, 200, 30) %}
+        {% set path = craft.craftAnalytics.sparklinePath(stats.series, 200, 30) %}
         {% if path %}
             <svg class="ca-sparkline" viewBox="0 0 200 30" preserveAspectRatio="none" role="img"
                  aria-label="{{ 'Daily views over the last 30 days'|t('craft-analytics') }}">
-                <path d="{{ path }}" fill="none" stroke="#2563eb" stroke-width="1.5"
+                <path d="{{ path }}" fill="none" stroke="var(--ca-views)" stroke-width="1.5"
                       stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></path>
             </svg>
         {% endif %}

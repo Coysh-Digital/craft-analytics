@@ -2,6 +2,7 @@
 
 namespace coyshdigital\craftanalytics\controllers;
 
+use coyshdigital\craftanalytics\assets\ChartsAsset;
 use coyshdigital\craftanalytics\assets\CpAsset;
 use coyshdigital\craftanalytics\models\DateRange;
 use coyshdigital\craftanalytics\Plugin;
@@ -115,6 +116,21 @@ abstract class BaseCpController extends Controller
             'canExport' => Craft::$app->getUser()->checkPermission(Plugin::PERMISSION_EXPORT),
             'uniquesAccuracy' => $this->stats()->uniquesAccuracy(),
         ];
+    }
+
+    /**
+     * Loads Chart.js and the chart initialiser.
+     *
+     * Called from the individual actions that draw something rather than from
+     * commonVariables(), deliberately: eight CP screens chart nothing at all,
+     * and there is no reason for Crawlers or Privacy to download a charting
+     * library. Craft's own entry editor and dashboard must never register this
+     * either — the sparklines there stay server-rendered SVG precisely so those
+     * screens carry no JavaScript of ours.
+     */
+    protected function registerCharts(): void
+    {
+        Craft::$app->getView()->registerAssetBundle(ChartsAsset::class);
     }
 
     protected function stats(): StatsService

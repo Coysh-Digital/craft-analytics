@@ -1,172 +1,33 @@
 {# Views and unique visitors over time.
 
-   Two series on one axis (both are counts — never a second y-scale). The
-   colours are validated for colour-vision deficiency, and each series is also
-   named in the legend and in the tooltip, so identity never rests on colour
-   alone. #}
+   Two series on one axis - both are counts, so there is never a second y-scale.
+   Identity never rests on colour: the legend below is server-rendered HTML,
+   each series is named in the tooltip, and the chart macro ships a table
+   carrying the same numbers for anyone who cannot see the canvas.
 
-{% import 'craft-analytics/_partials/macros.twig' as ca %}
+   The uniques series is absent rather than flat when a range has no per-hour
+   unique counts to merge; a line pinned to the axis would read as "nobody was
+   unique" rather than "this range cannot answer that". #}
 
-{% set width = 900 %}
-{% set height = 220 %}
-{% set padLeft = 44 %}
-{% set padBottom = 24 %}
-{% set plotWidth = width - padLeft %}
-{% set plotHeight = height - padBottom %}
+{% import 'craft-analytics/_partials/chart.twig' as chart %}
 
-{% set peak = max(trend.views|length ? max(trend.views) : 0, trend.uniques|length ? max(trend.uniques) : 0) %}
-{% set scale = craft.craftAnalytics.scale(peak) %}
-{% set viewsGeom = craft.craftAnalytics.series(trend.views, plotWidth, plotHeight, scale.max) %}
-{% set uniquesGeom = craft.craftAnalytics.series(trend.uniques, plotWidth, plotHeight, scale.max) %}
-{% set labels = craft.craftAnalytics.thinLabels(trend.labels) %}
-{% set hasUniques = trend.uniques|length and max(trend.uniques) > 0 %}
-
-{# Tooltip dates read as dates, not as ISO strings. #}
-{% set displayLabels = [] %}
-{% for label in trend.labels %}
-    {% set displayLabels = displayLabels|merge([trend.hourly ? label : label|date('j M Y')]) %}
-{% endfor %}
+{% set payload = craft.craftAnalytics.trendChart(trend) %}
 
 <div class="ca-card">
     <div class="ca-card-head">
         <h2 class="ca-card-title">{{ 'Traffic'|t('craft-analytics') }}</h2>
         <div class="ca-legend">
             <span><i class="ca-swatch" style="background: var(--ca-views)"></i>{{ 'Pageviews'|t('craft-analytics') }}</span>
-            {% if hasUniques %}
+            {% if payload.hasUniques %}
                 <span><i class="ca-swatch" style="background: var(--ca-uniques)"></i>{{ 'Unique visitors'|t('craft-analytics') }}</span>
             {% endif %}
         </div>
     </div>
     <div class="ca-card-body">
-        <div class="ca-chart" id="ca-trend">
-            <svg viewBox="0 0 {{ width }} {{ height }}" role="img"
-                 aria-label="{{ 'Pageviews and unique visitors over time. The table below has the same data.'|t('craft-analytics') }}">
-                <defs>
-                    <linearGradient id="ca-views-grad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="#2563eb" stop-opacity="0.18"/>
-                        <stop offset="100%" stop-color="#2563eb" stop-opacity="0"/>
-                    </linearGradient>
-                </defs>
-
-                {# Recessive grid: present enough to read a value against, quiet
-                   enough to stay behind the data. #}
-                <g class="ca-grid">
-                    {% for tick in scale.ticks %}
-                        {% set y = 6 + (plotHeight - 6) - (tick / scale.max * (plotHeight - 6)) %}
-                        <line x1="{{ padLeft }}" y1="{{ y }}" x2="{{ width }}" y2="{{ y }}"></line>
-                    {% endfor %}
-                </g>
-
-                <g class="ca-axis">
-                    {% for tick in scale.ticks %}
-                        {% set y = 6 + (plotHeight - 6) - (tick / scale.max * (plotHeight - 6)) %}
-                        <text x="{{ padLeft - 8 }}" y="{{ y + 4 }}" text-anchor="end">{{ ca.compact(tick) }}</text>
-                    {% endfor %}
-                    {% for i, label in labels %}
-                        {% if label is not null %}
-                            {% set x = padLeft + (trend.labels|length > 1 ? i * (plotWidth / (trend.labels|length - 1)) : plotWidth / 2) %}
-                            <text x="{{ x }}" y="{{ height - 6 }}" text-anchor="middle">
-                                {{ trend.hourly ? label : craft.craftAnalytics.shortDate(label) }}
-                            </text>
-                        {% endif %}
-                    {% endfor %}
-                </g>
-
-                <g transform="translate({{ padLeft }}, 0)">
-                    <path d="{{ viewsGeom.area }}" fill="url(#ca-views-grad)"></path>
-                    <path class="ca-line" d="{{ viewsGeom.line }}" stroke="var(--ca-views)"></path>
-                    {% if hasUniques %}
-                        <path class="ca-line" d="{{ uniquesGeom.line }}" stroke="var(--ca-uniques)"></path>
-                    {% endif %}
-
-                    <line class="ca-crosshair" id="ca-crosshair" x1="0" y1="0" x2="0" y2="{{ plotHeight }}"></line>
-                    <circle class="ca-dot" id="ca-dot-views" fill="var(--ca-views)" cx="0" cy="0"></circle>
-                    {% if hasUniques %}
-                        <circle class="ca-dot" id="ca-dot-uniques" fill="var(--ca-uniques)" cx="0" cy="0"></circle>
-                    {% endif %}
-                </g>
-            </svg>
-            <div class="ca-tooltip" id="ca-tooltip" role="status" aria-live="polite"></div>
-        </div>
+        {{ chart.chart('ca-trend', payload, {
+            label: 'Pageviews and unique visitors over time.'|t('craft-analytics'),
+            caption: 'Traffic over time'|t('craft-analytics'),
+            labelHeading: trend.hourly ? 'Hour'|t('craft-analytics') : 'Date'|t('craft-analytics'),
+        }) }}
     </div>
 </div>
-
-{% js %}
-(function () {
-    var chart = document.getElementById('ca-trend');
-    if (!chart) return;
-
-    var svg = chart.querySelector('svg');
-    var tooltip = document.getElementById('ca-tooltip');
-    var crosshair = document.getElementById('ca-crosshair');
-    var dotViews = document.getElementById('ca-dot-views');
-    var dotUniques = document.getElementById('ca-dot-uniques');
-
-    var data = {{ {
-        labels: displayLabels,
-        views: trend.views,
-        uniques: trend.uniques,
-        points: viewsGeom.points,
-        uniquePoints: uniquesGeom.points,
-        hourly: trend.hourly,
-        hasUniques: hasUniques,
-        padLeft: padLeft,
-        width: width,
-        viewsLabel: 'Pageviews'|t('craft-analytics'),
-        uniquesLabel: 'Unique visitors'|t('craft-analytics'),
-    }|json_encode|raw }};
-
-    if (!data.points.length) return;
-
-    function nearest(ratio) {
-        var i = Math.round(ratio * (data.points.length - 1));
-        return Math.max(0, Math.min(data.points.length - 1, i));
-    }
-
-    function show(event) {
-        var box = svg.getBoundingClientRect();
-        var scale = box.width / data.width;
-        var x = (event.clientX - box.left) / scale - data.padLeft;
-        var i = nearest(x / (data.width - data.padLeft));
-        var point = data.points[i];
-
-        crosshair.setAttribute('x1', point.x);
-        crosshair.setAttribute('x2', point.x);
-        crosshair.style.opacity = '1';
-
-        dotViews.setAttribute('cx', point.x);
-        dotViews.setAttribute('cy', point.y);
-        dotViews.style.opacity = '1';
-
-        if (dotUniques && data.uniquePoints[i]) {
-            dotUniques.setAttribute('cx', data.uniquePoints[i].x);
-            dotUniques.setAttribute('cy', data.uniquePoints[i].y);
-            dotUniques.style.opacity = '1';
-        }
-
-        var rows = '<div class="ca-tooltip-date">' + data.labels[i] + '</div>' +
-            '<div class="ca-tooltip-row"><i class="ca-swatch" style="background:#2563eb"></i>' +
-            data.viewsLabel + ' <b>' + data.views[i].toLocaleString() + '</b></div>';
-
-        if (data.hasUniques) {
-            rows += '<div class="ca-tooltip-row"><i class="ca-swatch" style="background:#0d9488"></i>' +
-                data.uniquesLabel + ' <b>' + data.uniques[i].toLocaleString() + '</b></div>';
-        }
-
-        tooltip.innerHTML = rows;
-        tooltip.style.left = ((point.x + data.padLeft) * scale) + 'px';
-        tooltip.style.top = (point.y * scale - 10) + 'px';
-        tooltip.classList.add('is-visible');
-    }
-
-    function hide() {
-        tooltip.classList.remove('is-visible');
-        crosshair.style.opacity = '0';
-        dotViews.style.opacity = '0';
-        if (dotUniques) dotUniques.style.opacity = '0';
-    }
-
-    chart.addEventListener('mousemove', show);
-    chart.addEventListener('mouseleave', hide);
-})();
-{% endjs %}
