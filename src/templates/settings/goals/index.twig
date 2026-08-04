@@ -11,23 +11,24 @@
 ] %}
 
 {% block actionButton %}
-    {% if not readOnly %}
-        <div class="btngroup">
-            <a class="btn submit" href="{{ url('settings/plugins/craft-analytics/goals/new') }}">
-                {{ 'New goal'|t('craft-analytics') }}
-            </a>
-            <a class="btn" href="{{ url('settings/plugins/craft-analytics/funnels/new') }}">
-                {{ 'New funnel'|t('craft-analytics') }}
-            </a>
-        </div>
-    {% endif %}
+    <div class="btngroup">
+        <a class="btn submit" href="{{ url('settings/plugins/craft-analytics/goals/new') }}">
+            {{ 'New goal'|t('craft-analytics') }}
+        </a>
+        <a class="btn" href="{{ url('settings/plugins/craft-analytics/funnels/new') }}">
+            {{ 'New funnel'|t('craft-analytics') }}
+        </a>
+    </div>
 {% endblock %}
 
 {% block content %}
-    {% if readOnly %}
+    {# Only while a site still carries the definitions goals used to be kept
+       in. Somebody editing that YAML and deploying it would otherwise see
+       nothing happen and have no way to find out why. #}
+    {% if hasLegacyConfig %}
         <div class="readable">
-            <blockquote class="note tip">
-                <p>{{ 'Goals and funnels are stored in project config, which is read-only while `allowAdminChanges` is disabled. Edit them in an environment where admin changes are allowed, and deploy the change.'|t('craft-analytics') }}</p>
+            <blockquote class="note warning">
+                <p>{{ 'Goals and funnels now live in the database and can be edited in any environment. The definitions still in your project config under `craftAnalytics.goals` and `craftAnalytics.funnels` are no longer read - editing them has no effect. You can delete `config/project/craftAnalytics/` and commit that.'|t('craft-analytics') }}</p>
             </blockquote>
         </div>
     {% endif %}
@@ -67,13 +68,11 @@
                         {%- endif -%}
                     </td>
                     <td class="thin">
-                        {% if not readOnly %}
-                            <a class="delete icon" title="{{ 'Delete'|t('app') }}"
-                               role="button"
-                               data-ca-delete="{{ actionUrl('craft-analytics/goals/delete') }}"
-                               data-ca-uid="{{ goal.uid }}"
-                               data-ca-confirm="{{ 'Delete “{name}”? Its conversions are deleted with it - they only mean anything as that goal’s conversions.'|t('craft-analytics', { name: goal.name }) }}"></a>
-                        {% endif %}
+                        <a class="delete icon" title="{{ 'Delete'|t('app') }}"
+                           role="button"
+                           data-ca-delete="{{ actionUrl('craft-analytics/goals/delete') }}"
+                           data-ca-uid="{{ goal.uid }}"
+                           data-ca-confirm="{{ 'Delete “{name}”? Its conversions are deleted with it - they only mean anything as that goal’s conversions.'|t('craft-analytics', { name: goal.name }) }}"></a>
                     </td>
                 </tr>
             {% endfor %}
@@ -116,13 +115,11 @@
                         {%- endif -%}
                     </td>
                     <td class="thin">
-                        {% if not readOnly %}
-                            <a class="delete icon" title="{{ 'Delete'|t('app') }}"
-                               role="button"
-                               data-ca-delete="{{ actionUrl('craft-analytics/goals/delete-funnel') }}"
-                               data-ca-uid="{{ funnel.uid }}"
-                               data-ca-confirm="{{ 'Delete “{name}”?'|t('craft-analytics', { name: funnel.name }) }}"></a>
-                        {% endif %}
+                        <a class="delete icon" title="{{ 'Delete'|t('app') }}"
+                           role="button"
+                           data-ca-delete="{{ actionUrl('craft-analytics/goals/delete-funnel') }}"
+                           data-ca-uid="{{ funnel.uid }}"
+                           data-ca-confirm="{{ 'Delete “{name}”?'|t('craft-analytics', { name: funnel.name }) }}"></a>
                     </td>
                 </tr>
             {% endfor %}

@@ -43,7 +43,7 @@ class AnalyticsQuery extends Query
                 'args' => self::commonArgs(),
                 'resolve' => static function($source, array $arguments) {
                     $siteId = self::siteId($arguments);
-                    $range = DateRange::fromPreset($arguments['period'] ?? DateRange::PRESET_30_DAYS);
+                    $range = DateRange::fromParam($arguments['period'] ?? DateRange::PRESET_30_DAYS);
 
                     return Plugin::getInstance()->getStats()->totals($siteId, $range);
                 },
@@ -60,7 +60,7 @@ class AnalyticsQuery extends Query
                 ],
                 'resolve' => static function($source, array $arguments) {
                     $siteId = self::siteId($arguments);
-                    $range = DateRange::fromPreset($arguments['period'] ?? DateRange::PRESET_30_DAYS);
+                    $range = DateRange::fromParam($arguments['period'] ?? DateRange::PRESET_30_DAYS);
                     $limit = min((int)($arguments['limit'] ?? 10), 200);
 
                     return Plugin::getInstance()->getStats()->topPages($siteId, $range, $limit);
@@ -85,7 +85,10 @@ class AnalyticsQuery extends Query
             'period' => [
                 'name' => 'period',
                 'type' => Type::string(),
-                'description' => 'One of: today, yesterday, 7d, 30d, 90d, 12mo. Defaults to 30d.',
+                'description' => 'One of: today, yesterday, 7d, 30d, 90d, 12mo. '
+                    . 'An absolute window may be given instead, as two dates '
+                    . '"YYYY-MM-DD:YYYY-MM-DD", spanning at most 400 days. '
+                    . 'Anything unrecognised is read as 30d.',
             ],
         ];
     }

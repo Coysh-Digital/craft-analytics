@@ -25,6 +25,7 @@ beforeEach(function() {
     $this->stats = new StatsService([
         'db' => $db,
         'counter' => new HllUniqueCounter(['settings' => new Settings()]),
+        'settings' => new Settings(),
     ]);
 });
 
@@ -168,4 +169,35 @@ test('views for many elements come back in one query', function() {
 
 test('asking for no elements does not query at all', function() {
     expect($this->stats->viewsByElement(1, [], DateRange::fromPreset(DateRange::PRESET_TODAY, STATS_NOW)))->toBe([]);
+});
+
+test('a single day still inside the hourly window is plotted by hour', function() {
+    // Dates come from the real clock rather than STATS_NOW: the window is
+    // measured against time() inside the compactor, so a fixed date in the past
+    // would fall outside it the moment this test got old.
+    $today = (new DateTimeImmutable('@' . time()))->format('Y-m-d');
+
+    writePage($today, 5, [1, 2, 3], hour: 9);
+
+    $trend = $this->stats->trend(1, DateRange::custom($today, $today));
+
+    expect($trend['hourly'])->toBeTrue()
+        ->and($trend['labels'])->toHaveCount(24)
+        ->and($trend['views'][9])->toBe(5);
+});
+
+test('a single day past the hourly window is plotted by day, not as 24 zeroes', function() {
+    // Compaction folds that day's 24 rows into one at hour = -1, so asking for
+    // an hourly axis would read rows that no longer exist and draw a flat line
+    // that looks like an outage. Only a custom range can reach this: the today
+    // and yesterday presets are always inside the window.
+    $old = (new DateTimeImmutable('@' . time()))->modify('-60 days')->format('Y-m-d');
+
+    writePage($old, 42, [1, 2, 3]);
+
+    $trend = $this->stats->trend(1, DateRange::custom($old, $old));
+
+    expect($trend['hourly'])->toBeFalse()
+        ->and($trend['labels'])->toBe([$old])
+        ->and($trend['views'])->toBe([42]);
 });

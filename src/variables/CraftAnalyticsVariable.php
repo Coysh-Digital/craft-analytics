@@ -22,6 +22,11 @@ use craft\elements\Entry;
  * return anything about an individual, because there is nothing about an
  * individual to return (C6) — so a front-end template calling this cannot
  * leak something the developer didn't realise they were holding.
+ *
+ * Every `$preset` argument takes a preset handle (`today`, `7d`, `30d`, …) or
+ * an absolute `YYYY-MM-DD:YYYY-MM-DD` window of up to 400 days. The parameter
+ * keeps its original name because Twig passes these by name, and renaming it
+ * would break templates that already say `preset: '7d'`.
  */
 class CraftAnalyticsVariable
 {
@@ -35,7 +40,7 @@ class CraftAnalyticsVariable
      */
     public function totals(?int $siteId = null, string $preset = DateRange::PRESET_30_DAYS): array
     {
-        return $this->stats()->totals($this->siteId($siteId), DateRange::fromPreset($preset));
+        return $this->stats()->totals($this->siteId($siteId), DateRange::fromParam($preset));
     }
 
     /**
@@ -53,7 +58,7 @@ class CraftAnalyticsVariable
         return $this->stats()->elementStats(
             $this->siteId($siteId),
             $elementId,
-            DateRange::fromPreset($preset),
+            DateRange::fromParam($preset),
         )['views'];
     }
 
@@ -66,7 +71,7 @@ class CraftAnalyticsVariable
      */
     public function popularPages(int $limit = 5, string $preset = DateRange::PRESET_30_DAYS, ?int $siteId = null): array
     {
-        return $this->stats()->topPages($this->siteId($siteId), DateRange::fromPreset($preset), $limit);
+        return $this->stats()->topPages($this->siteId($siteId), DateRange::fromParam($preset), $limit);
     }
 
     /**
@@ -89,7 +94,7 @@ class CraftAnalyticsVariable
         ?int $siteId = null,
     ): EntryQuery {
         $siteId = $this->siteId($siteId);
-        $ranked = $this->stats()->topElements($siteId, DateRange::fromPreset($preset), $limit * 4);
+        $ranked = $this->stats()->topElements($siteId, DateRange::fromParam($preset), $limit * 4);
 
         $query = Entry::find()->siteId($siteId);
 

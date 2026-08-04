@@ -49,6 +49,18 @@ test('salt rotation interval cannot drop below an hour', function() {
     expect($settings->validate())->toBeFalse();
 });
 
+test('a scheduled report period must be a preset, never an absolute window', function(string $period) {
+    // A recurring email sent for "1 Jan to 31 Mar" reports the same figures
+    // every week forever, and nobody notices for a month. The whitelist is
+    // DateRange::presets(), which is why 'custom' must never be a key in it.
+    $settings = new Settings(['reportPeriod' => $period]);
+
+    expect($settings->validate())->toBeFalse();
+})->with([
+    'the custom discriminator' => ['custom'],
+    'an absolute window' => ['2026-01-01:2026-03-31'],
+]);
+
 test('settings are populated from a config-file style array', function() {
     $settings = new Settings([
         'trackingMode' => 'server',

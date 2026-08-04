@@ -3,7 +3,7 @@
 
 {% set title = isNew ? 'New funnel'|t('craft-analytics') : funnel.name %}
 {% set docTitle = title ~ ' - ' ~ 'Craft Analytics'|t('craft-analytics') %}
-{% set fullPageForm = not readOnly %}
+{% set fullPageForm = true %}
 
 {% set crumbs = [
     { label: 'Settings'|t('app'), url: url('settings') },
@@ -41,8 +41,7 @@
         value: funnel.name,
         errors: funnel.getErrors('name'),
         autofocus: true,
-        required: true,
-        disabled: readOnly
+        required: true
     }) }}
 
     {{ forms.textField({
@@ -52,8 +51,7 @@
         class: 'code',
         value: funnel.handle,
         errors: funnel.getErrors('handle'),
-        required: true,
-        disabled: readOnly
+        required: true
     }) }}
 
     {{ forms.editableTableField({
@@ -71,10 +69,9 @@
         rows: funnel.steps|map(handle => { goal: handle }),
         errors: funnel.getErrors('steps'),
         addRowLabel: 'Add a step'|t('craft-analytics'),
-        allowAdd: not readOnly,
-        allowDelete: not readOnly,
-        allowReorder: not readOnly,
-        static: readOnly
+        allowAdd: true,
+        allowDelete: true,
+        allowReorder: true
     }) }}
 
     {{ forms.selectField({
@@ -84,16 +81,14 @@
         options: [{ label: 'All sites'|t('craft-analytics'), value: '' }]|merge(
             sites|map(s => { label: s.name, value: s.id })
         ),
-        value: funnel.siteId,
-        disabled: readOnly
+        value: funnel.siteId
     }) }}
 
     {{ forms.lightswitchField({
         label: 'Enabled'|t('app'),
         id: 'enabled',
         name: 'enabled',
-        on: funnel.enabled,
-        disabled: readOnly
+        on: funnel.enabled
     }) }}
 
     <div class="readable" style="margin-top: 24px">

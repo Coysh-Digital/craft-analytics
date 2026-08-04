@@ -1,5 +1,76 @@
 # Release Notes for Craft Analytics
 
+## 2.0.0 - 2026-08-04
+
+> **Before you upgrade.** Goals and funnels move out of project config and into
+> the database. The tables already existed - project config was the source of
+> truth and the rows were a mirror - so on nearly every site the upgrade is a
+> no-op and your goals keep reporting exactly as they did. What changes is
+> where they are edited and how they travel: **goals no longer arrive on
+> deploy**, and each environment keeps its own. If you rely on creating goals
+> in staging and applying them to production, that workflow ends here.
+>
+> The migration does not touch your project config, because it cannot: writing
+> to it throws wherever `allowAdminChanges` is off, which is the case this
+> whole change exists for. So the old definitions stay in
+> `config/project/craftAnalytics/` until you delete them, and the Goals screen
+> says so while they are there. Nothing reads them any more - editing that YAML
+> and deploying it will appear to do nothing, which is why the notice exists.
+
+### Added
+
+- **A specific timeframe.** The date picker on every report gains **Custom**,
+  which takes two dates and reports on exactly that window. It survives site
+  switches, drill-downs, the Pages filters and the CSV export like any preset
+  does, and it lives in the URL, so a particular window is a link that can be
+  bookmarked or sent on. It is a plain form and two date fields: no JavaScript
+  is involved, which matters on a control panel where inline scripts are
+  routinely deferred out of existence by front-end optimisers.
+
+  A custom window spans at most 400 days - just past the 12 months the picker
+  already offered. Unique visitors are counted per day, so a range costs one
+  query per day in it and an unbounded range is an unbounded amount of work.
+  Dates in the future are pulled back to today, dates entered the wrong way
+  round are swapped rather than refused, and anything unreadable falls back to
+  30 days rather than erroring.
+
+  The GraphQL `period` argument and the Twig methods take the same
+  `YYYY-MM-DD:YYYY-MM-DD` form. `craft-analytics/report/send --period` takes it
+  too, but *rejects* a date it cannot read instead of falling back: a console
+  user who mistypes a date wants to be told, not handed a month of the wrong
+  figures. The scheduled report period and the Overview widget's range stay
+  preset-only by design - an absolute window on a recurring email or a pinned
+  widget freezes, and reports the same figures forever.
+
+### Changed
+
+- **Goals and funnels can be created in production.** They were stored in
+  project config on the reasoning that a goal is configuration and should
+  arrive on deploy like a section does. That was right about the object and
+  wrong about the people: project config is read-only wherever
+  `allowAdminChanges` is off, so the goals screen in production could only
+  refuse, and the person who wanted a goal was a deploy away from the person
+  who could add one. A goal is closer to a saved report than to a section. It
+  now lives in the database, and every environment owns its own.
+
+### Fixed
+
+- The Locations map could fail in a way that could not report itself. The "the
+  map could not be drawn" message was rendered hidden and revealed by the same
+  script that draws the map - so when that script was the thing that failed to
+  arrive, nothing was left on the page to say so, and the card was simply
+  blank with an empty console. The message now starts visible and the script
+  hides it, which is the only arrangement that survives its own failure. If you
+  are looking at a blank Locations card after upgrading, it will now tell you
+  what to check.
+- A duplicate goal or funnel handle produced a database integrity error rather
+  than a form error. Both columns are uniquely indexed and creating goals is
+  now something people do rather than something they deploy, so picking a
+  handle somebody already used stopped being hypothetical.
+- A funnel step naming a goal that does not exist was saved as a funnel with
+  that step silently missing, which reports drop-off that never happened. It is
+  refused at the form instead.
+
 ## 1.6.0 - 2026-08-03
 
 > **What this adds to your database.** One new table,

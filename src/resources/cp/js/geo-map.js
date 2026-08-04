@@ -18,6 +18,16 @@
         return;
     }
 
+    // The fallback is rendered visible and hidden here, rather than rendered
+    // hidden and shown on failure. If this file never loads - and that is the
+    // common failure, since it is one more request that can 404, be blocked, or
+    // be served from a hostname the certificate does not cover - then nothing
+    // in this file runs, including any code that would have reported it. Only a
+    // message that is already on the page can survive that.
+    if (fallback) {
+        fallback.hidden = true;
+    }
+
     function giveUp(reason) {
         el.hidden = true;
         if (fallback) {

@@ -50,7 +50,6 @@ use craft\base\Plugin as BasePlugin;
 use craft\elements\Entry;
 use craft\events\DefineAttributeHtmlEvent;
 use craft\events\DefineHtmlEvent;
-use craft\events\RebuildConfigEvent;
 use craft\events\RegisterComponentTypesEvent;
 use craft\events\RegisterElementTableAttributesEvent;
 use craft\events\RegisterGqlQueriesEvent;
@@ -61,7 +60,6 @@ use craft\helpers\Html;
 use craft\services\Dashboard;
 use craft\services\Gc;
 use craft\services\Gql as GqlService;
-use craft\services\ProjectConfig;
 use craft\services\UserPermissions;
 use craft\web\Application as WebApplication;
 use craft\web\Request as WebRequest;
@@ -97,9 +95,9 @@ class Plugin extends BasePlugin
     public const PERMISSION_MANAGE_SETTINGS = 'craftAnalytics:manageSettings';
 
     // Bumped whenever a migration is added: Craft only runs them when the
-    // installed schema version is behind this one. 1.6.0 adds the page-sources
-    // rollup.
-    public string $schemaVersion = '1.6.0';
+    // installed schema version is behind this one. 2.0.0 lifts goals and
+    // funnels out of project config into the tables that used to mirror them.
+    public string $schemaVersion = '2.0.0';
     public bool $hasCpSettings = true;
     public bool $hasCpSection = true;
 
@@ -639,36 +637,6 @@ class Plugin extends BasePlugin
     }
 
     /**
-     * Keeps the goal and funnel tables in step with project config, which is
-     * the source of truth for both.
-     *
-     * Goals are applied before funnels, and the handler re-asserts that
-     * ordering itself: a funnel step points at a goal, and applying them the
-     * other way round would drop every step on a fresh environment.
-     */
-    private function attachProjectConfig(): void
-    {
-        $projectConfig = Craft::$app->getProjectConfig();
-
-        $projectConfig
-            ->onAdd(GoalsService::CONFIG_PATH . '.{uid}', [$this->getGoals(), 'handleChangedGoal'])
-            ->onUpdate(GoalsService::CONFIG_PATH . '.{uid}', [$this->getGoals(), 'handleChangedGoal'])
-            ->onRemove(GoalsService::CONFIG_PATH . '.{uid}', [$this->getGoals(), 'handleDeletedGoal'])
-            ->onAdd(FunnelsService::CONFIG_PATH . '.{uid}', [$this->getFunnels(), 'handleChangedFunnel'])
-            ->onUpdate(FunnelsService::CONFIG_PATH . '.{uid}', [$this->getFunnels(), 'handleChangedFunnel'])
-            ->onRemove(FunnelsService::CONFIG_PATH . '.{uid}', [$this->getFunnels(), 'handleDeletedFunnel']);
-
-        Event::on(
-            ProjectConfig::class,
-            ProjectConfig::EVENT_REBUILD,
-            function(RebuildConfigEvent $event) {
-                $event->config['craftAnalytics']['goals'] = $this->getGoals()->rebuildConfig();
-                $event->config['craftAnalytics']['funnels'] = $this->getFunnels()->rebuildConfig();
-            },
-        );
-    }
-
-    /**
      * The GraphQL queries, behind a schema scope of their own.
      *
      * Off unless a schema deliberately grants it: the numbers expose nobody,
@@ -701,7 +669,6 @@ class Plugin extends BasePlugin
     {
         $this->attachCapture();
         $this->attachBeacon();
-        $this->attachProjectConfig();
 
         // Noticed, not required: both check for their plugin and do nothing
         // if it isn't there.

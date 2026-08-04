@@ -6,6 +6,8 @@ use coyshdigital\craftanalytics\enums\GoalType;
 use coyshdigital\craftanalytics\models\Funnel;
 use coyshdigital\craftanalytics\models\Goal;
 use coyshdigital\craftanalytics\Plugin;
+use coyshdigital\craftanalytics\services\FunnelsService;
+use coyshdigital\craftanalytics\services\GoalsService;
 use Craft;
 use craft\web\Controller;
 use yii\web\ForbiddenHttpException;
@@ -16,8 +18,12 @@ use yii\web\Response;
  * Managing goal and funnel definitions.
  *
  * Separate from the reports controller because this is settings, not
- * analytics: it needs the settings permission, it writes project config, and
- * on a site with `allowAdminChanges` off it must refuse rather than pretend.
+ * analytics: it needs the settings permission rather than the view one, and
+ * it is the only place in the plugin that writes anything a person typed.
+ *
+ * Goals live in the database, so this works in every environment - including
+ * production, where `allowAdminChanges` is off and the project config version
+ * of this screen could only refuse.
  */
 class GoalsController extends Controller
 {
@@ -41,10 +47,17 @@ class GoalsController extends Controller
     {
         $plugin = Plugin::getInstance();
 
+        $projectConfig = Craft::$app->getProjectConfig();
+
         return $this->renderTemplate('craft-analytics/settings/goals/index.twig', [
             'goals' => $plugin->getGoals()->all(),
             'funnels' => $plugin->getFunnels()->all(),
-            'readOnly' => !Craft::$app->getConfig()->getGeneral()->allowAdminChanges,
+            // Definitions left over from when these lived in project config.
+            // Nothing reads them any more, so somebody editing that YAML and
+            // deploying it would watch nothing happen - worth saying once, on
+            // the screen they would go looking at.
+            'hasLegacyConfig' => $projectConfig->get(GoalsService::LEGACY_CONFIG_PATH) !== null
+                || $projectConfig->get(FunnelsService::LEGACY_CONFIG_PATH) !== null,
         ]);
     }
 
@@ -70,14 +83,12 @@ class GoalsController extends Controller
                 GoalType::cases(),
             ),
             'sites' => Craft::$app->getSites()->getAllSites(),
-            'readOnly' => !Craft::$app->getConfig()->getGeneral()->allowAdminChanges,
         ]);
     }
 
     public function actionSave(): ?Response
     {
         $this->requirePostRequest();
-        $this->requireAdminChanges();
 
         $uid = $this->request->getBodyParam('uid');
         $goal = $uid !== null && $uid !== '' ? $this->goalByUid((string)$uid) : new Goal();
@@ -108,7 +119,6 @@ class GoalsController extends Controller
     {
         $this->requirePostRequest();
         $this->requireAcceptsJson();
-        $this->requireAdminChanges();
 
         Plugin::getInstance()->getGoals()->deleteByUid((string)$this->request->getRequiredBodyParam('uid'));
 
@@ -119,7 +129,6 @@ class GoalsController extends Controller
     {
         $this->requirePostRequest();
         $this->requireAcceptsJson();
-        $this->requireAdminChanges();
 
         $uids = json_decode((string)$this->request->getRequiredBodyParam('ids'), true);
         Plugin::getInstance()->getGoals()->reorder(is_array($uids) ? $uids : []);
@@ -138,14 +147,12 @@ class GoalsController extends Controller
             'isNew' => $funnel->id === null,
             'goals' => Plugin::getInstance()->getGoals()->all(),
             'sites' => Craft::$app->getSites()->getAllSites(),
-            'readOnly' => !Craft::$app->getConfig()->getGeneral()->allowAdminChanges,
         ]);
     }
 
     public function actionSaveFunnel(): ?Response
     {
         $this->requirePostRequest();
-        $this->requireAdminChanges();
 
         $uid = (string)($this->request->getBodyParam('uid') ?? '');
         $funnel = $uid !== '' ? $this->funnelByUid($uid) : new Funnel();
@@ -175,7 +182,6 @@ class GoalsController extends Controller
     {
         $this->requirePostRequest();
         $this->requireAcceptsJson();
-        $this->requireAdminChanges();
 
         Plugin::getInstance()->getFunnels()->deleteByUid((string)$this->request->getRequiredBodyParam('uid'));
 
@@ -232,19 +238,5 @@ class GoalsController extends Controller
         }
 
         throw new NotFoundHttpException('Funnel not found.');
-    }
-
-    /**
-     * Project config is read-only when admin changes are off, which is the
-     * norm in production. Refusing here is honest; letting the form save and
-     * silently discarding it would not be.
-     */
-    private function requireAdminChanges(): void
-    {
-        if (!Craft::$app->getConfig()->getGeneral()->allowAdminChanges) {
-            throw new ForbiddenHttpException(
-                'Goals are stored in project config, which is read-only while allowAdminChanges is disabled.',
-            );
-        }
     }
 }

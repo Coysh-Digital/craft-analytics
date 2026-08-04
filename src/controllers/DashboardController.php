@@ -82,7 +82,7 @@ class DashboardController extends BaseCpController
                 'countries' => $isPro ? $stats->countries($siteId, $range, 5) : [],
 
                 'exportKind' => 'pages',
-                'exportParams' => ['site' => $site->handle, 'range' => $range->preset],
+                'exportParams' => ['site' => $site->handle, 'range' => $range->param],
             ],
         ));
     }

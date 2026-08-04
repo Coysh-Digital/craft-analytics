@@ -61,7 +61,9 @@ enumerate them.
 
 **Arguments:** `siteId` (must be a site this schema can read; defaults to the
 primary site, or the first readable one), `period` (`today`, `yesterday`,
-`7d`, `30d`, `90d`, `12mo` - defaults to `30d`).
+`7d`, `30d`, `90d`, `12mo` - defaults to `30d`). `period` also takes an
+absolute window as two dates, `"2026-01-01:2026-03-31"`, spanning at most 400
+days. Anything it cannot read is treated as `30d` rather than erroring.
 
 ## craftAnalyticsTopPages
 

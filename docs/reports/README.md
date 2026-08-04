@@ -48,6 +48,27 @@ referrer URL, which can carry search terms.
 **Devices** - device type, browser and operating system, with the device split
 as a doughnut.
 
+## Choosing a period
+
+Every report screen carries the same picker: today, yesterday, the last 7, 30
+or 90 days, the last 12 months, and **Custom** for an absolute window. Whatever
+you pick follows you across site switches, drill-downs, the Pages filters and
+the CSV export, and it lives in the URL, so a particular window is a link you
+can bookmark or send to someone.
+
+A custom window can span at most **400 days**. That is a little more than the
+12 months the picker already offers, and the cap is there because unique
+visitors are counted per day - a range is one query per day in it, so an
+unbounded one is an unbounded amount of work. Dates in the future are pulled
+back to today, and dates entered the wrong way round are swapped rather than
+rejected.
+
+One thing worth knowing: a single day only gets an hour-by-hour chart while it
+is still inside the hourly retention window (below). Ask for one day from three
+months ago and you get a single daily figure, because the hourly rows for that
+day were compacted away and drawing 24 zeroes would look like an outage rather
+than like housekeeping.
+
 ## When people visit
 
 The dashboard's heatmap plots day of the week against hour of the day. It

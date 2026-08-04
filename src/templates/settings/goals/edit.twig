@@ -3,7 +3,7 @@
 
 {% set title = isNew ? 'New goal'|t('craft-analytics') : goal.name %}
 {% set docTitle = title ~ ' - ' ~ 'Craft Analytics'|t('craft-analytics') %}
-{% set fullPageForm = not readOnly %}
+{% set fullPageForm = true %}
 
 {% set crumbs = [
     { label: 'Settings'|t('app'), url: url('settings') },
@@ -26,20 +26,18 @@
         value: goal.name,
         errors: goal.getErrors('name'),
         autofocus: true,
-        required: true,
-        disabled: readOnly
+        required: true
     }) }}
 
     {{ forms.textField({
         label: 'Handle'|t('app'),
-        instructions: 'Used in project config and the Twig API.'|t('craft-analytics'),
+        instructions: 'Used by funnel steps and the Twig API.'|t('craft-analytics'),
         id: 'handle',
         name: 'handle',
         class: 'code',
         value: goal.handle,
         errors: goal.getErrors('handle'),
-        required: true,
-        disabled: readOnly
+        required: true
     }) }}
 
     {{ forms.selectField({
@@ -48,8 +46,7 @@
         name: 'type',
         options: types|map(t => { label: t.label, value: t.value }),
         value: goal.type,
-        errors: goal.getErrors('type'),
-        disabled: readOnly
+        errors: goal.getErrors('type')
     }) }}
 
     {{ forms.textField({
@@ -60,8 +57,7 @@
         class: 'code',
         value: goal.target,
         errors: goal.getErrors('target'),
-        required: true,
-        disabled: readOnly
+        required: true
     }) }}
 
     {{ forms.textField({
@@ -74,8 +70,7 @@
         min: 0,
         size: 10,
         value: goal.value,
-        errors: goal.getErrors('value'),
-        disabled: readOnly
+        errors: goal.getErrors('value')
     }) }}
 
     {{ forms.selectField({
@@ -86,16 +81,14 @@
         options: [{ label: 'All sites'|t('craft-analytics'), value: '' }]|merge(
             sites|map(s => { label: s.name, value: s.id })
         ),
-        value: goal.siteId,
-        disabled: readOnly
+        value: goal.siteId
     }) }}
 
     {{ forms.lightswitchField({
         label: 'Enabled'|t('app'),
         id: 'enabled',
         name: 'enabled',
-        on: goal.enabled,
-        disabled: readOnly
+        on: goal.enabled
     }) }}
 
     <div class="readable" style="margin-top: 24px">
