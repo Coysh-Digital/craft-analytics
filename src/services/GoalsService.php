@@ -6,27 +6,36 @@ use coyshdigital\craftanalytics\db\Table;
 use coyshdigital\craftanalytics\models\Goal;
 use Craft;
 use craft\db\Query;
-use craft\events\ConfigEvent;
 use craft\helpers\Db;
 use craft\helpers\StringHelper;
 use yii\base\Component;
 use yii\db\Connection;
 
 /**
- * Goal definitions, stored in project config.
+ * Goal definitions, stored in the database.
  *
- * Project config is the source of truth: goals are configuration, they change
- * rarely, and they should arrive in production the same way a section does —
- * on deploy, reviewed, in version control. The database rows are a mirror
- * maintained by the config event handlers, so a report can join to a goal's
- * name without parsing YAML.
+ * They used to live in project config, on the reasoning that a goal is
+ * configuration and should arrive in production on deploy like a section does.
+ * That reasoning held for the object and not for the people: project config is
+ * read-only wherever `allowAdminChanges` is off, which is every production
+ * site, so the person who wanted a goal could not add one and the person who
+ * could was a deploy away. A goal is closer to a saved report than to a
+ * section. It lives in the database, and every environment owns its own.
+ *
+ * The consequence, which is real: goals no longer travel on deploy. One created
+ * in staging will not appear in production.
  *
  * Reads are memoised for the request, because the drain asks for the goal list
  * once per session it closes and this must not become a query per session.
  */
 class GoalsService extends Component
 {
-    public const CONFIG_PATH = 'craftAnalytics.goals';
+    /**
+     * Where goals used to be kept. Retained only so the migration and the CP
+     * can tell whether a site still has definitions sitting in project config
+     * that nothing reads any more.
+     */
+    public const LEGACY_CONFIG_PATH = 'craftAnalytics.goals';
 
     /**
      * Connection override; defaults to Craft's. Set in tests.
@@ -130,7 +139,7 @@ class GoalsService extends Component
     }
 
     /**
-     * Saves a goal, via project config.
+     * Saves a goal.
      *
      * Returns false on a validation failure rather than throwing, so the
      * controller can hand the model back to the form with its errors.
@@ -141,118 +150,55 @@ class GoalsService extends Component
             return false;
         }
 
+        // The handle is uniquely indexed, and it is what a funnel step and the
+        // drain's rollup writes point at. Catching it here turns what would be
+        // an integrity-constraint 500 into the form saying which field is
+        // wrong - and creating goals in production is exactly when a handle
+        // somebody else already used starts being easy to pick.
+        if ($this->handleTaken($goal)) {
+            $goal->addError('handle', Craft::t('craft-analytics', 'That handle is already in use by another goal.'));
+
+            return false;
+        }
+
+        $db = $this->connection();
         $isNew = $goal->id === null;
 
-        if ($goal->uid === '') {
-            $goal->uid = $isNew || $goal->id === null
-                ? StringHelper::UUID()
-                : (string)Db::uidById(Table::GOALS, $goal->id);
-        }
-
-        Craft::$app->getProjectConfig()->set(
-            self::CONFIG_PATH . '.' . $goal->uid,
-            $goal->toConfig(),
-            "Save the “{$goal->handle}” analytics goal",
-        );
-
         if ($isNew) {
-            $goal->id = (int)Db::idByUid(Table::GOALS, $goal->uid);
-        }
+            if ($goal->uid === '') {
+                $goal->uid = StringHelper::UUID();
+            }
 
-        return true;
-    }
-
-    public function deleteByUid(string $uid): void
-    {
-        Craft::$app->getProjectConfig()->remove(
-            self::CONFIG_PATH . '.' . $uid,
-            'Delete an analytics goal',
-        );
-    }
-
-    /**
-     * @param string[] $uids
-     */
-    public function reorder(array $uids): void
-    {
-        $projectConfig = Craft::$app->getProjectConfig();
-
-        foreach ($uids as $order => $uid) {
-            $projectConfig->set(self::CONFIG_PATH . '.' . $uid . '.sortOrder', $order + 1, 'Reorder analytics goals');
-        }
-    }
-
-    /**
-     * The uid that the changed config path matched.
-     *
-     * Craft passes token matches **numerically** — see the `array_values()`
-     * in `ProjectConfig::_applyChanges()` — not keyed by the token's name.
-     * Reading `$event->tokenMatches['uid']` therefore yields nothing, and with
-     * a `?? ''` fallback every goal silently collapses onto a single row with an
-     * empty uid. That is precisely what happened before this method existed,
-     * so it throws rather than defaulting.
-     */
-    private static function uidFor(ConfigEvent $event): string
-    {
-        return $event->tokenMatches[0]
-            ?? throw new \UnexpectedValueException("No uid in the config path {$event->path}.");
-    }
-
-    /**
-     * Mirrors a project config change into the goals table.
-     */
-    public function handleChangedGoal(ConfigEvent $event): void
-    {
-        $uid = self::uidFor($event);
-        $data = $event->newValue;
-
-        $id = (new Query())
-            ->select(['id'])
-            ->from([Table::GOALS])
-            ->where(['uid' => $uid])
-            ->scalar();
-
-        $columns = [
-            'name' => (string)($data['name'] ?? ''),
-            'handle' => (string)($data['handle'] ?? ''),
-            'type' => (string)($data['type'] ?? ''),
-            'target' => (string)($data['target'] ?? ''),
-            'value' => (float)($data['value'] ?? 0),
-            'enabled' => (bool)($data['enabled'] ?? true),
-            'siteId' => isset($data['siteId']) ? (int)$data['siteId'] : null,
-            'sortOrder' => (int)($data['sortOrder'] ?? 0),
-            'dateUpdated' => Db::prepareDateForDb(new \DateTime()),
-        ];
-
-        if ($id !== false && $id !== null) {
-            Craft::$app->getDb()->createCommand()
-                ->update(Table::GOALS, $columns, ['id' => $id])
-                ->execute();
-        } else {
-            Craft::$app->getDb()->createCommand()
-                ->insert(Table::GOALS, $columns + [
-                    'uid' => $uid,
+            $db->createCommand()
+                ->insert(Table::GOALS, self::columnsFor($goal) + [
+                    'uid' => $goal->uid,
                     'dateCreated' => Db::prepareDateForDb(new \DateTime()),
                 ])
+                ->execute();
+
+            $goal->id = (int)$db->getLastInsertID(Table::GOALS);
+        } else {
+            $db->createCommand()
+                ->update(Table::GOALS, self::columnsFor($goal), ['id' => $goal->id])
                 ->execute();
         }
 
         $this->clearCaches();
+
+        return true;
     }
 
     /**
-     * Deletes the mirrored row when a goal leaves project config.
+     * Deletes a goal.
      *
      * The rollup rows go with it, by cascade. That is deliberate: a goal's
      * conversions are only meaningful as *that goal's* conversions, and
      * orphaned counts nobody can name are worse than no counts at all. The CP
      * says so before the delete happens.
      */
-    public function handleDeletedGoal(ConfigEvent $event): void
+    public function deleteByUid(string $uid): void
     {
-        $uid = self::uidFor($event);
-
-        Craft::$app->getDb()->createCommand()
+        $this->connection()->createCommand()
             ->delete(Table::GOALS, ['uid' => $uid])
             ->execute();
 
@@ -260,24 +206,68 @@ class GoalsService extends Component
     }
 
     /**
-     * The goals as project config, for a `project-config/rebuild`.
-     *
-     * Returned as a plain uid-keyed map. It must *not* be run through
-     * `packAssociativeArrays()`: that is for associative arrays nested inside
-     * a config value whose key order matters, and applying it to the outer map
-     * collapses every goal onto a single empty key — which is exactly what a
-     * rebuild did before this comment existed.
+     * @param string[] $uids
+     */
+    public function reorder(array $uids): void
+    {
+        $db = $this->connection();
+        $transaction = $db->beginTransaction();
+
+        try {
+            foreach ($uids as $order => $uid) {
+                $db->createCommand()
+                    ->update(Table::GOALS, ['sortOrder' => $order + 1], ['uid' => $uid])
+                    ->execute();
+            }
+
+            $transaction->commit();
+        } catch (\Throwable $e) {
+            $transaction->rollBack();
+
+            throw $e;
+        }
+
+        $this->clearCaches();
+    }
+
+    /**
+     * The stored shape of a goal, without the columns only an insert sets.
      *
      * @return array<string,mixed>
      */
-    public function rebuildConfig(): array
+    public static function columnsFor(Goal $goal): array
     {
-        $config = [];
+        return [
+            'name' => $goal->name,
+            'handle' => $goal->handle,
+            'type' => $goal->type,
+            'target' => $goal->target,
+            'value' => $goal->value,
+            'enabled' => $goal->enabled,
+            'siteId' => $goal->siteId,
+            'sortOrder' => $goal->sortOrder,
+            'dateUpdated' => Db::prepareDateForDb(new \DateTime()),
+        ];
+    }
 
-        foreach ($this->all() as $goal) {
-            $config[$goal->uid] = $goal->toConfig();
+    /**
+     * Whether any *other* goal already holds this handle.
+     */
+    private function handleTaken(Goal $goal): bool
+    {
+        $query = (new Query())
+            ->from([Table::GOALS])
+            ->where(['handle' => $goal->handle]);
+
+        if ($goal->id !== null) {
+            $query->andWhere(['not', ['id' => $goal->id]]);
         }
 
-        return $config;
+        return $query->exists($this->db);
+    }
+
+    private function connection(): Connection
+    {
+        return $this->db ?? Craft::$app->getDb();
     }
 }

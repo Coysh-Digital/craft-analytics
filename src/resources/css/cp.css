@@ -146,6 +146,61 @@
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.09);
 }
 
+/* The absolute range picker: a <details> so it opens and closes without any
+   JavaScript, with its <summary> dressed as one more pill in the strip. */
+.ca-range-custom {
+    position: relative;
+}
+
+.ca-range-custom > summary {
+    cursor: pointer;
+    list-style: none;
+}
+
+.ca-range-custom > summary::-webkit-details-marker {
+    display: none;
+}
+
+.ca-range-custom > summary:hover {
+    color: var(--text-color);
+    background: rgba(255, 255, 255, 0.6);
+}
+
+/* Floated over the report rather than pushing it down, so opening the picker
+   does not move the figures you are about to compare against. */
+.ca-range-form {
+    position: absolute;
+    z-index: 10;
+    top: calc(100% + 6px);
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 210px;
+    padding: 12px;
+    background: var(--white);
+    border: 1px solid var(--hairline-color);
+    border-radius: var(--ca-radius);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12);
+}
+
+.ca-range-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 12px;
+    color: var(--medium-text-color);
+}
+
+/* Right-hand edge of the toolbar: the picker is the last pill in the strip, so
+   on a narrow viewport a left-aligned panel would hang off the screen. */
+@media (max-width: 600px) {
+    .ca-range-form {
+        left: auto;
+        right: 0;
+    }
+}
+
 /* ------------------------------------------------------------- stat tiles */
 
 /* A handful of headline numbers is a KPI row, not a bar chart. */

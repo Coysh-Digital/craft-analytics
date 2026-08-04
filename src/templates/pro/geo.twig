@@ -45,12 +45,15 @@ php craft craft-analytics/geo/status</pre>
                     <script type="application/json" id="ca-geo-data">
                         {{ { values: countryValues, sessionsLabel: 'sessions'|t('craft-analytics') }|json_encode|raw }}
                     </script>
-                    {# Replaced by the map once it draws. If the map library
-                       did not load - a cpresources publishing problem, or a
-                       content security policy blocking it - this is what stays
-                       on the screen, because a card that is simply blank tells
-                       nobody anything. #}
-                    <p id="ca-geo-map-fallback" class="ca-footnote" hidden>
+                    {# Rendered visible, and hidden by geo-map.js as its first
+                       act. That way round deliberately: if the script itself
+                       never arrives - a cpresources publishing problem, a
+                       hostname whose certificate does not match, a content
+                       security policy blocking it - then the only code that
+                       could have reported the failure is the code that failed,
+                       and an empty card is all anyone sees. Starting visible is
+                       the one arrangement that survives its own failure. #}
+                    <p id="ca-geo-map-fallback" class="ca-footnote">
                         {{ 'The map could not be drawn because its script did not load. The country figures below are unaffected. Check that the plugin resources under cpresources are being published and are not blocked.'|t('craft-analytics') }}
                     </p>
                 </div>

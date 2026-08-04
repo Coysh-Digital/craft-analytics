@@ -19,7 +19,7 @@ worth. Then every report can tell you not just "500 people read the blog" but
 | Field | What it's for |
 |---|---|
 | **Name** | What it's called in reports. "Enquiry form", not "goal 3". |
-| **Handle** | Used in project config and Twig. |
+| **Handle** | Used by funnel steps and the Twig API. Must be unique. |
 | **Type** | See below. |
 | **Target** | What has to happen. Means something different per type. |
 | **Value** | What one conversion is worth. Leave at 0 if it isn't about money. |
@@ -80,27 +80,21 @@ If you are about to run a campaign, create the goal first.
 **Deleting a goal deletes its conversions**, since they are only meaningful as
 that goal's conversions. The control panel warns you before it happens.
 
-## Goals live in project config
+## Goals live in the database
 
-So they deploy like everything else: create them in your dev environment,
-commit `config/project/craftAnalytics/goals/`, and they arrive in production on
-your next `project-config/apply`. Nobody has to retype them in production.
+Which means you can create one wherever you can reach the control panel,
+production included. There is nothing to deploy and nothing to apply.
 
-```yaml
-# config/project/craftAnalytics/goals/enquiry--a1b2c3d4-….yaml
-enabled: true
-handle: enquiry
-name: 'Enquiry form'
-siteId: null
-sortOrder: 1
-target: /thank-you
-type: url
-value: 50.0
-```
+Until version 2.0.0 they were kept in project config, so they arrived in
+production on a deploy. That sounded right and worked badly: project config is
+read-only wherever `allowAdminChanges` is off, which is every production site,
+so the goals screen there could only refuse. The person who wanted a goal
+could not add one, and the person who could was a deploy away.
 
-If `allowAdminChanges` is off in production - as it should be - the goals
-screen there is read-only and says so, rather than letting you save something
-that would be silently discarded.
+The trade-off, stated plainly: **goals no longer travel between environments.**
+One created in staging will not appear in production, and each environment
+keeps its own. If you are upgrading, see the 2.0.0 entry in the changelog for
+what happens to the definitions already in your project config.
 
 ## Reading the report
 

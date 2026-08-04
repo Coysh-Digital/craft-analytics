@@ -7,23 +7,26 @@ use coyshdigital\craftanalytics\models\Funnel;
 use coyshdigital\craftanalytics\Plugin;
 use Craft;
 use craft\db\Query;
-use craft\events\ConfigEvent;
 use craft\helpers\Db;
 use craft\helpers\StringHelper;
 use yii\base\Component;
 use yii\db\Connection;
 
 /**
- * Funnel definitions, in project config for the same reasons goals are: they
- * are configuration, and they should arrive in production on deploy.
+ * Funnel definitions, in the database for the same reasons goals are - see
+ * GoalsService for why they moved out of project config.
  *
- * Steps are stored as goal handles in config and mirrored to goal IDs in the
- * database, so a funnel survives being deployed to an environment where the
- * goals have different auto-increment IDs.
+ * A step is held as a goal ID, and read back out as a handle: the model talks
+ * in handles because that is what the CP form posts and what a funnel means,
+ * and the table stores the ID because that is what the rollup joins to.
  */
 class FunnelsService extends Component
 {
-    public const CONFIG_PATH = 'craftAnalytics.funnels';
+    /**
+     * Where funnels used to be kept. Retained only so the migration can find
+     * definitions that nothing reads any more.
+     */
+    public const LEGACY_CONFIG_PATH = 'craftAnalytics.funnels';
 
     /**
      * Connection override; defaults to Craft's. Set in tests.
@@ -100,110 +103,126 @@ class FunnelsService extends Component
         return null;
     }
 
+    /**
+     * Saves a funnel and its steps.
+     *
+     * Both in one transaction: a funnel's steps are a sequence, and a funnel
+     * left holding half of one reports drop-off that never happened.
+     *
+     * Returns false on a validation failure rather than throwing, so the
+     * controller can hand the model back to the form with its errors.
+     */
     public function save(Funnel $funnel, bool $runValidation = true): bool
     {
         if ($runValidation && !$funnel->validate()) {
             return false;
         }
 
+        // Uniquely indexed, same as a goal's - see GoalsService::save().
+        if ($this->handleTaken($funnel)) {
+            $funnel->addError('handle', Craft::t('craft-analytics', 'That handle is already in use by another funnel.'));
+
+            return false;
+        }
+
+        // saveSteps() skips a step that names no goal, which is right for a
+        // one-way import but wrong for a form: the funnel would save, look
+        // saved, and then report drop-off across a step that isn't there. The
+        // model cannot check this itself - it has no database.
+        $this->goalsService()->clearCaches();
+        $unknown = array_diff($funnel->steps, array_keys($this->goalsService()->idsByHandle()));
+
+        if ($unknown !== []) {
+            $funnel->addError('steps', Craft::t('craft-analytics', 'No goal named “{handle}”.', [
+                'handle' => reset($unknown),
+            ]));
+
+            return false;
+        }
+
+        $db = $this->connection();
         $isNew = $funnel->id === null;
+        $transaction = $db->beginTransaction();
 
-        if ($funnel->uid === '') {
-            $funnel->uid = $isNew || $funnel->id === null
-                ? StringHelper::UUID()
-                : (string)Db::uidById(Table::FUNNELS, $funnel->id);
+        try {
+            if ($isNew) {
+                if ($funnel->uid === '') {
+                    $funnel->uid = StringHelper::UUID();
+                }
+
+                $db->createCommand()
+                    ->insert(Table::FUNNELS, self::columnsFor($funnel) + [
+                        'uid' => $funnel->uid,
+                        'dateCreated' => Db::prepareDateForDb(new \DateTime()),
+                    ])
+                    ->execute();
+
+                $funnel->id = (int)$db->getLastInsertID(Table::FUNNELS);
+            } else {
+                $db->createCommand()
+                    ->update(Table::FUNNELS, self::columnsFor($funnel), ['id' => $funnel->id])
+                    ->execute();
+            }
+
+            $this->saveSteps((int)$funnel->id, $funnel->steps);
+
+            $transaction->commit();
+        } catch (\Throwable $e) {
+            $transaction->rollBack();
+
+            throw $e;
         }
 
-        Craft::$app->getProjectConfig()->set(
-            self::CONFIG_PATH . '.' . $funnel->uid,
-            $funnel->toConfig(),
-            "Save the “{$funnel->handle}” analytics funnel",
-        );
-
-        if ($isNew) {
-            $funnel->id = (int)Db::idByUid(Table::FUNNELS, $funnel->uid);
-        }
+        $this->funnels = null;
 
         return true;
     }
 
     public function deleteByUid(string $uid): void
     {
-        Craft::$app->getProjectConfig()->remove(self::CONFIG_PATH . '.' . $uid, 'Delete an analytics funnel');
+        $this->connection()->createCommand()
+            ->delete(Table::FUNNELS, ['uid' => $uid])
+            ->execute();
+
+        $this->funnels = null;
     }
 
     /**
-     * The uid that the changed config path matched.
+     * The stored shape of a funnel, without its steps and without the columns
+     * only an insert sets.
      *
-     * Craft passes token matches **numerically** — see the `array_values()`
-     * in `ProjectConfig::_applyChanges()` — not keyed by the token's name.
-     * Reading `$event->tokenMatches['uid']` therefore yields nothing, and with
-     * a `?? ''` fallback every funnel silently collapses onto a single row with an
-     * empty uid. That is precisely what happened before this method existed,
-     * so it throws rather than defaulting.
+     * @return array<string,mixed>
      */
-    private static function uidFor(ConfigEvent $event): string
+    public static function columnsFor(Funnel $funnel): array
     {
-        return $event->tokenMatches[0]
-            ?? throw new \UnexpectedValueException("No uid in the config path {$event->path}.");
-    }
-
-    /**
-     * Mirrors a funnel from project config.
-     *
-     * The steps are written in a deferred pass. Craft applies config paths in
-     * alphabetical order, so `craftAnalytics.funnels` lands *before*
-     * `craftAnalytics.goals` — and a step written at that moment would find no
-     * goal to point at and be silently dropped. Deferring runs it once the
-     * whole change set has been applied, by which time the goals exist. (Found
-     * by applying a funnel to a fresh environment and getting a funnel with
-     * zero steps.)
-     */
-    public function handleChangedFunnel(ConfigEvent $event): void
-    {
-        $uid = self::uidFor($event);
-        $data = $event->newValue;
-        $db = Craft::$app->getDb();
-
-        $id = (new Query())->select(['id'])->from([Table::FUNNELS])->where(['uid' => $uid])->scalar();
-
-        $columns = [
-            'name' => (string)($data['name'] ?? ''),
-            'handle' => (string)($data['handle'] ?? ''),
-            'siteId' => isset($data['siteId']) ? (int)$data['siteId'] : null,
-            'enabled' => (bool)($data['enabled'] ?? true),
-            'sortOrder' => (int)($data['sortOrder'] ?? 0),
+        return [
+            'name' => $funnel->name,
+            'handle' => $funnel->handle,
+            'siteId' => $funnel->siteId,
+            'enabled' => $funnel->enabled,
+            'sortOrder' => $funnel->sortOrder,
             'dateUpdated' => Db::prepareDateForDb(new \DateTime()),
         ];
-
-        if ($id !== false && $id !== null) {
-            $db->createCommand()->update(Table::FUNNELS, $columns, ['id' => $id])->execute();
-        } else {
-            $db->createCommand()->insert(Table::FUNNELS, $columns + [
-                'uid' => $uid,
-                'dateCreated' => Db::prepareDateForDb(new \DateTime()),
-            ])->execute();
-            $id = (new Query())->select(['id'])->from([Table::FUNNELS])->where(['uid' => $uid])->scalar();
-        }
-
-        $steps = array_values((array)($data['steps'] ?? []));
-        $this->funnels = null;
-
-        Craft::$app->getProjectConfig()->defer(
-            $event,
-            fn() => $this->saveSteps((int)$id, $steps),
-        );
     }
 
     /**
+     * Writes a funnel's steps, resolving goal handles to IDs.
+     *
+     * Returns the handles it could not place, so the caller can say so: a
+     * funnel quietly missing a step reports drop-off that never happened, and
+     * a warning in a log file is not where the person who just saved the form
+     * is looking.
+     *
      * @param array<int,mixed> $steps goal handles, in order
+     * @return string[] the handles that named no goal and were skipped
      */
-    private function saveSteps(int $funnelId, array $steps): void
+    public function saveSteps(int $funnelId, array $steps): array
     {
-        $db = Craft::$app->getDb();
+        $db = $this->connection();
 
-        // Memoised reads would still be holding the goal list from before this
-        // change set applied.
+        // A goal saved earlier in this request would otherwise be resolved
+        // against the list as it was before that save - which is how a brand
+        // new goal used as a step gets silently skipped.
         $this->goalsService()->clearCaches();
         $goalIds = $this->goalsService()->idsByHandle();
 
@@ -212,14 +231,13 @@ class FunnelsService extends Component
         $db->createCommand()->delete(Table::FUNNEL_STEPS, ['funnelId' => $funnelId])->execute();
 
         $position = 1;
+        $skipped = [];
 
         foreach ($steps as $handle) {
             $goalId = $goalIds[(string)$handle] ?? null;
 
-            // A step naming a goal that doesn't exist. Skipped rather than
-            // guessed at — but say so, because a funnel quietly missing a step
-            // reports drop-off that never happened.
             if ($goalId === null) {
+                $skipped[] = (string)$handle;
                 Craft::warning(
                     "Analytics funnel step “{$handle}” refers to a goal that doesn’t exist; the step was skipped.",
                     __METHOD__,
@@ -236,33 +254,29 @@ class FunnelsService extends Component
         }
 
         $this->funnels = null;
-    }
 
-    public function handleDeletedFunnel(ConfigEvent $event): void
-    {
-        Craft::$app->getDb()->createCommand()
-            ->delete(Table::FUNNELS, ['uid' => self::uidFor($event)])
-            ->execute();
-
-        $this->funnels = null;
+        return $skipped;
     }
 
     /**
-     * The funnels as project config, for a `project-config/rebuild`. A plain
-     * uid-keyed map — see GoalsService::rebuildConfig() for why it must not be
-     * packed.
-     *
-     * @return array<string,mixed>
+     * Whether any *other* funnel already holds this handle.
      */
-    public function rebuildConfig(): array
+    private function handleTaken(Funnel $funnel): bool
     {
-        $config = [];
+        $query = (new Query())
+            ->from([Table::FUNNELS])
+            ->where(['handle' => $funnel->handle]);
 
-        foreach ($this->all() as $funnel) {
-            $config[$funnel->uid] = $funnel->toConfig();
+        if ($funnel->id !== null) {
+            $query->andWhere(['not', ['id' => $funnel->id]]);
         }
 
-        return $config;
+        return $query->exists($this->db);
+    }
+
+    private function connection(): Connection
+    {
+        return $this->db ?? Craft::$app->getDb();
     }
 
     /**

@@ -21,7 +21,10 @@ use yii\console\ExitCode;
  */
 class ReportController extends Controller
 {
-    /** The period the summary covers: today, yesterday, 7d, 30d, 90d, 12mo. */
+    /**
+     * The period the summary covers: today, yesterday, 7d, 30d, 90d, 12mo, or
+     * two dates as YYYY-MM-DD:YYYY-MM-DD.
+     */
     public string $period = DateRange::PRESET_7_DAYS;
 
     /** Which site to report on. Defaults to the primary site. */
@@ -42,8 +45,17 @@ class ReportController extends Controller
     {
         $mailer = Plugin::getInstance()->getReportMailer();
 
-        if (!array_key_exists($this->period, DateRange::presets())) {
-            $this->stderr("“{$this->period}” is not a period. Try: " . implode(', ', array_keys(DateRange::presets())) . "\n", Console::FG_RED);
+        // The web falls back to 30 days on anything it cannot read, because the
+        // range there is chosen by whoever can write a query string. A console
+        // user who mistypes a date wants to be told, not handed a month of the
+        // wrong figures and left to notice.
+        if (!DateRange::isValidParam($this->period)) {
+            $this->stderr(
+                "“{$this->period}” is not a period. Try: "
+                . implode(', ', array_keys(DateRange::presets()))
+                . ", or two dates as YYYY-MM-DD:YYYY-MM-DD.\n",
+                Console::FG_RED,
+            );
 
             return ExitCode::USAGE;
         }

@@ -91,7 +91,7 @@ class ReportMailer extends Component
     public function summary(int $siteId, string $period): array
     {
         $stats = Plugin::getInstance()->getStats();
-        $range = DateRange::fromPreset($period);
+        $range = DateRange::fromParam($period);
         $previousRange = $range->previous();
 
         $totals = $stats->totals($siteId, $range);

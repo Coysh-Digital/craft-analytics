@@ -75,3 +75,116 @@ test('a year range spans a year', function() {
         ->and($range->to)->toBe('2026-07-16')
         ->and($range->days())->toBe(365);
 });
+
+test('a preset carries its own handle as the url param', function() {
+    expect(rangeAt(DateRange::PRESET_7_DAYS)->param)->toBe(DateRange::PRESET_7_DAYS)
+        ->and(rangeAt(DateRange::PRESET_7_DAYS)->isCustom())->toBeFalse();
+});
+
+test('a custom range round-trips through its url param', function() {
+    $range = DateRange::fromParam('2026-01-01:2026-03-31', NOW);
+
+    // Everything else depends on this: the param is rebuilt into every link on
+    // the page, so a range that does not survive the round trip silently
+    // resets itself on the first drill-down.
+    expect($range->param)->toBe('2026-01-01:2026-03-31')
+        ->and($range->from)->toBe('2026-01-01')
+        ->and($range->to)->toBe('2026-03-31')
+        ->and($range->preset)->toBe(DateRange::PRESET_CUSTOM)
+        ->and($range->isCustom())->toBeTrue()
+        ->and($range->days())->toBe(90);
+});
+
+test('fromParam resolves preset handles exactly as fromPreset does', function(string $preset) {
+    $viaParam = DateRange::fromParam($preset, NOW);
+    $viaPreset = DateRange::fromPreset($preset, NOW);
+
+    expect($viaParam->from)->toBe($viaPreset->from)
+        ->and($viaParam->to)->toBe($viaPreset->to)
+        ->and($viaParam->preset)->toBe($viaPreset->preset);
+})->with(array_keys(DateRange::presets()));
+
+test('a malformed custom range falls back to 30 days rather than failing', function(string $token) {
+    $range = DateRange::fromParam($token, NOW);
+
+    expect($range->preset)->toBe(DateRange::PRESET_30_DAYS)
+        ->and($range->days())->toBe(30);
+})->with([
+    'one date only' => ['2026-01-01'],
+    'unpadded' => ['2026-1-1:2026-03-31'],
+    // createFromFormat rolls this to 3 March unless the round trip catches it.
+    'a day that does not exist' => ['2026-02-30:2026-03-01'],
+    'a month that does not exist' => ['2026-13-01:2026-13-05'],
+    'traversal on the left' => ['../../etc/passwd:2026-01-01'],
+    'traversal on the right' => ['2026-01-01:../../etc/passwd'],
+    'empty' => [''],
+    'the discriminator on its own' => ['custom'],
+    'three parts' => ['2026-01-01:2026-03-31:2026-04-01'],
+]);
+
+test('dates picked the wrong way round are swapped, not rejected', function() {
+    $range = DateRange::fromParam('2026-03-31:2026-01-01', NOW);
+
+    expect($range->from)->toBe('2026-01-01')
+        ->and($range->to)->toBe('2026-03-31')
+        ->and($range->isCustom())->toBeTrue();
+});
+
+test('a range ending in the future is clamped to today', function() {
+    // Otherwise dates() emits a label per day to 2099 and trend() runs a
+    // uniques query for each one, from a query string.
+    $range = DateRange::fromParam('2026-07-01:2099-01-01', NOW);
+
+    expect($range->to)->toBe('2026-07-16')
+        ->and($range->from)->toBe('2026-07-01');
+});
+
+test('an over-long range is clamped to the maximum span, keeping its end', function() {
+    $range = DateRange::fromParam('2020-01-01:2026-07-16', NOW);
+
+    expect($range->days())->toBe(DateRange::MAX_CUSTOM_DAYS)
+        ->and($range->to)->toBe('2026-07-16')
+        ->and($range->from)->toBe('2025-06-12');
+});
+
+test('fromPreset cannot be handed a custom token', function() {
+    // The property that keeps the scheduled report and the Overview widget
+    // safe: they resolve through fromPreset(), so they are structurally
+    // incapable of holding an absolute window that would freeze.
+    $range = DateRange::fromPreset('2026-01-01:2026-03-31', NOW);
+
+    expect($range->preset)->toBe(DateRange::PRESET_30_DAYS)
+        ->and($range->days())->toBe(30);
+});
+
+test('custom is not a preset', function() {
+    // presets() is the whitelist for Settings::reportPeriod, the Overview
+    // widget and the report console command. If 'custom' ever appears here,
+    // all three start accepting a value that resolves to nothing.
+    expect(array_keys(DateRange::presets()))->not->toContain(DateRange::PRESET_CUSTOM);
+});
+
+test('isValidParam accepts presets and well-formed tokens, and nothing else', function() {
+    expect(DateRange::isValidParam(DateRange::PRESET_7_DAYS))->toBeTrue()
+        ->and(DateRange::isValidParam('2026-01-01:2026-03-31'))->toBeTrue()
+        ->and(DateRange::isValidParam('2026-02-30:2026-03-01'))->toBeFalse()
+        ->and(DateRange::isValidParam('custom'))->toBeFalse()
+        ->and(DateRange::isValidParam('last week'))->toBeFalse();
+});
+
+test('the previous period of a custom range links to its own dates', function() {
+    $range = DateRange::fromParam('2026-03-01:2026-03-31', NOW);
+    $previous = $range->previous();
+
+    expect($previous->from)->toBe('2026-01-29')
+        ->and($previous->to)->toBe('2026-02-28')
+        ->and($previous->days())->toBe($range->days())
+        ->and($previous->param)->toBe('2026-01-29:2026-02-28')
+        ->and($previous->to)->toBeLessThan($range->from);
+});
+
+test('a single custom day is still plotted hourly by the model', function() {
+    // The model stays pure; whether hourly rows still exist for that day is
+    // StatsService's business, not the range's.
+    expect(DateRange::fromParam('2026-03-01:2026-03-01', NOW)->isHourly())->toBeTrue();
+});

@@ -38,7 +38,7 @@
         <div class="ca-card-body">
             <form class="ca-page-filters" method="get">
                 <input type="hidden" name="site" value="{{ site.handle }}">
-                <input type="hidden" name="range" value="{{ range.preset }}">
+                <input type="hidden" name="range" value="{{ range.param }}">
                 <input type="text" class="text" name="q" value="{{ pathInclude }}"
                        placeholder="{{ 'Only paths containing…'|t('craft-analytics') }}"
                        aria-label="{{ 'Only paths containing'|t('craft-analytics') }}">
@@ -59,7 +59,7 @@
                    the comparison is a link someone can bookmark or send on. #}
                 <form method="get" id="ca-compare-form">
                     <input type="hidden" name="site" value="{{ site.handle }}">
-                    <input type="hidden" name="range" value="{{ range.preset }}">
+                    <input type="hidden" name="range" value="{{ range.param }}">
                     {% if pathInclude %}<input type="hidden" name="q" value="{{ pathInclude }}">{% endif %}
                     {% if pathExclude %}<input type="hidden" name="exclude" value="{{ pathExclude }}">{% endif %}
                 <table class="ca-table">

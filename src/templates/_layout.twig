@@ -33,6 +33,38 @@
                                href="{{ url(currentPath, currentParams|merge({ range: value })) }}"
                                {{ value == range.preset ? 'aria-current="true"' }}>{{ label }}</a>
                         {% endfor %}
+
+                        {# A disclosure and a plain GET form, so an absolute
+                           range needs no JavaScript at all. The two date fields
+                           post as `from` and `to`; the controller resolves them
+                           once and every link on the resulting page carries the
+                           combined token instead. #}
+                        <details class="ca-range-custom" {{ range.isCustom ? 'open' }}>
+                            <summary class="ca-range{{ range.isCustom ? ' is-selected' }}">
+                                {{ range.isCustom ? range.label : 'Custom'|t('craft-analytics') }}
+                            </summary>
+                            <form class="ca-range-form" method="get">
+                                {# Carries whatever else the screen is scoped by
+                                   - the site, a page path, the Pages filters -
+                                   so applying a range never silently drops a
+                                   filter or bounces back to the list. `range`
+                                   is skipped because `from`/`to` replace it. #}
+                                {% for key, value in currentParams|filter((value, key) => key != 'range' and value is not iterable) %}
+                                    <input type="hidden" name="{{ key }}" value="{{ value }}">
+                                {% endfor %}
+                                <label>
+                                    <span>{{ 'From'|t('craft-analytics') }}</span>
+                                    <input type="date" class="text" name="from" required
+                                           value="{{ range.from }}" max="{{ maxDate ?? '' }}">
+                                </label>
+                                <label>
+                                    <span>{{ 'To'|t('craft-analytics') }}</span>
+                                    <input type="date" class="text" name="to" required
+                                           value="{{ range.to }}" max="{{ maxDate ?? '' }}">
+                                </label>
+                                <button type="submit" class="btn submit">{{ 'Apply'|t('craft-analytics') }}</button>
+                            </form>
+                        </details>
                     </div>
                 {% endif %}
 

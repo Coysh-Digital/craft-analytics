@@ -42,7 +42,9 @@ the thing that usually doesn't happen.
 
 **Signature:** `popularEntries(limit = 5, period = '30d', siteId = null)`
 
-Periods are `today`, `yesterday`, `7d`, `30d`, `90d`, `12mo`.
+Periods are `today`, `yesterday`, `7d`, `30d`, `90d`, `12mo`, or an absolute
+window as two dates - `'2026-01-01:2026-03-31'` - of up to 400 days. Anything
+else is read as `30d`.
 
 ::: tip
 It over-fetches internally, because some of the most-viewed elements will

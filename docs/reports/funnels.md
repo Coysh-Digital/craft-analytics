@@ -97,20 +97,12 @@ turning it on changes your legal position.
 A step showing 0 usually means its goal is not matching. Check it on the Goals
 screen before concluding that your checkout is broken.
 
-## Funnels live in project config
+## Funnels live in the database
 
-Like goals. Steps are stored by goal handle, not ID, so a funnel survives
-being deployed to an environment where the auto-increment IDs are different.
+Like goals, and for the same reasons - see [Goals](goals.md) for why they moved
+out of project config in 2.0.0, and what that means if you are upgrading. You
+can build one in any environment, production included.
 
-```yaml
-# config/project/craftAnalytics/funnels/blogToEnquiry--….yaml
-enabled: true
-handle: blogToEnquiry
-name: 'Blog to enquiry'
-siteId: null
-sortOrder: 0
-steps:
-  - landed
-  - readPost
-  - enquired
-```
+A step names a goal, so the goal has to exist first. Naming one that doesn't is
+refused at the form rather than saved and skipped, because a funnel quietly
+missing a step reports drop-off that never happened.

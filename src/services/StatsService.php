@@ -7,6 +7,7 @@ use coyshdigital\craftanalytics\enums\Channel;
 use coyshdigital\craftanalytics\enums\DeviceType;
 use coyshdigital\craftanalytics\enums\DimensionType;
 use coyshdigital\craftanalytics\models\DateRange;
+use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\Plugin;
 use coyshdigital\craftanalytics\rollup\Compactor;
 use coyshdigital\craftanalytics\session\Session;
@@ -31,6 +32,14 @@ class StatsService extends Component
 
     /** Injectable, like every other collaborator here, so tests can set it. */
     public ?SegmentRegistry $segments = null;
+
+    /**
+     * Only read for the hourly retention cutoff, and injectable for the same
+     * reason everything else here is: Plugin::getInstance() is null in the test
+     * harness, so reaching for it from a code path a test can hit is a fatal
+     * rather than a failure.
+     */
+    public ?Settings $settings = null;
 
     /**
      * The headline numbers.
@@ -125,7 +134,13 @@ class StatsService extends Component
      */
     public function trend(int $siteId, DateRange $range, ?int $pathDimId = null): array
     {
-        if ($range->isHourly()) {
+        // A single day is worth an hourly axis, but only while that day still
+        // has hourly rows: compaction folds them into one daily row, so a
+        // custom single day from three months ago would plot a flat 24 hours of
+        // zeroes and look broken rather than compacted. The daily axis gives it
+        // one honest point instead. Presets can never reach this - today and
+        // yesterday are always inside the window - but a custom range can.
+        if ($range->isHourly() && $range->from >= $this->hourlyWindowFrom()) {
             return $this->hourlyTrend($siteId, $range, $pathDimId);
         }
 
@@ -1170,7 +1185,7 @@ class StatsService extends Component
      */
     public function hourlyWindowFrom(?int $now = null): string
     {
-        return (new Compactor())->cutoffDate($now ?? time());
+        return (new Compactor(['settings' => $this->settings]))->cutoffDate($now ?? time());
     }
 
     private function counter(): UniqueCounterInterface

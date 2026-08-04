@@ -85,7 +85,7 @@ class ReportsController extends BaseCpController
                 'compareLimit' => ChartData::MAX_SERIES,
                 'editUrls' => ElementLinks::editUrls(array_column($pages, 'elementId')),
                 'exportKind' => 'pages',
-                'exportParams' => ['site' => $site->handle, 'range' => $range->preset],
+                'exportParams' => ['site' => $site->handle, 'range' => $range->param],
                 'pathInclude' => $include,
                 'pathExclude' => $exclude,
                 'dimensionCap' => Plugin::getInstance()->getSettings()->dimensionCap,
@@ -206,7 +206,7 @@ class ReportsController extends BaseCpController
                 'outbound' => $isPro ? $stats->outbound($siteId, $range, 20, $pathDimId) : [],
                 'editUrls' => ElementLinks::editUrls([$totals['elementId']]),
                 'exportKind' => 'pages',
-                'exportParams' => ['site' => $site->handle, 'range' => $range->preset],
+                'exportParams' => ['site' => $site->handle, 'range' => $range->param],
                 // The range pills and site switcher rebuild their hrefs from
                 // currentParams; without the path riding along, changing the
                 // range would land back on the Pages list.
@@ -244,7 +244,7 @@ class ReportsController extends BaseCpController
                 'channelChart' => $channelChart,
                 'referrers' => $stats->sources($siteId, $range, 200),
                 'exportKind' => 'sources',
-                'exportParams' => ['site' => $site->handle, 'range' => $range->preset],
+                'exportParams' => ['site' => $site->handle, 'range' => $range->param],
             ],
         ));
     }
@@ -276,7 +276,7 @@ class ReportsController extends BaseCpController
                     ['label' => Craft::t('craft-analytics', 'Sessions')],
                 ),
                 'exportKind' => 'devices',
-                'exportParams' => ['site' => $site->handle, 'range' => $range->preset],
+                'exportParams' => ['site' => $site->handle, 'range' => $range->param],
             ],
         ));
     }

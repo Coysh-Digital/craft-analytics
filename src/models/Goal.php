@@ -12,7 +12,7 @@ use craft\helpers\StringHelper;
 /**
  * Something worth counting.
  *
- * Goals live in project config, so they deploy with the rest of the site
+ * Goals live in the database, so they can be created in any environment
  * rather than being retyped into production by hand.
  *
  * A goal converts **once per session**, not once per pageview: somebody who
@@ -117,22 +117,6 @@ class Goal extends Model
         return fnmatch($this->target, explode('?', $path, 2)[0]);
     }
 
-    /**
-     * @return array<string,mixed> the project config representation
-     */
-    public function toConfig(): array
-    {
-        return [
-            'name' => $this->name,
-            'handle' => $this->handle,
-            'type' => $this->type,
-            'target' => $this->target,
-            'value' => $this->value,
-            'enabled' => $this->enabled,
-            'siteId' => $this->siteId,
-            'sortOrder' => $this->sortOrder,
-        ];
-    }
 
     /**
      * @return array<int,mixed>

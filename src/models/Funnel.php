@@ -29,8 +29,9 @@ class Funnel extends Model
     public int $sortOrder = 0;
 
     /**
-     * Goal handles in order. Handles, not IDs, because project config must not
-     * carry auto-increment IDs across environments.
+     * Goal handles in order. Handles rather than IDs because that is what the
+     * form posts and what a funnel means to a person; the table stores the ID
+     * it resolves to, which is what the rollup joins against.
      *
      * @var array<int,string>
      */
@@ -96,20 +97,6 @@ class Funnel extends Model
         return $reached;
     }
 
-    /**
-     * @return array<string,mixed> the project config representation
-     */
-    public function toConfig(): array
-    {
-        return [
-            'name' => $this->name,
-            'handle' => $this->handle,
-            'siteId' => $this->siteId,
-            'enabled' => $this->enabled,
-            'sortOrder' => $this->sortOrder,
-            'steps' => array_values($this->steps),
-        ];
-    }
 
     /**
      * @return array<int,mixed>

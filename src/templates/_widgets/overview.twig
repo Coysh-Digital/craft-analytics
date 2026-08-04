@@ -35,7 +35,7 @@
         {% endif %}
 
         <p style="margin-top: 10px">
-            <a class="go" href="{{ url('craft-analytics', { site: site.handle, range: range.preset }) }}">
+            <a class="go" href="{{ url('craft-analytics', { site: site.handle, range: range.param }) }}">
                 {{ 'Open analytics'|t('craft-analytics') }}
             </a>
         </p>

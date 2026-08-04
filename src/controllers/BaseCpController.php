@@ -92,9 +92,27 @@ abstract class BaseCpController extends Controller
         return $site->id ?? throw new ForbiddenHttpException('That site has not been saved yet.');
     }
 
+    /**
+     * The range being viewed.
+     *
+     * The picker's custom form posts `from` and `to` as two fields, because two
+     * date inputs is what a browser gives you for free and combining them would
+     * need JavaScript. Everything after that submission travels as a single
+     * `range` token, rebuilt from `currentParams` into every link on the page -
+     * so the two-param form is read here once, and never has to be threaded
+     * through the drill-downs, filters, site switcher and export links that all
+     * merge `currentParams`.
+     */
     protected function range(): DateRange
     {
-        return DateRange::fromPreset((string)$this->request->getParam('range', DateRange::PRESET_30_DAYS));
+        $from = $this->request->getParam('from');
+        $to = $this->request->getParam('to');
+
+        if (is_string($from) && is_string($to) && $from !== '' && $to !== '') {
+            return DateRange::custom($from, $to);
+        }
+
+        return DateRange::fromParam((string)$this->request->getParam('range', DateRange::PRESET_30_DAYS));
     }
 
     /**
@@ -112,7 +130,11 @@ abstract class BaseCpController extends Controller
             'range' => $range,
             'ranges' => DateRange::presets(),
             'currentPath' => $this->request->getPathInfo(),
-            'currentParams' => ['site' => $site->handle, 'range' => $range->preset],
+            'currentParams' => ['site' => $site->handle, 'range' => $range->param],
+            // The furthest either date input will let you go. There is no data
+            // from tomorrow, and a range ending in the future only produces
+            // empty days on a chart.
+            'maxDate' => DateRange::fromPreset(DateRange::PRESET_TODAY)->to,
             'canExport' => Craft::$app->getUser()->checkPermission(Plugin::PERMISSION_EXPORT),
             'uniquesAccuracy' => $this->stats()->uniquesAccuracy(),
         ];
