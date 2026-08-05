@@ -1,5 +1,30 @@
 # Release Notes for Craft Analytics
 
+## Unreleased
+
+> **The GraphQL API is now Lite-excluded, as it was always documented to be.**
+> If you are on Lite and querying `craftAnalyticsTotals` or
+> `craftAnalyticsTopPages` today, those queries stop resolving when you
+> upgrade. Nothing else about your install changes, and no data is touched.
+> Pro is unaffected.
+
+### Fixed
+
+- **Pro features are enforced by the licence, not only described by it.** The
+  GraphQL API has been a Pro feature in the documentation since it shipped,
+  but nothing in the code checked the edition: the queries were registered for
+  every install, and the only thing in front of them was the schema scope,
+  which an admin grants for their own reasons and which says nothing about the
+  licence. A Lite site that ticked "Read traffic reports" got the whole API.
+  Lite now registers no queries and is not offered the permission in the
+  schema editor, since a checkbox granting access to something the licence
+  does not include is worse than no checkbox at all.
+- The Pro report screens no longer hand their figures to the template on Lite.
+  They were already hidden, but by an `{% if %}` in the markup, which makes
+  the licence a property of a template rather than of the controller. The
+  numbers are now withheld before rendering. This matters most on a site that
+  has downgraded, where the Pro rows are still sitting in the tables.
+
 ## 2.0.0 - 2026-08-04
 
 > **Before you upgrade.** Goals and funnels move out of project config and into

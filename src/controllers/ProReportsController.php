@@ -11,9 +11,10 @@ use yii\web\Response;
 /**
  * The Pro reports: campaigns, geo, events.
  *
- * Gated at the controller, not in the template — hiding a nav item is not a
- * licence check. Lite gets a plain explanation of what the screen would show,
- * once, without nagging.
+ * Gated at the controller, not in the template - hiding a nav item is not a
+ * licence check, and neither is an `{% if %}`. Lite is passed no figures at
+ * all; it gets a plain explanation of what the screen would show, once,
+ * without nagging.
  */
 class ProReportsController extends BaseCpController
 {
@@ -106,6 +107,16 @@ class ProReportsController extends BaseCpController
         array $variables,
     ): Response {
         $isPro = Plugin::getInstance()->is(Plugin::EDITION_PRO);
+
+        // Lite is handed the screen's title and nothing else. The templates
+        // already branch on isPro, but that makes the gate a property of the
+        // markup: one edited `{% if %}` and the figures are on the page. Not
+        // passing them is the version that cannot be undone by a typo. A site
+        // that downgrades keeps its Pro rows in the tables, so this is a live
+        // concern rather than a theoretical one.
+        if (!$isPro) {
+            $variables = array_intersect_key($variables, ['title' => true]);
+        }
 
         return $this->renderTemplate('craft-analytics/pro/' . $screen . '.twig', array_merge(
             $this->commonVariables($site, $range),

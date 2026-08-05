@@ -29,10 +29,24 @@ class AnalyticsQuery extends Query
     public const SCOPE = 'craftAnalytics.read';
 
     /**
+     * The API is a Pro feature, so Lite registers no queries at all.
+     *
+     * Checked here as well as at the point of registration, because returning
+     * an empty list is what makes the schema itself honest: a query that is
+     * never declared cannot be called, cannot be introspected, and cannot be
+     * left reachable by some future caller that forgets the edition.
+     *
+     * `$isPro` is injectable for the same reason it is on the rollup writers -
+     * `Plugin::getInstance()` is null in the test harness.
+     *
      * @return array<string,array<string,mixed>>
      */
-    public static function getQueries(bool $checkToken = true): array
+    public static function getQueries(bool $checkToken = true, ?bool $isPro = null): array
     {
+        if (!($isPro ?? Plugin::getInstance()->is(Plugin::EDITION_PRO))) {
+            return [];
+        }
+
         if ($checkToken && !Gql::canQueryAnalytics()) {
             return [];
         }

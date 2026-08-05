@@ -644,6 +644,14 @@ class Plugin extends BasePlugin
      */
     private function attachGql(): void
     {
+        // The GraphQL API is a Pro feature. Lite registers neither the schema
+        // component nor the queries, so the permission never appears in the
+        // schema editor either - offering a checkbox that grants access to
+        // something the licence does not include is worse than hiding it.
+        if (!$this->is(self::EDITION_PRO)) {
+            return;
+        }
+
         Event::on(
             GqlService::class,
             GqlService::EVENT_REGISTER_GQL_SCHEMA_COMPONENTS,
