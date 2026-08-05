@@ -10,8 +10,8 @@ anywhere.
 
 It did not start life as a product. We built it for our own client sites and it
 has been quietly running them for a while, so it comes to the public already
-tested in the wild rather than fresh off the workbench. Having leaned on
-it day to day, we decided it was worth releasing to everyone.
+tested in the wild rather than fresh off the workbench. Having leaned on it day
+to day, we decided it was worth releasing to everyone.
 
 ## What it does differently
 
@@ -75,7 +75,7 @@ enter on a cached page are reported as Direct. Pageview counts are unaffected,
 and so are UTM campaigns, which travel in the URL - so behind an aggressive
 cache, tag the inbound links you care about.
 [Static & edge caching](https://coysh.digital/plugins/craft-analytics/docs/configuration/caching)
-has the details.
+has more details.
 
 ## Documentation
 
@@ -94,7 +94,8 @@ The full documentation lives at
 
 ## Lite vs Pro
 
-Lite is a usable analytics tool on its own, not a trial of Pro.
+Lite is a usable analytics tool on its own, not a trial of Pro. Pro only gives
+you access to better integrations and goals/funnels.
 
 | | Lite | Pro |
 |---|---|---|
@@ -123,7 +124,7 @@ We used AI tooling while building this: to talk through approaches, to take some
 of the grind out of the groundwork, and to help draft this documentation. What
 it is not is code written by a machine and shipped unread. Every line was
 reviewed, tested and put in place by a developer who understood it and stands
-behind it. The design decisions, the trade-offs and the final code are mine.
+behind it. The design decisions, the trade-offs and the final code are ours.
 
 ## Licence
 
