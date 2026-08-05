@@ -1,6 +1,6 @@
 # Craft Analytics
 
-My aim was to build an analytics plugin that is lightweight, privacy-focused,
+Our aim was to build an analytics plugin that is lightweight, privacy-focused,
 and feature-rich, with GDPR compliance at the heart of its design. Craft
 Analytics is first-party and cookieless by default, with no added
 time-to-first-byte and storage that does not grow with your traffic.
@@ -8,10 +8,10 @@ time-to-first-byte and storage that does not grow with your traffic.
 Everything runs on your own server: no account, no CDN script, and no data sent
 anywhere.
 
-It did not start life as a product. I built it for our own client sites and it
-has been quietly running them for a while, so it reaches the Plugin Store
-already tested in the wild rather than fresh off the workbench. Having leaned on
-it day to day, I decided it was worth releasing to everyone.
+It did not start life as a product. We built it for our own client sites and it
+has been quietly running them for a while, so it comes to the public already
+tested in the wild rather than fresh off the workbench. Having leaned on
+it day to day, we decided it was worth releasing to everyone.
 
 ## What it does differently
 
@@ -119,7 +119,7 @@ no migration to run and your existing data carries over.
 
 ## A note on AI
 
-I used AI tooling while building this: to talk through approaches, to take some
+We used AI tooling while building this: to talk through approaches, to take some
 of the grind out of the groundwork, and to help draft this documentation. What
 it is not is code written by a machine and shipped unread. Every line was
 reviewed, tested and put in place by a developer who understood it and stands
