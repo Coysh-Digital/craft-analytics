@@ -2,12 +2,6 @@
 
 ## Unreleased
 
-> **The GraphQL API is now Lite-excluded, as it was always documented to be.**
-> If you are on Lite and querying `craftAnalyticsTotals` or
-> `craftAnalyticsTopPages` today, those queries stop resolving when you
-> upgrade. Nothing else about your install changes, and no data is touched.
-> Pro is unaffected.
-
 ### Fixed
 
 - **Pro features are enforced by the licence, not only described by it.** The
