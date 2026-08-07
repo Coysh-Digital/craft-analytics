@@ -4,7 +4,10 @@ namespace coyshdigital\craftanalytics\controllers;
 
 use coyshdigital\craftanalytics\charts\Heatmap;
 use coyshdigital\craftanalytics\helpers\ElementLinks;
+use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\Plugin;
+use coyshdigital\craftanalytics\write\SpoolStatus;
+use Craft;
 use yii\web\Response;
 
 /**
@@ -40,6 +43,13 @@ class DashboardController extends BaseCpController
                 'selectedSubnavItem' => 'dashboard',
                 'isPro' => $isPro,
                 'totals' => $totals,
+                // Only worth computing when there's nothing to show: distinguishes
+                // "no traffic yet" from "traffic arrived but is stuck in the spool" -
+                // the Real-time screen reads a different, always-current source and
+                // doesn't need this.
+                'emptyStateHint' => $totals['views'] === 0
+                    ? self::emptyStateHint($plugin->getSettings())
+                    : null,
                 'deltas' => [
                     'views' => self::delta($totals['views'], $previous['views']),
                     'uniques' => self::delta($totals['uniques'], $previous['uniques']),
@@ -85,5 +95,38 @@ class DashboardController extends BaseCpController
                 'exportParams' => ['site' => $site->handle, 'range' => $range->param],
             ],
         ));
+    }
+
+    /**
+     * "No data" reads very differently depending on why. A spooled install
+     * with hits sitting unread is not the same problem as a site nobody has
+     * visited yet, and telling them apart here is the only place that
+     * information is cheap to get - one `filesize()`, not a query.
+     *
+     * @return array{title: string, message: string}
+     */
+    private static function emptyStateHint(Settings $settings): array
+    {
+        if ($settings->writeDriver === Settings::WRITE_DRIVER_SPOOL && (new SpoolStatus())->hasBacklog()) {
+            return [
+                'title' => Craft::t('craft-analytics', 'Data is waiting to be counted'),
+                'message' => Craft::t(
+                    'craft-analytics',
+                    'Pageviews have arrived but haven’t been drained into the reports yet. Run '
+                    . 'php craft craft-analytics/drain/run, make sure it’s already on your cron, or turn on '
+                    . 'the automatic fallback under Settings → How data is written.',
+                ),
+            ];
+        }
+
+        return [
+            'title' => Craft::t('craft-analytics', 'No data for this period'),
+            'message' => $settings->writeDriver === Settings::WRITE_DRIVER_QUEUE
+                ? Craft::t(
+                    'craft-analytics',
+                    'Once the site has traffic and the queue worker has processed it, it appears here.',
+                )
+                : Craft::t('craft-analytics', 'Once the site has traffic, it appears here.'),
+        ];
     }
 }

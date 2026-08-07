@@ -153,6 +153,17 @@
     {% endif %}
 </div>
 
+{% if settings.writeDriver == 'spool' %}
+    {{ forms.lightswitchField({
+        label: 'Drain automatically when there’s no cron'|t('craft-analytics'),
+        instructions: 'A slower backup for hosts where cron isn’t an option. At most once a minute, an ordinary page request runs the drain instead - after the visitor already has their page, so it never costs them anything. Skipped once the spool grows past 2 MB, so a real backlog still needs cron rather than being drained inside one request. Leave this on even if you do have cron; it only ever does anything in the gap between one run and the next.'|t('craft-analytics'),
+        id: 'autoDrain',
+        name: 'autoDrain',
+        on: settings.autoDrain,
+        errors: settings.getErrors('autoDrain'),
+    }) }}
+{% endif %}
+
 {{ forms.textField({
     label: 'Session window'|t('craft-analytics'),
     instructions: 'How long someone can be inactive before their next pageview counts as a new visit. 1800 seconds (30 minutes) is the industry norm, and matching it makes your numbers comparable to everyone else’s.'|t('craft-analytics'),

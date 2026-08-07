@@ -6,10 +6,7 @@
 
     {% if totals.views == 0 %}
         <div class="ca-card">
-            {{ ca.empty(
-                'No data for this period'|t('craft-analytics'),
-                'Once the site has traffic and the drain has run, it appears here.'|t('craft-analytics')
-            ) }}
+            {{ ca.empty(emptyStateHint.title, emptyStateHint.message) }}
         </div>
     {% else %}
         <div class="ca-kpis">
