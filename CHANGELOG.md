@@ -1,6 +1,26 @@
 # Release Notes for Craft Analytics
 
-## Unreleased
+## 2.1.0 - 2026-08-07
+
+### Added
+
+- **A cron-free fallback for the drain.** The spool driver has always needed
+  `craft-analytics/drain/run` on a schedule, or the reports stay empty - fine
+  on most hosts, not an option on some shared ones. With the new "Drain
+  automatically when there's no cron" setting (on by default), an ordinary
+  page request runs the drain instead, at most once a minute and only after
+  the visitor already has their page, so it costs them nothing. A backlog
+  past 2 MB is left for cron rather than drained inside one request. A real
+  cron entry still wins every race and this setting is safe to leave on even
+  if you have one.
+- **The empty-state on the dashboard now knows the difference between "no
+  traffic yet" and "traffic arrived but hasn't been drained".** Previously
+  both looked identical - zero on every number, one generic explanation.
+  With the spool driver, a spool that still has bytes in it now gets its own
+  message pointing at the drain command, cron, and the new fallback setting,
+  instead of leaving you to guess. The Real-time screen is unaffected: it
+  reads a different, always-current source and a genuine zero there is
+  normal.
 
 ### Fixed
 

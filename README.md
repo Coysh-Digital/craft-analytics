@@ -52,6 +52,11 @@ Then put the drain on your cron, or the reports stay empty:
 0 4 * * *   php craft craft-analytics/gc/run
 ```
 
+No cron on your host? The plugin can drain itself from ordinary traffic
+instead - see "Drain automatically when there's no cron" in the plugin
+settings. It's slower and on by default, so most installs never need to think
+about this at all.
+
 Full instructions: [Installation & setup](https://coysh.digital/plugins/craft-analytics/docs/get-started/installation)
 
 ## Before you compare the numbers

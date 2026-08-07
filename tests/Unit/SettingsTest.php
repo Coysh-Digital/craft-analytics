@@ -9,7 +9,8 @@ test('default settings validate', function() {
         ->and($settings->trackingMode)->toBe(Settings::TRACKING_MODE_HYBRID)
         ->and($settings->writeDriver)->toBe(Settings::WRITE_DRIVER_SPOOL)
         ->and($settings->honourGpc)->toBeTrue()
-        ->and($settings->honourDnt)->toBeFalse();
+        ->and($settings->honourDnt)->toBeFalse()
+        ->and($settings->autoDrain)->toBeTrue();
 });
 
 test('unknown tracking mode is rejected', function() {

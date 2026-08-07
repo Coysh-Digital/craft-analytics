@@ -40,6 +40,7 @@ use coyshdigital\craftanalytics\uniques\UniqueCounterInterface;
 use coyshdigital\craftanalytics\variables\CraftAnalyticsVariable;
 use coyshdigital\craftanalytics\widgets\LiveWidget;
 use coyshdigital\craftanalytics\widgets\OverviewWidget;
+use coyshdigital\craftanalytics\write\AutoDrain;
 use coyshdigital\craftanalytics\write\DirectWriter;
 use coyshdigital\craftanalytics\write\QueueWriter;
 use coyshdigital\craftanalytics\write\SpoolWriter;
@@ -480,6 +481,35 @@ class Plugin extends BasePlugin
     }
 
     /**
+     * The cron-free fallback: after the connection to the visitor is closed,
+     * a throttled, size-capped drain pass gives spooled installs somewhere to
+     * go when the host offers no cron. See {@see AutoDrain} for the guards.
+     */
+    private function attachAutoDrain(): void
+    {
+        if (Craft::$app instanceof WebApplication === false) {
+            return;
+        }
+
+        Event::on(
+            Response::class,
+            Response::EVENT_AFTER_SEND,
+            function() {
+                self::closeConnection();
+
+                try {
+                    (new AutoDrain())->run($this->getSettings());
+                } catch (\Throwable $e) {
+                    // The page is already delivered; a failure here must stay
+                    // invisible to the visitor whose request happened to pay
+                    // for it. The next request, or cron, tries again.
+                    Craft::warning('craft-analytics auto-drain failed: ' . $e->getMessage(), __METHOD__);
+                }
+            },
+        );
+    }
+
+    /**
      * Hands the connection back to the visitor before we do any work.
      *
      * Under PHP-FPM this is exact. Under other SAPIs there is no equivalent,
@@ -677,6 +707,7 @@ class Plugin extends BasePlugin
     {
         $this->attachCapture();
         $this->attachBeacon();
+        $this->attachAutoDrain();
 
         // Noticed, not required: both check for their plugin and do nothing
         // if it isn't there.

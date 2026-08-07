@@ -136,6 +136,14 @@ class Settings extends Model
     /** Back-pressure guard: spool size in bytes beyond which oldest data is dropped. */
     public int $spoolMaxBytes = 52428800;
 
+    /**
+     * Runs the drain from an ordinary web request when cron isn't an option,
+     * throttled to roughly once a minute and skipped once the spool has grown
+     * past a modest size. Only applies to the spool driver; queue and direct
+     * need no draining.
+     */
+    public bool $autoDrain = true;
+
     /** Honour the Global Privacy Control header (`Sec-GPC: 1`). */
     public bool $honourGpc = true;
 
@@ -376,7 +384,7 @@ class Settings extends Model
             [['beaconRateLimit'], 'integer', 'min' => 1],
             [['beaconPath', 'consentPath'], 'string'],
             [['beaconPath', 'consentPath'], 'match', 'pattern' => '/^[A-Za-z0-9\-_\/\.]+$/'],
-            [['honourGpc', 'honourDnt', 'injectScript', 'stripQueryString'], 'boolean'],
+            [['honourGpc', 'honourDnt', 'injectScript', 'stripQueryString', 'autoDrain'], 'boolean'],
             [['excludePaths', 'excludeQueryParams'], 'each', 'rule' => ['string']],
 
             // Consent (Pro)
