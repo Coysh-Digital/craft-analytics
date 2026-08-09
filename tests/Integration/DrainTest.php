@@ -2,18 +2,27 @@
 
 use coyshdigital\craftanalytics\db\SchemaBuilder;
 use coyshdigital\craftanalytics\db\Table;
+use coyshdigital\craftanalytics\ingest\CaptureService;
 use coyshdigital\craftanalytics\ingest\Hit;
 use coyshdigital\craftanalytics\migrations\Install;
 use coyshdigital\craftanalytics\models\Settings;
+use coyshdigital\craftanalytics\rollup\DbRollupSink;
+use coyshdigital\craftanalytics\rollup\DimensionCapper;
 use coyshdigital\craftanalytics\rollup\GoalMatcher;
 use coyshdigital\craftanalytics\rollup\JourneyRecorder;
 use coyshdigital\craftanalytics\rollup\NullRollupSink;
+use coyshdigital\craftanalytics\rollup\ProRollupWriter;
 use coyshdigital\craftanalytics\rollup\RollupSinkInterface;
+use coyshdigital\craftanalytics\services\ChannelClassifier;
+use coyshdigital\craftanalytics\services\DeviceParser;
+use coyshdigital\craftanalytics\services\DimensionsService;
 use coyshdigital\craftanalytics\session\SessionStore;
 use coyshdigital\craftanalytics\tests\TestDb;
+use coyshdigital\craftanalytics\uniques\HllUniqueCounter;
 use coyshdigital\craftanalytics\write\Drainer;
 use coyshdigital\craftanalytics\write\SpoolWriter;
 use yii\caching\ArrayCache;
+use yii\db\Query;
 
 beforeEach(function() {
     if (!TestDb::available()) {
@@ -480,4 +489,89 @@ test('a session closed by a committed batch is never counted twice', function() 
     expect($result->closedSessions)->toBe(0)
         ->and($this->sink->flushedSessions)->toBe(0)
         ->and($sessions->activeSessions(1, $now))->toBeEmpty();
+});
+
+/**
+ * A crawler record carries a reserved sentinel where a visitor hash would go,
+ * because a crawler is not a person and gets nothing to pseudonymise. The
+ * drain's hash check used to demand hex of it, so every crawler hit was
+ * counted as a malformed line and dropped - and the Crawlers report stayed
+ * empty on the default spool driver while `direct` and `queue`, which never
+ * reach this check, filled it.
+ */
+function makeCrawlerHit(string $name = 'Googlebot', string $path = '/pricing'): Hit
+{
+    return new Hit(
+        siteId: 1,
+        path: $path,
+        visitorHash: CaptureService::CRAWLER_HASH,
+        sessionKey: CaptureService::CRAWLER_HASH,
+        timestamp: time(),
+        referrer: '',
+        userAgent: 'Googlebot/2.1',
+        acceptLanguage: '',
+        countView: false,
+        kind: Hit::KIND_CRAWLER,
+        eventName: $name,
+    );
+}
+
+test('a crawler hit survives the drain instead of counting as malformed', function() {
+    makeSpool($this->spoolDir, [
+        makeCrawlerHit(),
+        makeHit('/pricing', 'aaaaaaaaaaaaaaaa'),
+    ]);
+
+    $result = makeDrainer($this)->run();
+
+    expect($result->malformedLines)->toBe(0)
+        ->and($result->hits)->toBe(2)
+        // The crawler never touches a page, session or unique figure: only
+        // the human hit is a view.
+        ->and($this->sink->flushedViews)->toBe(1);
+});
+
+test('a drained crawler hit reaches the crawlers rollup', function() {
+    $db = TestDb::connection();
+    $dimensions = new DimensionsService(['db' => $db]);
+
+    $capper = new DimensionCapper([
+        'db' => $db,
+        'settings' => $this->settings,
+        'dimensions' => $dimensions,
+    ]);
+
+    $sink = new DbRollupSink([
+        'db' => $db,
+        'settings' => $this->settings,
+        'counter' => new HllUniqueCounter(['settings' => $this->settings]),
+        'capper' => $capper,
+        'channels' => new ChannelClassifier(),
+        'devices' => new DeviceParser(),
+        // Crawler counts are not a Pro feature, but the interaction block
+        // calls the Pro writer unconditionally - and without one injected it
+        // reaches for a plugin instance this bootstrap has no room for,
+        // taking the whole commit down with it.
+        'pro' => new ProRollupWriter([
+            'db' => $db,
+            'settings' => $this->settings,
+            'capper' => $capper,
+            'isPro' => false,
+        ]),
+    ]);
+
+    makeSpool($this->spoolDir, [makeCrawlerHit('Googlebot'), makeCrawlerHit('Googlebot')]);
+
+    makeDrainer($this, $sink)->run();
+
+    $row = (new Query())
+        ->select(['c.requests', 'name' => 'd.value'])
+        ->from(['c' => Table::CRAWLERS_ROLLUP])
+        ->innerJoin(['d' => Table::DIMENSIONS], '[[d]].[[id]] = [[c]].[[crawlerDimId]]')
+        ->one($db);
+
+    // Two requests from one crawler on one day: one row, not one per request.
+    expect($row)->not->toBeFalse()
+        ->and($row['name'])->toBe('Googlebot')
+        ->and((int)$row['requests'])->toBe(2);
 });
