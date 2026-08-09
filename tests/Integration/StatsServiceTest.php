@@ -201,3 +201,116 @@ test('a single day past the hourly window is plotted by day, not as 24 zeroes', 
         ->and($trend['labels'])->toBe([$old])
         ->and($trend['views'])->toBe([42]);
 });
+
+/**
+ * Counts the statements a callable issues.
+ *
+ * The connection has logging and profiling off, so this turns logging on for
+ * the duration and counts the one info message Yii writes per query. Only
+ * logging, not profiling: profiling emits a begin and an end message under the
+ * same category, which would count every statement more than once.
+ */
+function countQueries(callable $fn): int
+{
+    $db = TestDb::connection();
+    $logger = Yii::getLogger();
+
+    $wasLogging = $db->enableLogging;
+    $db->enableLogging = true;
+    $start = count($logger->messages);
+
+    try {
+        $fn();
+    } finally {
+        $db->enableLogging = $wasLogging;
+    }
+
+    $queries = 0;
+
+    // Category only. Craft logs the SQL through Yii::debug, so the level is
+    // TRACE rather than INFO, and with profiling left off there is exactly
+    // one message per statement.
+    foreach (array_slice($logger->messages, $start) as $message) {
+        if (($message[2] ?? '') === 'yii\db\Command::query') {
+            $queries++;
+        }
+    }
+
+    return $queries;
+}
+
+test('the query counter counts queries', function() {
+    // This file's performance assertions are only worth anything if the
+    // counter is not always returning zero, which is exactly what it did
+    // while the connection had logging switched off.
+    $queries = countQueries(function() {
+        TestDb::connection()->createCommand('SELECT 1')->queryScalar();
+        TestDb::connection()->createCommand('SELECT 1')->queryScalar();
+    });
+
+    expect($queries)->toBe(2);
+});
+
+test('a trend over a long range does not query once per day', function() {
+    // Three months of daily rows.
+    $cursor = new DateTimeImmutable('2026-01-01');
+    for ($i = 0; $i < 90; $i++) {
+        writePage($cursor->format('Y-m-d'), 10, [$i]);
+        $cursor = $cursor->modify('+1 day');
+    }
+
+    $range = DateRange::custom('2026-01-01', '2026-03-31', STATS_NOW);
+
+    $queries = countQueries(fn() => $this->stats->trend(1, $range));
+
+    // Was one query per day in the range plus one for the views, so ninety-one
+    // here and three hundred and sixty-six for a twelve-month chart, on every
+    // dashboard load. The number of statements must not scale with the range.
+    expect($queries)->toBeLessThan(5);
+});
+
+test('a long trend still reports each day separately', function() {
+    writePage('2026-01-01', 10, [1, 2, 3]);
+    writePage('2026-01-02', 20, [4, 5]);
+
+    $range = DateRange::custom('2026-01-01', '2026-01-03', STATS_NOW);
+    $trend = $this->stats->trend(1, $range);
+
+    expect($trend['labels'])->toBe(['2026-01-01', '2026-01-02', '2026-01-03'])
+        ->and($trend['views'])->toBe([10, 20, 0])
+        // Each day merged on its own, and a day with nothing in it is zero
+        // rather than missing.
+        ->and($trend['uniques'][0])->toBeGreaterThan(0)
+        ->and($trend['uniques'][2])->toBe(0);
+});
+
+test('a range that has finished happening is answered from cache the second time', function() {
+    writePage('2026-01-01', 10, [1, 2, 3]);
+
+    $this->stats->cache = new yii\caching\ArrayCache();
+    $range = DateRange::custom('2026-01-01', '2026-01-31', STATS_NOW);
+
+    $first = $this->stats->totals(1, $range);
+    $queries = countQueries(fn() => $this->stats->totals(1, $range));
+
+    expect($queries)->toBe(0)
+        ->and($this->stats->totals(1, $range))->toBe($first);
+});
+
+test('a range including today is never cached', function() {
+    // The real current date, not a frozen one: whether a range is still being
+    // written to is judged against the actual clock, which is the only thing
+    // a running site can ask.
+    $today = (new DateTimeImmutable('now', new DateTimeZone(Craft::$app->getTimeZone())))->format('Y-m-d');
+    writePage($today, 10, [1]);
+
+    $this->stats->cache = new yii\caching\ArrayCache();
+    $range = DateRange::custom($today, $today);
+
+    $this->stats->totals(1, $range);
+    $queries = countQueries(fn() => $this->stats->totals(1, $range));
+
+    // Today is still being written to while it is being read, and Real-time
+    // and the current day are what somebody watches as they happen.
+    expect($queries)->toBeGreaterThan(0);
+});

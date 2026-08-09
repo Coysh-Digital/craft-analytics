@@ -29,6 +29,9 @@ class ExactUniqueCounter extends Component implements UniqueCounterInterface
     public ?Connection $db = null;
     public ?Settings $settings = null;
 
+    /** Scope keys per statement, before the union has to be assembled here. */
+    private const MAX_KEYS_PER_QUERY = 1000;
+
     public function name(): string
     {
         return Settings::UNIQUES_DRIVER_EXACT;
@@ -78,10 +81,35 @@ class ExactUniqueCounter extends Component implements UniqueCounterInterface
 
         // COUNT(DISTINCT) across the scopes is a real union: a visitor who
         // appears in several of them still counts once.
-        return (int)(new Query())
-            ->from(Table::UNIQUE_MEMBERS)
-            ->where(['scopeKey' => $keys])
-            ->count('DISTINCT [[visitorHash]]', $this->db());
+        if (count($keys) <= self::MAX_KEYS_PER_QUERY) {
+            return (int)(new Query())
+                ->from(Table::UNIQUE_MEMBERS)
+                ->where(['scopeKey' => $keys])
+                ->count('DISTINCT [[visitorHash]]', $this->db());
+        }
+
+        // Past that, one parameter per scope stops being a query the database
+        // will accept: a wide range on a busy site produces tens of thousands
+        // of scopes, and the statement was simply refused. Chunking has to
+        // collect the hashes rather than add up per-chunk counts, because
+        // adding those would count anybody who appeared in two chunks twice -
+        // the exact error this driver exists to avoid.
+        $seen = [];
+
+        foreach (array_chunk($keys, self::MAX_KEYS_PER_QUERY) as $chunk) {
+            $hashes = (new Query())
+                ->select('visitorHash')
+                ->distinct()
+                ->from(Table::UNIQUE_MEMBERS)
+                ->where(['scopeKey' => $chunk])
+                ->column($this->db());
+
+            foreach ($hashes as $hash) {
+                $seen[$hash] = true;
+            }
+        }
+
+        return count($seen);
     }
 
     /**
