@@ -3,8 +3,8 @@
 namespace coyshdigital\craftanalytics\widgets;
 
 use coyshdigital\craftanalytics\assets\CpAsset;
-use coyshdigital\craftanalytics\models\DateRange;
 use coyshdigital\craftanalytics\helpers\SiteAccess;
+use coyshdigital\craftanalytics\models\DateRange;
 use coyshdigital\craftanalytics\Plugin;
 use Craft;
 use craft\base\Widget;

@@ -4,8 +4,8 @@ namespace coyshdigital\craftanalytics\controllers;
 
 use coyshdigital\craftanalytics\assets\ChartsAsset;
 use coyshdigital\craftanalytics\assets\CpAsset;
-use coyshdigital\craftanalytics\models\DateRange;
 use coyshdigital\craftanalytics\helpers\SiteAccess;
+use coyshdigital\craftanalytics\models\DateRange;
 use coyshdigital\craftanalytics\Plugin;
 use coyshdigital\craftanalytics\services\StatsService;
 use Craft;
