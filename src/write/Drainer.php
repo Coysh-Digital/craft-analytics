@@ -19,6 +19,7 @@ use Craft;
 use yii\base\Component;
 use yii\db\Connection;
 use yii\db\Query;
+use yii\mutex\Mutex;
 
 /**
  * Turns spooled hits into rollups.
@@ -76,12 +77,66 @@ class Drainer extends Component
     /** Settings override; defaults to the plugin's. Set in tests. */
     public ?Settings $settings = null;
 
+    /** Mutex override; set false to run without one (tests). */
+    public Mutex|false|null $mutex = null;
+
+    /**
+     * Hits applied and committed per slice.
+     *
+     * Small enough that a slice is a few megabytes of objects at worst, large
+     * enough that the per-commit overhead stays negligible against the
+     * aggregation it enables. Settable so a test can cross a slice boundary
+     * without writing a spool big enough to need one.
+     */
+    public int $chunkHits = 20000;
+
+    /**
+     * Separates a slice's number from its file's batch id.
+     *
+     * Part of the drain-log identity, so it has to be as stable as the file
+     * name it extends: the same file always slices the same way, and a replay
+     * recognises the slices it already committed.
+     */
+    private const CHUNK_SEPARATOR = '#';
+
+    private const MUTEX_NAME = 'craftAnalytics.drain';
+
     /**
      * Drains everything currently spooled.
      */
     public function run(?int $now = null): DrainResult
     {
         $now ??= time();
+        $mutex = $this->mutex();
+
+        // One drain at a time. Claim-by-rename already stops two runs reading
+        // the same file, but it says nothing about two runs closing the same
+        // session: stageIdleSessions() only skips a session whose owning batch
+        // has already committed, so a second run starting while the first is
+        // mid-flight re-stages what it has staged and both commit it - the
+        // session, its bounce, its entry and exit, and its device and source
+        // rows all counted twice.
+        //
+        // That is not a remote possibility. The automatic drain throttles
+        // itself with a 60-second cache entry, so a pass that takes longer
+        // than a minute, or a cron entry overlapping one, is enough.
+        //
+        // Declining is the right answer for the loser: the spool is still
+        // there and the next pass takes it. No mutex available means carry on,
+        // because not draining at all is worse than draining twice.
+        if ($mutex !== null && !$mutex->acquire(self::MUTEX_NAME)) {
+            return new DrainResult();
+        }
+
+        try {
+            return $this->drain($now);
+        } finally {
+            $mutex?->release(self::MUTEX_NAME);
+        }
+    }
+
+    private function drain(int $now): DrainResult
+    {
         $result = new DrainResult();
 
         foreach ($this->claim() as $file) {
@@ -147,16 +202,70 @@ class Drainer extends Component
             return;
         }
 
-        [$hits, $malformed] = $this->readHits($file);
-        $result->malformedLines += $malformed;
+        $handle = @fopen($file, 'rb');
 
-        if ($hits === []) {
-            $this->commit($batchId, [], []);
+        if ($handle === false) {
             $this->discard($file);
 
             return;
         }
 
+        // Read and committed in bounded slices rather than all at once. A
+        // whole spool is up to `spoolMaxBytes` - 50 MB, around 175,000 hits -
+        // and materialising that as Hit objects goes through a 128 MB CLI
+        // limit, which is a fatal rather than an exception. The batch would
+        // then be retried, fail the same way twice more, and be quarantined:
+        // an outage long enough to build a backlog was also the thing that
+        // guaranteed the backlog would never be counted.
+        //
+        // Each slice commits under its own derived id, so the drain log still
+        // knows exactly what has landed, and a run interrupted half way keeps
+        // the slices it finished instead of starting the file again.
+        $chunkIndex = 0;
+        $hits = 0;
+        $buckets = 0;
+
+        try {
+            while (true) {
+                [$chunk, $malformed] = $this->readChunk($handle);
+                $result->malformedLines += $malformed;
+
+                if ($chunk === []) {
+                    break;
+                }
+
+                $chunkId = $batchId . self::CHUNK_SEPARATOR . $chunkIndex++;
+
+                if ($this->isCommitted($chunkId)) {
+                    continue;
+                }
+
+                $buckets += $this->applyChunk($chunkId, $chunk);
+                $hits += count($chunk);
+            }
+        } finally {
+            fclose($handle);
+        }
+
+        // The whole-file marker goes in last. A replay that finds it skips the
+        // file outright, without re-reading a slice at a time to discover that
+        // every one of them is already committed.
+        $this->commit($batchId, [], []);
+        $this->discard($file);
+
+        $result->batches++;
+        $result->hits += $hits;
+        $result->buckets += $buckets;
+    }
+
+    /**
+     * Aggregates one slice of a spool file and commits it.
+     *
+     * @param Hit[] $hits
+     * @return int buckets written
+     */
+    private function applyChunk(string $chunkId, array $hits): int
+    {
         $acquisition = $this->acquisitionReferrers($hits);
 
         $aggregator = new Aggregator(null, $this->settings());
@@ -172,25 +281,12 @@ class Drainer extends Component
         $this->goalMatcher()->matchBatch($hits, $deltas);
 
         foreach ($deltas as $delta) {
-            $this->sessions()->apply($delta, $batchId);
+            $this->sessions()->apply($delta, $chunkId);
         }
 
-        $closed = $this->stageIdleSessions($now, $batchId);
+        $this->commit($chunkId, $aggregator->buckets(), [], $hits, $aggregator->interactions);
 
-        $this->commit($batchId, $aggregator->buckets(), $closed, $hits, $aggregator->interactions);
-
-        // Past the commit the batch is counted; dropping the closed records
-        // and the file is cleanup, and is safe to redo.
-        foreach ($closed as $session) {
-            $this->sessions()->delete($session);
-        }
-
-        $this->discard($file);
-
-        $result->batches++;
-        $result->hits += count($hits);
-        $result->buckets += $aggregator->bucketCount();
-        $result->closedSessions += count($closed);
+        return $aggregator->bucketCount();
     }
 
     /**
@@ -454,20 +550,22 @@ class Drainer extends Component
     }
 
     /**
+     * Reads up to CHUNK_HITS usable hits from an open spool file.
+     *
+     * Malformed lines are counted where they are read rather than carried, so
+     * a slice that is entirely junk still advances the file and the caller
+     * still sees the count.
+     *
+     * @param resource $handle
      * @return array{0: Hit[], 1: int} hits, and the count of lines that
      *                                 weren't parseable
      */
-    private function readHits(string $file): array
+    private function readChunk($handle): array
     {
         $hits = [];
         $malformed = 0;
-        $handle = @fopen($file, 'rb');
 
-        if ($handle === false) {
-            return [[], 0];
-        }
-
-        while (($line = fgets($handle)) !== false) {
+        while (count($hits) < $this->chunkHits && ($line = fgets($handle)) !== false) {
             $line = trim($line);
 
             if ($line === '') {
@@ -486,8 +584,6 @@ class Drainer extends Component
 
             $hits[] = $hit;
         }
-
-        fclose($handle);
 
         return [$hits, $malformed];
     }
@@ -509,6 +605,24 @@ class Drainer extends Component
         }
 
         return IdentityService::isValidHash($hit->visitorHash);
+    }
+
+    private function mutex(): ?Mutex
+    {
+        if ($this->mutex === false) {
+            return null;
+        }
+
+        if ($this->mutex !== null) {
+            return $this->mutex;
+        }
+
+        // Null only where there is no application to ask - the test harness.
+        try {
+            return $this->mutex = Craft::$app->getMutex();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     private function sink(): RollupSinkInterface

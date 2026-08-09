@@ -75,9 +75,15 @@ class CaptureService extends Component
         // when a cache is served by nginx and PHP never runs at all. Doing the
         // same in both cases means the numbers don't depend on how the cache
         // happens to be wired up.
-        $nonce = Plugin::getInstance()->getScriptInjector()->getPendingNonce();
+        $injector = Plugin::getInstance()->getScriptInjector();
+        $nonce = $injector->getPendingNonce();
 
-        if ($nonce === null && $this->isCachedDelivery()) {
+        // A missing nonce only means a cache hit if a template did not run.
+        // When one did, the tag simply could not be placed - Craft fires the
+        // hook it is written from only where its compiler found a literal
+        // `</body>` - and standing aside here left the view to a beacon that
+        // was never shipped with the page, so nobody counted it.
+        if ($nonce === null && !$injector->renderedPageTemplate() && $this->isCachedDelivery()) {
             return null;
         }
 
@@ -90,15 +96,24 @@ class CaptureService extends Component
             return null;
         }
 
-        Plugin::getInstance()->getWriter()->write($event->hit);
-
-        // The nonce is only worth recording now that the pageview has
-        // actually been counted: if it hadn't been, the beacon *should* count
-        // it. Deliberately after the flush — this is a cache write, and the
-        // visitor is not waiting for it (C1).
+        // Recorded before the write, not after. The tracker is deferred, so
+        // its beacon can arrive while this method is still running - and in
+        // that window there was nothing for it to claim, so it counted a
+        // second view of the same page. The window is widest exactly when the
+        // site is busiest, which is when the numbers matter most.
+        //
+        // The order trades a rare undercount for a common overcount: if the
+        // write below fails, the beacon claims a nonce for a view that was
+        // never recorded. Writes swallow their own failures anyway, so that
+        // case is already invisible, and one lost view beats one invented one.
+        //
+        // Still after the flush - this is a cache write and the visitor is not
+        // waiting for it (C1).
         if ($nonce !== null) {
             Plugin::getInstance()->getNonces()->record($nonce, $event->hit->visitorHash);
         }
+
+        Plugin::getInstance()->getWriter()->write($event->hit);
 
         return $event->hit;
     }

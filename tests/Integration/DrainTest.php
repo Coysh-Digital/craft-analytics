@@ -367,14 +367,23 @@ test('a poisoned session in the hot layer does not wedge the drain', function() 
         ->and(glob($this->spoolDir . '/*.processing'))->toBeEmpty();
 
     // The batch committed, and the poison is gone rather than waiting to be
-    // re-staged by the next run.
-    $committed = TestDb::connection()->createCommand('SELECT COUNT(*) FROM ' . Table::DRAIN_LOG)->queryScalar();
-    expect((int)$committed)->toBe(1);
+    // re-staged by the next run. Counted rather than compared to a fixed
+    // number: a file commits one marker per slice plus one for itself, so the
+    // total says more about how the file was sliced than about whether the
+    // work landed. What matters is that a second run adds nothing to it.
+    $committed = fn(): int => (int)TestDb::connection()
+        ->createCommand('SELECT COUNT(*) FROM ' . Table::DRAIN_LOG)
+        ->queryScalar();
+
+    $afterFirst = $committed();
+    expect($afterFirst)->toBeGreaterThan(0);
 
     $second = makeDrainer($this, sketchSink($this->settings))->run($now);
 
     expect($second->failedBatches)->toBe(0)
-        ->and($sessions->activeSessions(1, $now))->toBeEmpty();
+        ->and($second->hits)->toBe(0)
+        ->and($sessions->activeSessions(1, $now))->toBeEmpty()
+        ->and($committed())->toBe($afterFirst);
 });
 
 test('a corrupt sketch on a rollup row is rebuilt rather than replayed forever', function() {
@@ -574,4 +583,96 @@ test('a drained crawler hit reaches the crawlers rollup', function() {
     expect($row)->not->toBeFalse()
         ->and($row['name'])->toBe('Googlebot')
         ->and((int)$row['requests'])->toBe(2);
+});
+
+test('a spool larger than one slice is drained completely and exactly once', function() {
+    // More hits than CHUNK_HITS, so the file has to be read and committed in
+    // several passes. Before, the whole file was materialised as Hit objects
+    // in one go - 50 MB of spool is around 175,000 of them, which goes
+    // through a 128 MB CLI limit as a fatal, not an exception. The batch was
+    // then retried, died the same way twice more and was quarantined, so an
+    // outage long enough to build a backlog was also what guaranteed the
+    // backlog would never be counted.
+    $hits = [];
+    for ($i = 0; $i < 250; $i++) {
+        $hits[] = makeHit('/pricing', str_pad((string)$i, 16, '0', STR_PAD_LEFT));
+    }
+    makeSpool($this->spoolDir, $hits);
+
+    $drainer = makeDrainer($this);
+    $drainer->chunkHits = 100;
+    $result = $drainer->run();
+
+    expect($result->hits)->toBe(250)
+        ->and($this->sink->flushedViews)->toBe(250)
+        ->and(glob($this->spoolDir . '/*.processing'))->toBeEmpty();
+
+    // And a replay counts none of it a second time.
+    $second = makeDrainer($this);
+    $second->chunkHits = 100;
+
+    expect($second->run()->hits)->toBe(0)
+        ->and($this->sink->flushedViews)->toBe(250);
+});
+
+test('a slice already committed is not applied again when its file is replayed', function() {
+    $hits = [];
+    for ($i = 0; $i < 250; $i++) {
+        $hits[] = makeHit('/pricing', str_pad((string)$i, 16, '0', STR_PAD_LEFT));
+    }
+    makeSpool($this->spoolDir, $hits);
+
+    // Claim the file the way a run does, then mark its first slice committed
+    // and leave the file behind - the state a crash between two slices
+    // leaves.
+    $live = glob($this->spoolDir . '/*') ?: [];
+    $claimed = $this->spoolDir . '/spool-deadbeefdeadbeef.processing';
+    rename($live[0], $claimed);
+
+    TestDb::connection()->createCommand()->insert(Table::DRAIN_LOG, [
+        'batchId' => 'spool-deadbeefdeadbeef#0',
+        'driver' => 'spool',
+        'committedAt' => gmdate('Y-m-d H:i:s'),
+    ])->execute();
+
+    $drainer = makeDrainer($this);
+    $drainer->chunkHits = 100;
+    $result = $drainer->run();
+
+    // The first slice is skipped and the rest are applied: progress survives
+    // an interruption instead of the file starting over.
+    expect($result->hits)->toBe(150)
+        ->and($this->sink->flushedViews)->toBe(150);
+});
+
+test('a second drain running concurrently declines rather than double-counting', function() {
+    $lockDir = sys_get_temp_dir() . '/ca-locks-' . bin2hex(random_bytes(6));
+    $mutex = new yii\mutex\FileMutex(['mutexPath' => $lockDir]);
+    $mutex->init();
+
+    makeSpool($this->spoolDir, [makeHit('/pricing'), makeHit('/about')]);
+
+    // Somebody else is already draining: cron overlapping the automatic pass,
+    // or a pass that outlived its own 60-second throttle.
+    expect($mutex->acquire('craftAnalytics.drain'))->toBeTrue();
+
+    $drainer = makeDrainer($this);
+    $drainer->mutex = $mutex;
+    $result = $drainer->run();
+
+    // Declines and leaves the spool alone; the next pass takes it.
+    expect($result->hits)->toBe(0)
+        ->and($this->sink->flushedViews)->toBe(0);
+
+    $mutex->release('craftAnalytics.drain');
+
+    $after = makeDrainer($this);
+    $after->mutex = $mutex;
+
+    expect($after->run()->hits)->toBe(2);
+
+    foreach (glob($lockDir . '/*') ?: [] as $lock) {
+        @unlink($lock);
+    }
+    @rmdir($lockDir);
 });

@@ -65,3 +65,44 @@ function cachedDeliveryApplies(Settings $settings): bool
 
     return $method->invoke($capture);
 }
+
+/**
+ * The nonce alone was never quite enough to say "this came from a cache".
+ *
+ * It is issued while a page is built, so its absence usually does mean the
+ * HTML came from somewhere else - but it is also absent when a template ran
+ * and the tag could not be placed. Craft fires the hook the tag is written
+ * from only where its compiler found a literal `</body>` in the template
+ * text, and a partial returning text/html, or a layout whose closing tag
+ * comes from a variable, has none.
+ *
+ * Those pages got no tag, no nonce, and therefore no beacon either - and
+ * capture read the missing nonce as a cache hit and stood aside for a beacon
+ * that was never shipped. The view was counted by nobody, on both halves of
+ * the pipeline at once, with nothing on any screen to say so.
+ *
+ * The render marker is the missing half: templates do not run for a cache
+ * hit, so anything that marks one rules a cache hit out.
+ */
+test('a template that rendered without a closing body tag is still counted', function() {
+    $injector = new coyshdigital\craftanalytics\ingest\ScriptInjector();
+
+    expect($injector->renderedPageTemplate())->toBeFalse();
+
+    // What Craft's afterRenderPageTemplate event does.
+    $injector->markPageRendered();
+
+    expect($injector->renderedPageTemplate())->toBeTrue()
+        // No nonce, because there was nowhere to put the tag - but a template
+        // did run, so this is not a cache hit and the server must count it.
+        ->and($injector->getPendingNonce())->toBeNull();
+});
+
+test('a cache hit leaves the render unmarked', function() {
+    // Templates do not run for a page served from a cache, so nothing marks
+    // it and the nonce is absent for the reason capture assumes.
+    $injector = new coyshdigital\craftanalytics\ingest\ScriptInjector();
+
+    expect($injector->renderedPageTemplate())->toBeFalse()
+        ->and($injector->getPendingNonce())->toBeNull();
+});
