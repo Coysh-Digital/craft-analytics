@@ -448,3 +448,90 @@ test('an element resolved before compaction survives a later pass that does not 
         // Still joinable to the Content reports.
         ->and((int)$rows[0]['elementId'])->toBe(42);
 });
+
+test('the orphan sweep works across more dimensions than fit one pass', function() {
+    $db = TestDb::connection();
+
+    // More than ORPHAN_CHUNK (1,000), so the keyset walk has to take several
+    // passes and delete rows underneath itself as it goes. The version this
+    // replaced loaded every referenced id into PHP and built one NOT IN and
+    // one IN out of the lot, so it grew with the table and fell over on
+    // exactly the cardinality spike it exists to clean up after.
+    $rows = [];
+    foreach (range(1, 2500) as $i) {
+        $rows[] = [1, substr(hash('xxh3', "orphan-$i"), 0, 16), "/orphan-$i", '2026-07-01'];
+    }
+    $db->createCommand()->batchInsert(
+        Table::DIMENSIONS,
+        ['type', 'valueHash', 'value', 'firstSeen'],
+        $rows,
+    )->execute();
+
+    // One of them is referenced and must survive.
+    $keptId = (int)(new Query())->select('id')->from(Table::DIMENSIONS)
+        ->where(['value' => '/orphan-1200'])->scalar($db);
+    writeHourlyPage('2026-07-15', 9, 10, [1], pathDimId: $keptId);
+
+    $result = (new GcService(['db' => $db, 'settings' => new Settings()]))->run(mktime(12, 0, 0, 7, 16, 2026));
+
+    expect($result['orphanedDimensions'])->toBe(2499)
+        ->and((new Query())->select('value')->from(Table::DIMENSIONS)->column($db))->toBe(['/orphan-1200']);
+});
+
+test('retention deletes more rows than fit one batch', function() {
+    $db = TestDb::connection();
+
+    // Past DELETE_CHUNK (5,000), so deleteInBatches has to loop. Selecting by
+    // primary key rather than using DELETE ... LIMIT is what keeps this
+    // working on Postgres.
+    $rows = [];
+    foreach (range(1, 6000) as $i) {
+        $rows[] = [1, '2026-01-01', $i % 24, $i, 1];
+    }
+    $db->createCommand()->batchInsert(
+        Table::PAGES_ROLLUP,
+        ['siteId', 'date', 'hour', 'pathDimId', 'views'],
+        $rows,
+    )->execute();
+
+    $result = (new GcService([
+        'db' => $db,
+        'settings' => new Settings(['rollupRetentionMonths' => 3]),
+        'counter' => new HllUniqueCounter(['settings' => new Settings()]),
+    ]))->run(mktime(12, 0, 0, 7, 16, 2026));
+
+    expect($result['expiredRollups'])->toBe(6000)
+        ->and((new Query())->from(Table::PAGES_ROLLUP)->count('*', $db))->toBe(0);
+});
+
+test('the unique-member cutoff is read in the site timezone, not UTC', function() {
+    $db = TestDb::connection();
+    $original = Craft::$app->timeZone;
+
+    // Noon UTC on the 16th is already the 17th in Auckland, and the salt
+    // cutoff two rotations back lands on the 14th in UTC and the 15th there.
+    // A row dated the 14th is therefore expired in site time and not in UTC -
+    // which is the whole disagreement, since the `date` column is written in
+    // site time like every other date in the schema.
+    Craft::$app->timeZone = 'Pacific/Auckland';
+
+    try {
+        $db->createCommand()->insert(Table::UNIQUE_MEMBERS, [
+            'scopeKey' => 'page:1:2026-07-14:9:1',
+            'siteId' => 1,
+            'date' => '2026-07-14',
+            'visitorHash' => str_repeat('a', 16),
+        ])->execute();
+
+        // Pinned to an instant rather than mktime(), which reads the PHP
+        // process timezone - and this test is about a date boundary, so it
+        // has to mean the same thing on every machine that runs it.
+        $now = (new DateTimeImmutable('2026-07-16 12:00:00', new DateTimeZone('UTC')))->getTimestamp();
+
+        (new GcService(['db' => $db, 'settings' => new Settings()]))->run($now);
+
+        expect((new Query())->from(Table::UNIQUE_MEMBERS)->count('*', $db))->toBe(0);
+    } finally {
+        Craft::$app->timeZone = $original;
+    }
+});

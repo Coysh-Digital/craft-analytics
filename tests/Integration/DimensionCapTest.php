@@ -170,3 +170,80 @@ test('__other__ does not consume one of the capped slots', function() {
 
     expect((int)$tracked)->toBe(5);
 });
+
+/**
+ * The cap has to bound the dimensions table too, not only the rollups.
+ *
+ * resolve() used to create the dimension row and then decide whether to admit
+ * it, so a flood folded into `__other__` where it was counted and still left
+ * one dimensions row per distinct value behind - the traffic-driven growth
+ * this class exists to prevent, moved one table along. The only thing that
+ * cleaned those up was the orphan sweep in the GC, which is the code that
+ * fell over on a table that size.
+ */
+test('a flood past the cap creates no dimension row for the values it folds away', function() {
+    drainPaths($this, array_map(fn($i) => "/page-$i", range(1, 20)));
+
+    $paths = (new Query())
+        ->from(Table::DIMENSIONS)
+        ->where(['type' => DimensionType::Path->value])
+        ->count('*', TestDb::connection());
+
+    // Five admitted paths plus __other__ itself. Not twenty-one.
+    expect((int)$paths)->toBe(6);
+});
+
+test('a value admitted earlier in the day still resolves to its own row', function() {
+    drainPaths($this, ['/kept', '/kept', '/kept']);
+
+    $dimId = $this->dimensions->getId(DimensionType::Path, '/kept');
+
+    expect($dimId)->not->toBeNull()
+        ->and($dimId)->not->toBe(otherDimId($this));
+});
+
+test('a user agent flood cannot grow the devices rollup without bound', function() {
+    // The browser and OS dimensions are parsed straight out of the
+    // User-Agent, which the caller writes. They were not capped at all, so
+    // each distinct string was a devices_rollup row and up to two dimension
+    // rows.
+    foreach (range(1, 20) as $i) {
+        $this->capper->resolve(1, '2026-07-16', DimensionType::Browser, "FakeBrowser$i");
+    }
+
+    $browsers = (new Query())
+        ->from(Table::DIMENSIONS)
+        ->where(['type' => DimensionType::Browser->value])
+        ->count('*', TestDb::connection());
+
+    expect((int)$browsers)->toBe(6);
+});
+
+test('every dimension a caller can influence is capped', function(DimensionType $type) {
+    foreach (range(1, 12) as $i) {
+        $this->capper->resolve(1, '2026-07-16', $type, "value-$i");
+    }
+
+    $count = (new Query())
+        ->from(Table::DIMENSIONS)
+        ->where(['type' => $type->value])
+        ->count('*', TestDb::connection());
+
+    expect((int)$count)->toBe(6);
+})->with([
+    DimensionType::Path,
+    DimensionType::ReferrerHost,
+    DimensionType::Browser,
+    DimensionType::Os,
+    DimensionType::CampaignSource,
+    DimensionType::CampaignMedium,
+    DimensionType::CampaignName,
+    DimensionType::CampaignTerm,
+    DimensionType::CampaignContent,
+    DimensionType::SearchTerm,
+    DimensionType::EventName,
+    DimensionType::OutboundHost,
+    DimensionType::OutboundUrl,
+    DimensionType::Crawler,
+    DimensionType::Segment,
+]);

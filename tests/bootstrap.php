@@ -66,8 +66,16 @@ Craft::$app = new class {
         return true;
     }
 
+    /**
+     * Settable, because "what date is it" is a question the plugin answers in
+     * the site's timezone everywhere - rollup buckets, retention cutoffs, the
+     * date ranges the reports are asked for - and a harness that can only say
+     * UTC cannot test any of the boundaries where that matters.
+     */
+    public string $timeZone = 'UTC';
+
     public function getTimeZone(): string
     {
-        return 'UTC';
+        return $this->timeZone;
     }
 };

@@ -65,8 +65,12 @@ class DbRollupSink extends Component implements RollupSinkInterface
     }
 
     /**
-     * One row per crawler per day. Capped like any other dimension, so a
-     * flood of one-off scrapers cannot grow the table without bound.
+     * One row per crawler per day, capped like any other dimension so a flood
+     * of one-off scrapers cannot grow the table without bound.
+     *
+     * That was written here before it was true: the crawler type was not in
+     * the capper's list at all, and the name comes from the User-Agent, which
+     * anyone can vary per request. It is capped now.
      */
     private function writeCrawlers(InteractionBuckets $interactions): void
     {
