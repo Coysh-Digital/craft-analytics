@@ -558,6 +558,24 @@ class Plugin extends BasePlugin
                 }
             },
         );
+
+        // Fires whenever a page template renders, whether or not it contains a
+        // literal `</body>` for the tag to go before. That distinction is the
+        // whole point: without it, a template with no closing tag looks
+        // exactly like a page served from a full-page cache - no nonce in
+        // either case - and capture stood aside for the beacon that was never
+        // shipped, so the view was counted by nobody.
+        Event::on(
+            View::class,
+            View::EVENT_AFTER_RENDER_PAGE_TEMPLATE,
+            function() {
+                try {
+                    $this->getScriptInjector()->markPageRendered();
+                } catch (\Throwable $e) {
+                    Craft::warning('craft-analytics could not mark the render: ' . $e->getMessage(), __METHOD__);
+                }
+            },
+        );
     }
 
     /**

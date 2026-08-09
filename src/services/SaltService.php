@@ -10,6 +10,7 @@ use yii\base\Component;
 use yii\caching\CacheInterface;
 use yii\db\Connection;
 use yii\db\Query;
+use yii\mutex\Mutex;
 
 /**
  * The rotating salt behind anonymous visitor hashing.
@@ -27,6 +28,15 @@ class SaltService extends Component
 {
     private const CACHE_KEY = 'craftAnalytics.salt';
     private const SALT_BYTES = 32;
+
+    /**
+     * How long to wait for another worker's rotation.
+     *
+     * Short: the work under the lock is one small write, and a request that
+     * waits longer than this is better off rotating itself than holding a
+     * visitor's worker.
+     */
+    private const LOCK_TIMEOUT = 3;
 
     /** Connection override — tests and (later) the Pro external database. */
     public ?Connection $db = null;
@@ -48,10 +58,62 @@ class SaltService extends Component
         $salt = $this->current ??= $this->load();
 
         if ($salt['nextRotation'] <= time()) {
-            return ($this->current = $this->rotate())['salt'];
+            return $this->rotateOnce()['salt'];
         }
 
         return $salt['salt'];
+    }
+
+    /**
+     * Rotates under a lock, so a burst of requests crossing the boundary
+     * produces one new salt rather than one each.
+     *
+     * Unlocked, every worker that noticed the window had elapsed generated its
+     * own salt and wrote it over the others. Each one then hashed its own
+     * request with the salt it had made, so visitors arriving in that moment
+     * were split across several salts - new hashes, new sessions, and the
+     * split landed every rotation rather than rarely.
+     *
+     * A worker that cannot take the lock waits for the holder and re-reads,
+     * which is the whole point: the value it wants is the one being written.
+     * If there is no mutex to be had it rotates anyway, because a salt that is
+     * overdue is worse than a salt that is duplicated.
+     *
+     * @return array{salt: string, nextRotation: int}
+     */
+    private function rotateOnce(): array
+    {
+        $mutex = $this->mutex();
+        $name = 'craftAnalytics.saltRotation';
+
+        if ($mutex === null || !$mutex->acquire($name, self::LOCK_TIMEOUT)) {
+            return $this->current = $this->rotate();
+        }
+
+        try {
+            // Re-read now the lock is held: whoever held it before this may
+            // have rotated already, and rotating again would throw away a
+            // salt that is already in use.
+            $fresh = $this->load(refresh: true);
+
+            if ($fresh['nextRotation'] > time()) {
+                return $this->current = $fresh;
+            }
+
+            return $this->current = $this->rotate();
+        } finally {
+            $mutex->release($name);
+        }
+    }
+
+    private function mutex(): ?Mutex
+    {
+        // Null only where there is no application to ask - the test harness.
+        try {
+            return Craft::$app->getMutex();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**
@@ -116,9 +178,9 @@ class SaltService extends Component
     /**
      * @return array{salt: string, nextRotation: int}
      */
-    private function load(): array
+    private function load(bool $refresh = false): array
     {
-        $cached = $this->cache()?->get(self::CACHE_KEY);
+        $cached = $refresh ? false : $this->cache()?->get(self::CACHE_KEY);
 
         if (is_array($cached) && isset($cached['salt'], $cached['nextRotation'])) {
             /** @var array{salt: string, nextRotation: int} $cached */

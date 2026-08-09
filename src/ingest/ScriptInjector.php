@@ -34,9 +34,41 @@ class ScriptInjector extends Component
      */
     private ?string $pendingNonce = null;
 
+    /**
+     * Whether Craft rendered a page template on this request.
+     *
+     * The missing half of "no nonce means this came from a cache". A nonce is
+     * issued while a page is being built, so its absence usually does mean the
+     * HTML came from somewhere else - but it is also absent when the template
+     * rendered and the tag could not be placed, because Craft only fires
+     * EVENT_END_BODY where its compiler found a literal `</body>` in the
+     * template text. A partial returning text/html, or a layout whose closing
+     * tag arrives from a variable, has none.
+     *
+     * Those pages got no tag, no nonce and therefore no beacon either, and
+     * capture read the missing nonce as a cache hit and recorded nothing at
+     * all. They were invisible in both halves of the pipeline at once.
+     */
+    private bool $pageRendered = false;
+
     public function getPendingNonce(): ?string
     {
         return $this->pendingNonce;
+    }
+
+    public function markPageRendered(): void
+    {
+        $this->pageRendered = true;
+    }
+
+    /**
+     * Whether this response was built by Craft now, rather than served from a
+     * full-page cache. Templates do not run for a cache hit, so nothing marks
+     * it.
+     */
+    public function renderedPageTemplate(): bool
+    {
+        return $this->pageRendered;
     }
 
     /**
