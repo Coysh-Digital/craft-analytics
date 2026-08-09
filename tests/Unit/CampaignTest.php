@@ -2,6 +2,8 @@
 
 use coyshdigital\craftanalytics\enums\AttributionModel;
 use coyshdigital\craftanalytics\models\Campaign;
+use coyshdigital\craftanalytics\models\Settings;
+use coyshdigital\craftanalytics\ingest\CaptureService;
 
 test('a campaign is read from utm parameters', function() {
     $campaign = Campaign::fromQueryString('utm_source=newsletter&utm_medium=email&utm_campaign=spring');
@@ -103,4 +105,43 @@ test('a click id alone is not a campaign', function() {
     // gclid identifies an ad click, not a source. It is stripped from the
     // path, but inventing a campaign from it would be making data up.
     expect(Campaign::fromQueryString('gclid=abc123'))->toBeNull();
+});
+
+test('an entity-encoded link keeps every part of its campaign', function() {
+    // A URL HTML-encoded before being linked arrives with `&amp;` separators,
+    // so parse_str names every parameter after the first `amp;utm_medium`,
+    // `amp;amp;utm_campaign` and so on. The path normaliser was hardened for
+    // this; this parser was not, and the campaign lost all but its source.
+    $campaign = Campaign::fromQueryString(
+        'utm_source=newsletter&amp;utm_medium=email&amp;amp;utm_campaign=spring',
+    );
+
+    expect($campaign)->not->toBeNull()
+        ->and($campaign->source)->toBe('newsletter')
+        ->and($campaign->medium)->toBe('email')
+        ->and($campaign->campaign)->toBe('spring');
+});
+
+test('a beacon path carries a campaign that the path itself throws away', function() {
+    // What the beacon posts as `p`, and what the controller does with it:
+    // split once on the query, canonicalise the path, parse the campaign from
+    // the query. The parse has to happen, because normalizePath() strips the
+    // UTM tags a line later - they describe how somebody arrived, not which
+    // page they arrived at.
+    //
+    // Behind a full-page cache the beacon is the only record of the visit, so
+    // skipping this step filed every campaign-tagged landing as Direct.
+    [$path, $query] = explode('?', '/landing?utm_source=newsletter&utm_medium=email', 2);
+
+    $capture = new CaptureService();
+    $capture->settings = new Settings();
+
+    $campaign = Campaign::fromQueryString($query);
+
+    expect($campaign)->not->toBeNull()
+        ->and($campaign->source)->toBe('newsletter')
+        ->and($campaign->medium)->toBe('email')
+        // The tags are gone from the path, which is why they had to be read
+        // from the query before it was normalised away.
+        ->and($capture->normalizePath($capture->beaconPathInfo($path), $query))->toBe('/landing');
 });

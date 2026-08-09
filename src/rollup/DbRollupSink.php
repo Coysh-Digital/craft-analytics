@@ -145,10 +145,15 @@ class DbRollupSink extends Component implements RollupSinkInterface
             Table::PAGES_ROLLUP,
             $keys,
             ['views' => $bucket->views, 'totalDwellMs' => $bucket->dwellMs],
-            // Only set when the row is created: a path's element doesn't
-            // change mid-hour, and re-writing it on every upsert would be
-            // pointless work.
             $bucket->elementId !== null ? ['elementId' => $bucket->elementId] : [],
+            // Written on insert, and allowed to fill a null on an existing
+            // row. Insert-only left the element permanently unknown whenever
+            // the row happened to be created by something that had none: a
+            // beacon on a cached page, or the entrance/exit write for a
+            // session closing in a batch where the page had no counted view.
+            // Nothing revisited those rows, so they stayed invisible to the
+            // Content reports for good. A resolved value is never overwritten.
+            ['elementId'],
         );
 
         $this->recordUniques(

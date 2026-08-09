@@ -81,3 +81,73 @@ test('stripQueryString drops the whole query, even a would-be-kept parameter', f
     expect(normalize('/membership/join-us-today', 'ad=120246329263250047', $settings))
         ->toBe('/membership/join-us-today');
 });
+
+/**
+ * The server records Craft's getPathInfo(); the beacon sends the browser's
+ * raw location.pathname. beaconPathInfo() closes that gap, so one page is one
+ * row rather than a view on one row and its dwell on another.
+ */
+function beaconPath(string $pathname, string $basePath = '', string $pageTrigger = 'p'): string
+{
+    $capture = new CaptureService();
+    $capture->settings = new Settings();
+
+    return $capture->beaconPathInfo($pathname, $basePath, $pageTrigger);
+}
+
+test('a trailing slash does not make a second page', function() {
+    expect(beaconPath('/about/'))->toBe('about')
+        ->and(beaconPath('/about'))->toBe('about');
+});
+
+test('repeated slashes collapse the way Craft collapses them', function() {
+    expect(beaconPath('//about//us/'))->toBe('about/us');
+});
+
+test('a percent-encoded path is decoded to match the server', function() {
+    // getPathInfo() is decoded by Yii before the plugin ever sees it.
+    expect(beaconPath('/caf%C3%A9/men%C3%BC'))->toBe('café/menü');
+});
+
+test('path-style pagination is stripped, as Craft strips it', function() {
+    expect(beaconPath('/blog/p2'))->toBe('blog')
+        ->and(beaconPath('/blog/news/p14'))->toBe('blog/news')
+        // Matched against the whole path, so a "/page/2" trigger works too.
+        ->and(beaconPath('/blog/page/2', pageTrigger: 'page/'))->toBe('blog');
+});
+
+test('a page that merely ends in the trigger letter is left alone', function() {
+    expect(beaconPath('/help'))->toBe('help')
+        ->and(beaconPath('/blog/p'))->toBe('blog/p');
+});
+
+test('query-string pagination is left in the query, not stripped from the path', function() {
+    expect(beaconPath('/blog', pageTrigger: '?page'))->toBe('blog');
+});
+
+test("the site's base path is removed, as it is from getPathInfo", function() {
+    // A multi-site setup separating its sites by path, or a subfolder install.
+    expect(beaconPath('/de/about', basePath: 'de'))->toBe('about')
+        ->and(beaconPath('/de', basePath: 'de'))->toBe('')
+        // Only the leading occurrence: a page genuinely called de/de/x keeps
+        // its second segment.
+        ->and(beaconPath('/de/de/x', basePath: 'de'))->toBe('de/x');
+});
+
+test('a path that does not start with the base path is untouched', function() {
+    expect(beaconPath('/deutschland/about', basePath: 'de'))->toBe('deutschland/about');
+});
+
+test('the root path survives every step', function() {
+    expect(beaconPath('/'))->toBe('')
+        ->and(normalize(beaconPath('/'), ''))->toBe('/');
+});
+
+test('a canonicalised beacon path and the server path produce one row', function() {
+    // The same page, seen by both halves of the pipeline.
+    $fromServer = normalize('about/us', 'utm_source=newsletter');
+    $fromBeacon = normalize(beaconPath('/about/us/'), 'utm_source=newsletter');
+
+    expect($fromBeacon)->toBe($fromServer)
+        ->and($fromBeacon)->toBe('/about/us');
+});
