@@ -21,6 +21,9 @@ class RedisUniqueCounter extends Component implements UniqueCounterInterface
 {
     private const KEY_PREFIX = 'ca:u:';
 
+    /** Keys per command, before the union has to be assembled in steps. */
+    private const MAX_KEYS_PER_COMMAND = 1000;
+
     public ?RedisConnection $redis = null;
     public ?Settings $settings = null;
 
@@ -75,7 +78,31 @@ class RedisUniqueCounter extends Component implements UniqueCounterInterface
         // union of its days rather than the sum.
         $keys = array_map(static fn(UniqueScope $scope) => self::KEY_PREFIX . $scope->key(), $scopes);
 
-        return (int)$this->connection()->executeCommand('PFCOUNT', $keys);
+        if (count($keys) <= self::MAX_KEYS_PER_COMMAND) {
+            return (int)$this->connection()->executeCommand('PFCOUNT', $keys);
+        }
+
+        // A wide range on a busy site produces more scopes than belong in one
+        // command. They cannot be counted a chunk at a time and added up -
+        // that would count anybody appearing in two chunks twice - so the
+        // chunks are merged into one temporary sketch and that is counted.
+        // PFMERGE is a union, so the result is identical to the single-command
+        // form, just assembled in several steps.
+        $temp = self::KEY_PREFIX . 'tmp:' . bin2hex(random_bytes(8));
+        $redis = $this->connection();
+
+        try {
+            foreach (array_chunk($keys, self::MAX_KEYS_PER_COMMAND) as $chunk) {
+                $redis->executeCommand('PFMERGE', array_merge([$temp], $chunk));
+                // Bounded lifetime from the first write, so an interruption
+                // between here and the delete cannot leave it behind forever.
+                $redis->executeCommand('EXPIRE', [$temp, 300]);
+            }
+
+            return (int)$redis->executeCommand('PFCOUNT', [$temp]);
+        } finally {
+            $redis->executeCommand('DEL', [$temp]);
+        }
     }
 
     /**

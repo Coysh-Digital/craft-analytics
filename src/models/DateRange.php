@@ -304,6 +304,19 @@ final class DateRange
         return $date;
     }
 
+    /**
+     * Whether this range reaches today.
+     *
+     * The dividing line for caching a report: a range that ends before today
+     * describes rollup rows nothing is still writing to, so the same question
+     * has the same answer until retention or a late batch changes it. A range
+     * that includes today is being added to as it is read.
+     */
+    public function includesToday(?int $now = null): bool
+    {
+        return $this->to >= self::today($now)->format('Y-m-d');
+    }
+
     private static function today(?int $now): \DateTimeImmutable
     {
         $timestamp = $now ?? time();

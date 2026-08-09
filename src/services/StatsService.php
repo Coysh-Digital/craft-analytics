@@ -15,6 +15,7 @@ use coyshdigital\craftanalytics\uniques\UniqueCounterInterface;
 use coyshdigital\craftanalytics\uniques\UniqueScope;
 use Craft;
 use yii\base\Component;
+use yii\caching\CacheInterface;
 use yii\db\Connection;
 use yii\db\Query;
 
@@ -41,12 +42,34 @@ class StatsService extends Component
      */
     public ?Settings $settings = null;
 
+    /** Result cache; defaults to Craft's, and absent means no caching. */
+    public ?CacheInterface $cache = null;
+
+    /**
+     * How long a finished day's answer is kept.
+     *
+     * An hour rather than indefinitely, because a range in the past is not
+     * quite immutable: a spool recovered after an outage, or a quarantined
+     * batch replayed, can still add to a day that has already been read. An
+     * hour keeps the repeated loads of one sitting cheap and bounds how long
+     * a late arrival can stay invisible.
+     */
+    private const CACHE_TTL = 3600;
+
     /**
      * The headline numbers.
      *
      * @return array{views: int, uniques: int, sessions: int, bounceRate: float, avgDurationMs: int, avgViewsPerSession: float, avgDwellMs: int}
      */
     public function totals(int $siteId, DateRange $range): array
+    {
+        return $this->remember('totals', $siteId, $range, fn() => $this->computeTotals($siteId, $range));
+    }
+
+    /**
+     * @return array{views: int, uniques: int, sessions: int, bounceRate: float, avgDurationMs: int, avgViewsPerSession: float, avgDwellMs: int}
+     */
+    private function computeTotals(int $siteId, DateRange $range): array
     {
         /** @var array{views: string|null, dwell: string|null}|null $pages */
         $pages = (new Query())
@@ -98,10 +121,58 @@ class StatsService extends Component
      */
     public function uniquesFor(int $siteId, DateRange $range, ?int $pathDimId = null): int
     {
+        return $this->remember(
+            'uniques:' . ($pathDimId ?? ''),
+            $siteId,
+            $range,
+            fn() => $this->computeUniquesFor($siteId, $range, $pathDimId),
+        );
+    }
+
+    private function computeUniquesFor(int $siteId, DateRange $range, ?int $pathDimId = null): int
+    {
         $counter = $this->counter();
+        $scopes = [];
+        $sketches = [];
+
+        foreach ($this->uniqueRows($siteId, $range, $pathDimId) as $row) {
+            $scopes[] = new UniqueScope(
+                UniqueScope::KIND_PAGE,
+                $siteId,
+                (string)$row['date'],
+                (int)$row['hour'],
+                (int)$row['pathDimId'],
+            );
+
+            if ($counter->storesOnRow()) {
+                $sketches[] = self::readBlob($row['uniques']);
+            }
+        }
+
+        return $counter->estimate($scopes, $sketches);
+    }
+
+    /**
+     * The rollup rows a unique count over this range has to consider.
+     *
+     * The sketch blob is only selected when the driver actually reads it. On
+     * Redis and the exact driver the counters live elsewhere and the column is
+     * null, so selecting it dragged a blob per row across the wire for nothing
+     * - and a 30-day range on a site with a few hundred paths is tens of
+     * thousands of rows.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function uniqueRows(int $siteId, DateRange $range, ?int $pathDimId = null): array
+    {
+        $columns = ['date', 'hour', 'pathDimId'];
+
+        if ($this->counter()->storesOnRow()) {
+            $columns[] = 'uniques';
+        }
 
         $query = (new Query())
-            ->select(['uniques', 'date', 'hour', 'pathDimId'])
+            ->select($columns)
             ->from(Table::PAGES_ROLLUP)
             ->where(['siteId' => $siteId])
             ->andWhere(['between', 'date', $range->from, $range->to]);
@@ -110,21 +181,7 @@ class StatsService extends Component
             $query->andWhere(['pathDimId' => $pathDimId]);
         }
 
-        $scopes = [];
-        $sketches = [];
-
-        foreach ($query->all($this->db()) as $row) {
-            $scopes[] = new UniqueScope(
-                UniqueScope::KIND_PAGE,
-                $siteId,
-                (string)$row['date'],
-                (int)$row['hour'],
-                (int)$row['pathDimId'],
-            );
-            $sketches[] = self::readBlob($row['uniques']);
-        }
-
-        return $counter->estimate($scopes, $sketches);
+        return $query->all($this->db());
     }
 
     /**
@@ -133,6 +190,19 @@ class StatsService extends Component
      * @return array{labels: string[], views: int[], uniques: int[], hourly: bool}
      */
     public function trend(int $siteId, DateRange $range, ?int $pathDimId = null): array
+    {
+        return $this->remember(
+            'trend:' . ($pathDimId ?? ''),
+            $siteId,
+            $range,
+            fn() => $this->computeTrend($siteId, $range, $pathDimId),
+        );
+    }
+
+    /**
+     * @return array{labels: string[], views: int[], uniques: int[], hourly: bool}
+     */
+    private function computeTrend(int $siteId, DateRange $range, ?int $pathDimId = null): array
     {
         // A single day is worth an hourly axis, but only while that day still
         // has hourly rows: compaction folds them into one daily row, so a
@@ -161,6 +231,12 @@ class StatsService extends Component
             $viewsByDate[(string)$row['date']] = (int)$row['views'];
         }
 
+        // One query for the whole range, bucketed by date here. This used to
+        // ask the database once per day in the range - 365 queries for a
+        // twelve-month chart, each one loading every rollup row for its day
+        // and merging their sketches - on every dashboard load.
+        $uniquesByDate = $this->uniquesByDate($siteId, $range, $pathDimId);
+
         $labels = [];
         $views = [];
         $uniques = [];
@@ -170,7 +246,7 @@ class StatsService extends Component
             $views[] = $viewsByDate[$date] ?? 0;
             // Per-day uniques are merged within the day — correct — and are
             // deliberately not merged across days (see uniquesFor()).
-            $uniques[] = $this->uniquesForDate($siteId, $date, $pathDimId);
+            $uniques[] = $uniquesByDate[$date] ?? 0;
         }
 
         return ['labels' => $labels, 'views' => $views, 'uniques' => $uniques, 'hourly' => false];
@@ -216,34 +292,116 @@ class StatsService extends Component
         return ['labels' => $labels, 'views' => $views, 'uniques' => $uniques, 'hourly' => true];
     }
 
-    private function uniquesForDate(int $siteId, string $date, ?int $pathDimId = null): int
+    /**
+     * Caches a report for a range that has finished happening.
+     *
+     * Every rollup read here is a grouped aggregate over rows that stop
+     * changing once their day is over, and there was no caching at all: each
+     * dashboard load recomputed a year of history from scratch, twice over,
+     * because the previous period is worked out the same way.
+     *
+     * Today is never cached. The current day and Real-time are the two things
+     * somebody watches while they are happening, and a figure that lags by an
+     * hour there would be worse than a slow one.
+     *
+     * @template T
+     * @param callable():T $compute
+     * @return T
+     */
+    private function remember(string $name, int $siteId, DateRange $range, callable $compute): mixed
     {
-        $query = (new Query())
-            ->select(['uniques', 'hour', 'pathDimId'])
-            ->from(Table::PAGES_ROLLUP)
-            ->where(['siteId' => $siteId, 'date' => $date]);
+        $cache = $this->cache();
 
-        if ($pathDimId !== null) {
-            $query->andWhere(['pathDimId' => $pathDimId]);
+        if ($cache === null || $range->includesToday()) {
+            return $compute();
         }
 
-        $rows = $query->all($this->db());
+        // The counter driver is part of the key: the same range answered by
+        // the exact driver and by a sketch are different numbers, and swapping
+        // drivers must not read back the other one's answer.
+        $key = implode(':', [
+            'craftanalytics',
+            $name,
+            $siteId,
+            $range->from,
+            $range->to,
+            $this->counter()->name(),
+        ]);
 
-        $scopes = [];
-        $sketches = [];
+        $cached = $cache->get($key);
 
-        foreach ($rows as $row) {
-            $scopes[] = new UniqueScope(
+        if ($cached !== false) {
+            return $cached;
+        }
+
+        $value = $compute();
+        $cache->set($key, $value, self::CACHE_TTL);
+
+        return $value;
+    }
+
+    /**
+     * Craft's cache, or null where there isn't one - the test harness, mainly,
+     * where the absence simply means every read is computed.
+     */
+    private function cache(): ?CacheInterface
+    {
+        if ($this->cache !== null) {
+            return $this->cache;
+        }
+
+        try {
+            $cache = Craft::$app->getCache();
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return $this->cache = $cache instanceof CacheInterface ? $cache : null;
+    }
+
+    /**
+     * Uniques for every day in a range, in one pass over the rollup rows.
+     *
+     * Each day is still merged on its own - a visitor seen in three hours of
+     * one day is one visitor, and days are deliberately not merged into each
+     * other (see uniquesFor()). What changed is that the rows for the whole
+     * range are fetched once and grouped here, rather than queried a day at a
+     * time.
+     *
+     * @return array<string,int> date => distinct visitors
+     */
+    private function uniquesByDate(int $siteId, DateRange $range, ?int $pathDimId = null): array
+    {
+        $counter = $this->counter();
+        $storesOnRow = $counter->storesOnRow();
+
+        /** @var array<string,array{scopes: UniqueScope[], sketches: array<int,string|null>}> $byDate */
+        $byDate = [];
+
+        foreach ($this->uniqueRows($siteId, $range, $pathDimId) as $row) {
+            $date = (string)$row['date'];
+            $byDate[$date] ??= ['scopes' => [], 'sketches' => []];
+
+            $byDate[$date]['scopes'][] = new UniqueScope(
                 UniqueScope::KIND_PAGE,
                 $siteId,
                 $date,
                 (int)$row['hour'],
                 (int)$row['pathDimId'],
             );
-            $sketches[] = self::readBlob($row['uniques']);
+
+            if ($storesOnRow) {
+                $byDate[$date]['sketches'][] = self::readBlob($row['uniques']);
+            }
         }
 
-        return $this->counter()->estimate($scopes, $sketches);
+        $uniques = [];
+
+        foreach ($byDate as $date => $parts) {
+            $uniques[$date] = $counter->estimate($parts['scopes'], $parts['sketches']);
+        }
+
+        return $uniques;
     }
 
     /**
