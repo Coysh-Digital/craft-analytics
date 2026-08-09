@@ -207,17 +207,32 @@ class PrivacyService extends Component
     /**
      * Counts, for the CP panel and the DSAR commands.
      *
+     * Scoped to given site IDs where the caller has them. The CP passes the
+     * sites the viewer is allowed to see: these were whole-table counts, so a
+     * user restricted to one site read every site's consented-visitor and
+     * journey totals off the Privacy screen. Aggregates only, but it
+     * contradicted the per-site model the rest of the plugin enforces.
+     *
+     * Null means every site, which is what the console commands want: a DSAR
+     * is answered for a person, not for a site.
+     *
+     * @param int[]|null $siteIds
      * @return array{consentedVisitors: int, journeyRows: int, consentGrants: int, consentDenials: int}
      */
-    public function counts(): array
+    public function counts(?array $siteIds = null): array
     {
+        $scope = static function(Query $query) use ($siteIds): Query {
+            return $siteIds === null ? $query : $query->andWhere(['siteId' => $siteIds]);
+        };
+
         return [
-            'consentedVisitors' => (int)(new Query())->from(Table::JOURNEYS)->count('DISTINCT [[visitorId]]', $this->db()),
-            'journeyRows' => (int)(new Query())->from(Table::JOURNEYS)->count('*', $this->db()),
-            'consentGrants' => (int)(new Query())->from(Table::CONSENT_LOG)
-                ->where(['state' => ConsentState::Granted->value])->count('*', $this->db()),
-            'consentDenials' => (int)(new Query())->from(Table::CONSENT_LOG)
-                ->where(['state' => ConsentState::Denied->value])->count('*', $this->db()),
+            'consentedVisitors' => (int)$scope((new Query())->from(Table::JOURNEYS))
+                ->count('DISTINCT [[visitorId]]', $this->db()),
+            'journeyRows' => (int)$scope((new Query())->from(Table::JOURNEYS))->count('*', $this->db()),
+            'consentGrants' => (int)$scope((new Query())->from(Table::CONSENT_LOG)
+                ->where(['state' => ConsentState::Granted->value]))->count('*', $this->db()),
+            'consentDenials' => (int)$scope((new Query())->from(Table::CONSENT_LOG)
+                ->where(['state' => ConsentState::Denied->value]))->count('*', $this->db()),
         ];
     }
 

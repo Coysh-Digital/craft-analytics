@@ -3,6 +3,7 @@
 namespace coyshdigital\craftanalytics\widgets;
 
 use coyshdigital\craftanalytics\assets\CpAsset;
+use coyshdigital\craftanalytics\helpers\SiteAccess;
 use coyshdigital\craftanalytics\Plugin;
 use Craft;
 use craft\base\Widget;
@@ -43,9 +44,13 @@ class LiveWidget extends Widget
             return null;
         }
 
-        $site = Craft::$app->getSites()->getCurrentSite();
+        // Scoped like every other analytics screen. Checking only the view
+        // permission and then reading Craft's current site meant a user
+        // restricted to one site could be shown another site's figures,
+        // depending on what the CP happened to consider current.
+        $site = SiteAccess::current();
 
-        if ($site->id === null) {
+        if ($site?->id === null) {
             return null;
         }
 

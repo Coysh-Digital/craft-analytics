@@ -45,7 +45,21 @@ final class Csv
      */
     private static function putRow($handle, array $values): void
     {
-        fputcsv($handle, array_map(self::neutralise(...), $values), ',', '"', '\\');
+        // No escape character: RFC 4180, which is what a CSV actually is.
+        //
+        // PHP's default is a backslash, and given a value ending in one it
+        // encloses the field without doubling it - `/downloads\` is written as
+        // "/downloads\". A strict reader copes, because a backslash means
+        // nothing to it. A reader that honours backslash escapes does not: it
+        // takes the closing quote as escaped and keeps consuming, and one such
+        // value swallows the entire rest of the file into a single cell. PHP's
+        // own fgetcsv() is in the second group by default, so an export could
+        // not reliably be read back by the language that wrote it.
+        //
+        // That value is reachable: the beacon accepts any path starting with a
+        // slash and rejects only newlines and `://`, so a trailing backslash
+        // is one request away and the path is exported verbatim.
+        fputcsv($handle, array_map(self::neutralise(...), $values), ',', '"', '');
     }
 
     /**

@@ -282,3 +282,37 @@ test('a subject request needs a subject', function() {
     expect(fn() => $privacy->export())->toThrow(InvalidArgumentException::class)
         ->and(fn() => $privacy->erase())->toThrow(InvalidArgumentException::class);
 });
+
+/**
+ * The Privacy screen's figures are per-site like every other figure.
+ *
+ * counts() ran COUNT(*) over the whole journeys and consent tables, and the
+ * screen renders to anyone with the view permission - so a user restricted to
+ * one site read every site's consented-visitor and journey totals. Aggregates
+ * only, which is why this is a small hole rather than a large one, but it
+ * contradicted the per-site model the rest of the plugin enforces.
+ */
+test('privacy counts can be scoped to the sites a viewer may see', function() {
+    $db = TestDb::connection();
+    $privacy = new coyshdigital\craftanalytics\services\PrivacyService(['db' => $db]);
+
+    foreach ([[1, 'visitor-a'], [1, 'visitor-b'], [2, 'visitor-c']] as [$siteId, $visitorId]) {
+        $db->createCommand()->insert(Table::JOURNEYS, [
+            'siteId' => $siteId,
+            'visitorId' => $visitorId,
+            'sessionId' => 'sess-' . $visitorId,
+            'sequence' => 1,
+            'pathDimId' => 1,
+            'occurredAt' => gmdate('Y-m-d H:i:s'),
+        ])->execute();
+    }
+
+    $everySite = $privacy->counts();
+    $siteOne = $privacy->counts([1]);
+
+    expect($everySite['journeyRows'])->toBe(3)
+        ->and($everySite['consentedVisitors'])->toBe(3)
+        // Site two's visitor is not this viewer's to count.
+        ->and($siteOne['journeyRows'])->toBe(2)
+        ->and($siteOne['consentedVisitors'])->toBe(2);
+});
