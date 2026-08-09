@@ -15,6 +15,13 @@ use coyshdigital\craftanalytics\services\DeviceParser;
 use coyshdigital\craftanalytics\services\DimensionsService;
 use coyshdigital\craftanalytics\tests\TestDb;
 use coyshdigital\craftanalytics\uniques\HllUniqueCounter;
+use coyshdigital\craftanalytics\enums\GoalType;
+use coyshdigital\craftanalytics\rollup\GoalMatcher;
+use coyshdigital\craftanalytics\rollup\JourneyRecorder;
+use coyshdigital\craftanalytics\services\GoalsService;
+use coyshdigital\craftanalytics\session\SessionStore;
+use coyshdigital\craftanalytics\write\HitApplier;
+use yii\caching\ArrayCache;
 use yii\db\Query;
 
 /**
@@ -26,12 +33,13 @@ use yii\db\Query;
  * sink, so every one of them was silently discarded on any site not using the
  * default `spool` mode.
  *
- * These reproduce HitApplier's sequence rather than invoking it: it resolves
- * its sink and session store from the plugin instance, which this bootstrap
- * has no room for. So they pin the half that was wrong - that a single-hit
- * aggregation writes every rollup, interactions included - and applyOne()
- * below has to stay in step with HitApplier::apply() for that to keep meaning
- * something.
+ * The interaction tests reproduce HitApplier's sequence rather than invoking
+ * it, and applyOne() below has to stay in step with HitApplier::apply() for
+ * them to keep meaning something. That gap is not free: goal matching and
+ * journey recording were missing from the real method for as long as this
+ * file agreed with itself about what the method did. Everything added since
+ * calls HitApplier directly, which is now possible because its settings are
+ * injectable like the rest of its collaborators.
  */
 beforeEach(function() {
     if (!TestDb::available()) {
@@ -93,6 +101,7 @@ function directHit(array $overrides = []): Hit
         timestamp: mktime(10, 0, 0, 7, 16, 2026),
         referrer: $overrides['referrer'] ?? 'https://www.google.com/',
         dwellMs: 0,
+        visitorId: $overrides['visitorId'] ?? null,
         kind: $overrides['kind'] ?? Hit::KIND_VIEW,
         eventName: $overrides['eventName'] ?? null,
         eventValue: $overrides['eventValue'] ?? null,
@@ -166,4 +175,86 @@ test('the path a direct-written interaction happened on is kept', function() {
 
     expect($pathDimId)->not->toBeNull()
         ->and($count)->toBe(1);
+});
+
+/**
+ * The two things the single-hit path used to leave out entirely.
+ *
+ * Goal matching and journey recording lived only in the drain, so a site on
+ * `direct` or `queue` reported every conversion as zero and every funnel as
+ * empty - not wrongly, but permanently, and with no sign on the screen that
+ * the number was coming from a code path that never ran.
+ *
+ * These invoke the real HitApplier rather than reproducing its sequence. That
+ * is the whole point: the mirror above is what let this through the first
+ * time, because a mirror agrees with itself.
+ */
+function makeApplier(object $ctx, array $overrides = []): HitApplier
+{
+    return new HitApplier(array_merge([
+        'db' => TestDb::connection(),
+        'sink' => $ctx->sink,
+        'settings' => $ctx->settings,
+        'sessions' => new SessionStore([
+            'settings' => $ctx->settings,
+            'cache' => new ArrayCache(),
+            'siteIds' => [1],
+        ]),
+        'goalMatcher' => new GoalMatcher(isPro: false),
+        'journeys' => new JourneyRecorder(['settings' => $ctx->settings, 'isPro' => false]),
+    ], $overrides));
+}
+
+test('a goal converts on the single-hit path, not only in the drain', function() {
+    TestDb::connection()->createCommand()->insert(Table::GOALS, [
+        'name' => 'Pricing viewed',
+        'handle' => 'pricingViewed',
+        'type' => GoalType::Url->value,
+        'target' => '/pricing',
+        'enabled' => true,
+        'uid' => 'goal-' . bin2hex(random_bytes(6)),
+        'dateCreated' => gmdate('Y-m-d H:i:s'),
+        'dateUpdated' => gmdate('Y-m-d H:i:s'),
+    ])->execute();
+
+    $goals = new GoalsService(['db' => TestDb::connection()]);
+
+    $sessions = new SessionStore([
+        'settings' => $this->settings,
+        'cache' => new ArrayCache(),
+        'siteIds' => [1],
+    ]);
+
+    makeApplier($this, [
+        'sessions' => $sessions,
+        'goalMatcher' => new GoalMatcher(goals: $goals, isPro: true),
+    ])->apply(directHit(['path' => '/pricing']));
+
+    // Asked as of the hit's own moment: the fixture timestamp is weeks old,
+    // and against a live clock the session is simply idle.
+    $active = $sessions->activeSessions(1, directHit()->timestamp);
+
+    // The handle is on the session, which is what ProRollupWriter reads at
+    // close to write the conversion. Without the matcher it is never there.
+    expect($active)->toHaveCount(1)
+        ->and($active[0]->goals)->toContain('pricingViewed');
+});
+
+test('a consented journey is recorded on the single-hit path', function() {
+    $this->settings->enableConsent = true;
+    $this->settings->enableJourneys = true;
+
+    makeApplier($this, [
+        'journeys' => new JourneyRecorder([
+            'settings' => $this->settings,
+            'dimensions' => $this->dimensions,
+            'db' => TestDb::connection(),
+            'isPro' => true,
+        ]),
+    ])->apply(directHit(['visitorId' => 'visitor-abc']));
+
+    $row = (new Query())->from(Table::JOURNEYS)->one(TestDb::connection());
+
+    expect($row)->not->toBeFalse()
+        ->and($row['visitorId'])->toBe('visitor-abc');
 });

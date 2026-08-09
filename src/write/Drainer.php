@@ -3,6 +3,7 @@
 namespace coyshdigital\craftanalytics\write;
 
 use coyshdigital\craftanalytics\db\Table;
+use coyshdigital\craftanalytics\ingest\CaptureService;
 use coyshdigital\craftanalytics\ingest\Hit;
 use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\Plugin;
@@ -478,7 +479,7 @@ class Drainer extends Component
             // The hash is checked here, not where it is finally used: a line
             // the sketch cannot accept is worth one increment of a counter at
             // the boundary, and is worth nothing at all inside a transaction.
-            if ($hit === null || $hit->siteId === 0 || !IdentityService::isValidHash($hit->visitorHash)) {
+            if ($hit === null || $hit->siteId === 0 || !self::hasUsableIdentity($hit)) {
                 $malformed++;
                 continue;
             }
@@ -489,6 +490,25 @@ class Drainer extends Component
         fclose($handle);
 
         return [$hits, $malformed];
+    }
+
+    /**
+     * Whether a hit carries an identity the rollups can use.
+     *
+     * Crawler records are the exception the hash check has to know about.
+     * They are counted per crawler name and never per visitor, so they travel
+     * under a reserved sentinel rather than a hash — and demanding hex of
+     * that sentinel dropped every one of them here as malformed, which is why
+     * the Crawlers report stayed empty on the spool driver while `direct` and
+     * `queue`, which never pass through this boundary, filled it.
+     */
+    private static function hasUsableIdentity(Hit $hit): bool
+    {
+        if ($hit->kind === Hit::KIND_CRAWLER) {
+            return $hit->visitorHash === CaptureService::CRAWLER_HASH;
+        }
+
+        return IdentityService::isValidHash($hit->visitorHash);
     }
 
     private function sink(): RollupSinkInterface
