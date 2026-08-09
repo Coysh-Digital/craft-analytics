@@ -1,5 +1,123 @@
 # Release Notes for Craft Analytics
 
+## 2.2.0 - 2026-08-09
+
+> **Before you upgrade.** Three figures will visibly change, and none of the
+> changes is your traffic changing.
+>
+> **The Crawlers report starts filling up.** On the default spool driver it was
+> always empty, because crawler records were being discarded before they could
+> be counted. Expect it to go from nothing to a real list overnight.
+>
+> **Conversions and funnels start reporting on `direct` and `queue` sites.** If
+> your site uses either of those write drivers, every goal has read zero since
+> the day you created it. Those numbers begin now; there is no backfill,
+> because the data to backfill from was never written.
+>
+> **Some pages may appear twice for a while.** The beacon now records a page
+> under the same path the server does, having previously kept the trailing
+> slash, the percent-encoding and the pagination segment that Craft strips.
+> Historical rows are left exactly as they are, so a page recorded both ways
+> keeps both rows until they age out of retention. New traffic lands on one.
+>
+> No schema change, and no migration to wait for.
+
+### Fixed
+
+- **Crawler hits never survived the drain.** They travel under a reserved
+  sentinel where a visitor hash would go, because a crawler is not a person
+  and gets nothing to pseudonymise, and the drain rejected that sentinel as a
+  corrupt line. The Crawlers report was therefore permanently empty on the
+  default driver while working normally on the other two, which is why it went
+  unnoticed.
+- **Goals and journeys were recorded only by the drain.** A site on the
+  `direct` or `queue` write driver reported every conversion as zero and every
+  funnel as empty, for as long as it had been running, with nothing to suggest
+  the figure came from a code path that never executed.
+- **A second compaction pass could delete the day it was compacting.**
+  Compaction folds a day's hourly rows into one daily row, and it rebuilt that
+  row from the hourly rows alone. After the first pass those rows are gone and
+  the daily row is the only record of them, so anything that put a fresh hourly
+  row on an old date - a quarantined batch replayed, a spool recovered after an
+  outage, seeded history - caused the day's totals to be replaced by whatever
+  had just arrived.
+- **Campaigns were lost behind a full-page cache.** The beacon has always
+  received the UTM parameters and never read them, so on a cached page, where
+  the beacon is the only record of the visit, every campaign-tagged landing was
+  filed as Direct. The documentation said the opposite. The missing referrer
+  stays missing and stays deliberate: a browser-supplied referrer is forgeable,
+  a tag in the URL the visitor actually requested is not.
+- **The beacon and the server disagreed about what a path is.** The server
+  records Craft's own path, which is decoded, trimmed of trailing slashes and
+  stripped of the site's base path and any pagination segment. The beacon sent
+  the raw one. One page became two rows - the view on one, its dwell and scroll
+  on the other - and on a subfolder install, or a multi-site setup that
+  separates its sites by path, every page split that way.
+- **A campaign behind an entity-encoded link kept only its source.** The path
+  normaliser had been hardened for `&amp;` separators and the campaign parser
+  had not.
+- **A page row created without an element never gained one.** The element was
+  written on insert only, so a row first created by a beacon or by the
+  entrance and exit write stayed unattached for good and never appeared in the
+  content reports. It can now be filled in later, and a resolved element is
+  never overwritten.
+- **A template with no closing `</body>` tag was counted by nobody.** Craft
+  places the tracker before that tag, and where there is none - an HTMX
+  partial, a layout whose closing tag comes from a variable - there was no
+  tag, no beacon, and a missing nonce that the server read as a cache hit. The
+  two cases are now told apart.
+- **The drain could double-count a session.** Nothing prevented two drains
+  running at once, and the automatic drain only throttles itself for a minute,
+  so a pass that outlives its own throttle or a cron entry overlapping one was
+  enough for both to close the same session and count it, its bounce and its
+  entry and exit twice.
+- **A busy site could count a pageview twice.** The nonce that tells the
+  beacon the server already counted a view was recorded after the write rather
+  than before, and the tracker is deferred, so a beacon arriving in that window
+  found nothing to claim. The window was widest exactly when the site was
+  busiest.
+- **Salt rotation split visitors every time it ran.** Each worker that noticed
+  the window had elapsed generated its own salt and wrote it over the others,
+  then hashed its own request with the one it had made.
+- **Exports could not be read back by PHP.** A value ending in a backslash - a
+  path, which anybody can request - was written so that a reader honouring
+  backslash escapes swallowed every remaining row into one cell. Spreadsheets
+  were unaffected; PHP's own reader was not.
+- **The unique-member retention cutoff was read in UTC** against dates written
+  in the site's timezone, putting it up to a day out in either direction.
+- **Two dashboard widgets ignored per-site permissions**, and the Privacy
+  screen's counts covered every site. A user restricted to one site could see
+  another site's figures in both places.
+
+### Changed
+
+- **Every dimension a caller can influence is now capped.** Browsers and
+  operating systems are parsed from the User-Agent, the five campaign columns
+  come from the query string, and site-search terms, event names, outbound
+  targets and crawler names all arrive from outside. None of them were capped,
+  so each distinct value was a rollup row and a dimension row. The cap is also
+  applied before the dimension row is created rather than after, which is what
+  it was for.
+- **The garbage collector no longer falls over on a large table.** The sweep
+  that removes unreferenced dimension values loaded every referenced id in the
+  plugin into memory at once, so it failed on exactly the cardinality spike it
+  exists to clean up after - and it runs on ordinary web requests as well as
+  from cron. Retention deletes are batched for the same reason.
+- **The drain reads a spool in slices.** A backlog large enough to matter was
+  also large enough to exhaust memory, and the resulting failure counted
+  against the batch's retries until it was quarantined and never counted at
+  all. Each slice commits on its own, so an interrupted run keeps its progress.
+- **Reports are considerably faster.** The trend chart asked the database once
+  per day in the range, which is 366 queries for a twelve-month chart on every
+  dashboard load; it now asks once. Unique counts no longer load sketch data
+  the chosen driver does not read, the Redis and exact drivers no longer build
+  a single statement per row of the range, and any range that ended before
+  today is remembered for an hour. Today is never cached.
+- **The Privacy screen says what uninstalling will destroy.** Uninstalling
+  drops every table, which is right and has not changed, but one of them is the
+  consent log - the evidence that processing already carried out was lawful,
+  and the one thing erasing a visitor deliberately leaves behind.
+
 ## 2.1.0 - 2026-08-07
 
 ### Added
