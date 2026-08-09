@@ -113,10 +113,18 @@ class Compactor extends Component
         $transaction = $db->beginTransaction();
 
         try {
+            // Every row for the day, the already-compacted one included. The
+            // daily row is not a duplicate to be overwritten: once a day has
+            // compacted, its hourly rows are gone and that row is the only
+            // record of them. Rebuilding the day from the hourly rows alone
+            // was therefore correct exactly once, on the first pass - and any
+            // hourly row arriving afterwards (a quarantined batch replayed
+            // past the hourly window, a spool recovered after an outage,
+            // seeded history) brought the day back into range and silently
+            // replaced a month of traffic with whatever had just turned up.
             $rows = (new Query())
                 ->from($table)
                 ->where(['siteId' => $siteId, 'date' => $date])
-                ->andWhere(['!=', 'hour', self::DAILY_HOUR])
                 ->all($db);
 
             /** @var array<string,array<string,mixed>> $merged */
@@ -125,10 +133,12 @@ class Compactor extends Component
             $sketches = [];
             /** @var array<string,array<int,array<string,mixed>>> $grouped */
             $grouped = [];
+            /** @var array<string,array<int,array<string,mixed>>> $elementRows */
+            $elementRows = [];
 
             foreach ($rows as $row) {
                 $key = implode('|', array_map(static fn($c) => (string)$row[$c], $groupColumns));
-                $grouped[$key][] = $row;
+                $isDaily = (int)$row['hour'] === self::DAILY_HOUR;
 
                 if (!isset($merged[$key])) {
                     $merged[$key] = array_intersect_key($row, array_flip($groupColumns));
@@ -136,6 +146,21 @@ class Compactor extends Component
                         $merged[$key][$column] = 0;
                     }
                     $sketches[$key] = [];
+                    $grouped[$key] = [];
+                    $elementRows[$key] = [];
+                }
+
+                if ($isDaily) {
+                    // Ahead of the hourly rows, so an element this day already
+                    // resolved is not lost to a late row that never knew one.
+                    array_unshift($elementRows[$key], $row);
+                } else {
+                    // Only the hourly rows: these drive the driver-counter
+                    // fold below, and a scope at `hour = -1` is the daily
+                    // counter itself - folding it into itself and then
+                    // discarding it would throw away what was just merged.
+                    $grouped[$key][] = $row;
+                    $elementRows[$key][] = $row;
                 }
 
                 foreach ($counterColumns as $column) {
@@ -152,9 +177,7 @@ class Compactor extends Component
                 }
             }
 
-            // The daily rows may already exist from an interrupted pass, so
-            // replace rather than upsert-add: the hourly rows are the whole
-            // truth for this day.
+            // Now safe to replace: the day's existing total is inside $merged.
             $db->createCommand()->delete($table, [
                 'siteId' => $siteId,
                 'date' => $date,
@@ -165,7 +188,7 @@ class Compactor extends Component
                 $row['hour'] = self::DAILY_HOUR;
 
                 if ($table === Table::PAGES_ROLLUP) {
-                    $row['elementId'] = self::elementIdFor($grouped[$key]);
+                    $row['elementId'] = self::elementIdFor($elementRows[$key]);
                 }
 
                 if ($hasSketch) {
