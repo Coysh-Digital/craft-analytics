@@ -118,6 +118,20 @@ php craft craft-analytics/privacy/document --to=./privacy</pre>
         </div>
     </div>
 
+    {% if counts.consentGrants > 0 or counts.consentDenials > 0 %}
+        <div class="ca-card">
+            <div class="ca-card-head">
+                <h2 class="ca-card-title">{{ 'Before you uninstall'|t('craft-analytics') }}</h2>
+            </div>
+            <div class="ca-card-body">
+                <p class="ca-muted" style="margin-bottom: 12px">
+                    {{ 'Uninstalling this plugin drops every one of its tables, and that includes the consent log - the record of who agreed to what, and when. It is the evidence that processing you have already carried out was lawful, which is why erasing a visitor deliberately leaves it behind. Export it first if you may need it.'|t('craft-analytics') }}
+                </p>
+                <pre class="ca-code">php craft craft-analytics/privacy/document --to=./privacy</pre>
+            </div>
+        </div>
+    {% endif %}
+
     <p class="ca-footnote">
         {{ 'This panel describes what your configuration permits, not what happens to have occurred. It is not legal advice.'|t('craft-analytics') }}
     </p>

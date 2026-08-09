@@ -5,6 +5,7 @@ namespace coyshdigital\craftanalytics\controllers;
 use coyshdigital\craftanalytics\assets\ChartsAsset;
 use coyshdigital\craftanalytics\assets\CpAsset;
 use coyshdigital\craftanalytics\models\DateRange;
+use coyshdigital\craftanalytics\helpers\SiteAccess;
 use coyshdigital\craftanalytics\Plugin;
 use coyshdigital\craftanalytics\services\StatsService;
 use Craft;
@@ -70,17 +71,9 @@ abstract class BaseCpController extends Controller
      */
     protected function allowedSites(): array
     {
-        $user = Craft::$app->getUser();
-        $sites = Craft::$app->getSites()->getAllSites();
-
-        if ($user->checkPermission(Plugin::PERMISSION_VIEW_ALL_SITES)) {
-            return array_values($sites);
-        }
-
-        return array_values(array_filter(
-            $sites,
-            static fn(Site $site) => $user->checkPermission('editSite:' . $site->uid),
-        ));
+        // Shared with the dashboard widgets, which used to check the view
+        // permission and then take whatever site Craft considered current.
+        return SiteAccess::allowed();
     }
 
     /**

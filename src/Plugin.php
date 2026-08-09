@@ -155,6 +155,44 @@ class Plugin extends BasePlugin
         $this->attachEventHandlers();
     }
 
+    /**
+     * Says what is about to be destroyed, in the log, before it is.
+     *
+     * Uninstalling drops every table this plugin owns. That is the right
+     * behaviour and it is not changing here - a plugin that leaves tables
+     * behind is worse - but one of those tables is the consent log, which is
+     * the evidence that processing already carried out was lawful. Erasing a
+     * visitor deliberately leaves it in place; uninstalling takes it without
+     * asking.
+     *
+     * A log line is not consent to lose it. It is a record that it happened,
+     * and a number to compare against a backup, for the case where somebody
+     * uninstalls to reinstall and finds out afterwards. The Privacy screen
+     * carries the warning where it can actually be read in time.
+     */
+    protected function beforeUninstall(): void
+    {
+        try {
+            $counts = $this->getPrivacy()->counts();
+        } catch (\Throwable) {
+            // Nothing to report if the tables have already gone.
+            return;
+        }
+
+        if ($counts['consentGrants'] === 0 && $counts['consentDenials'] === 0) {
+            return;
+        }
+
+        Craft::warning(sprintf(
+            'craft-analytics is being uninstalled, which drops its consent log: %d grants and %d denials, '
+            . 'covering %d consented visitors. That record is the evidence the processing was lawful. '
+            . 'If it is needed, restore it from a backup taken before this point.',
+            $counts['consentGrants'],
+            $counts['consentDenials'],
+            $counts['consentedVisitors'],
+        ), __METHOD__);
+    }
+
     public function getDimensions(): DimensionsService
     {
         /** @var DimensionsService */

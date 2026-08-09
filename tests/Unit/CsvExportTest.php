@@ -57,3 +57,71 @@ test('the header row is written from the first row keys', function() {
 test('no rows means no header and no file content', function() {
     expect(Csv::encode([]))->toBe('');
 });
+
+/**
+ * A trailing backslash used to swallow the rest of the file.
+ *
+ * fputcsv()'s default escape character is a backslash. Given a value ending
+ * in one it encloses the field without doubling it, so `/downloads\` was
+ * written as "/downloads\". A strict RFC 4180 reader copes, because a
+ * backslash means nothing to it - but a reader that honours backslash escapes
+ * takes that closing quote as escaped and keeps consuming, collapsing every
+ * remaining row into one cell. PHP's own fgetcsv() is in the second group by
+ * default, so the export could not be read back by the language that wrote it.
+ *
+ * Reachable the same way the formula case is: the beacon accepts any path
+ * starting with a slash and rejects only newlines and `://`.
+ */
+test('a path ending in a backslash does not swallow the rows after it', function() {
+    $csv = Csv::encode([
+        ['path' => '/downloads\\', 'views' => 7],
+        ['path' => '/pricing', 'views' => 9],
+    ]);
+
+    // Read the way PHP reads by default, which is the case that broke.
+    $rows = readCsv($csv, '\\');
+
+    expect($rows)->toHaveCount(3)
+        ->and($rows[1][0])->toBe('/downloads\\')
+        ->and($rows[1][1])->toBe('7')
+        // The row after it survived rather than being eaten by the one before.
+        ->and($rows[2][0])->toBe('/pricing')
+        ->and($rows[2][1])->toBe('9');
+});
+
+test('a spreadsheet reads the same file the same way', function() {
+    $csv = Csv::encode([
+        ['path' => '/downloads\\', 'views' => 7],
+        ['path' => '/pricing', 'views' => 9],
+    ]);
+
+    // No escape character: RFC 4180, which is what Excel and Sheets do.
+    $rows = readCsv($csv);
+
+    expect($rows)->toHaveCount(3)
+        ->and($rows[1][0])->toBe('/downloads\\')
+        ->and($rows[2][0])->toBe('/pricing');
+});
+
+test('a quote inside a value is still escaped the way a spreadsheet expects', function() {
+    $csv = Csv::encode([['path' => '/say/"hello"', 'views' => 1]]);
+    $rows = readCsv($csv);
+
+    expect($rows[1][0])->toBe('/say/"hello"')
+        ->and($rows[1][1])->toBe('1');
+});
+
+/**
+ * Reads a CSV back, with the escape character named rather than defaulted -
+ * PHP is in the middle of changing that default, and which one is in force is
+ * the entire subject of the tests above.
+ *
+ * @return array<int,array<int,string|null>>
+ */
+function readCsv(string $csv, string $escape = ''): array
+{
+    return array_map(
+        static fn(string $line): array => str_getcsv($line, ',', '"', $escape),
+        array_values(array_filter(explode("\n", trim($csv)))),
+    );
+}

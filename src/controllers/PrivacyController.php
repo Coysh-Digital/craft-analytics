@@ -3,6 +3,7 @@
 namespace coyshdigital\craftanalytics\controllers;
 
 use coyshdigital\craftanalytics\Plugin;
+use craft\models\Site;
 use yii\web\Response;
 
 /**
@@ -24,7 +25,12 @@ class PrivacyController extends BaseCpController
                 'showRanges' => false,
                 'canExport' => false,
                 'posture' => $plugin->getPrivacy()->posture(),
-                'counts' => $plugin->getPrivacy()->counts(),
+                // Only the sites this viewer may see, like every other figure
+                // on every other screen.
+                'counts' => $plugin->getPrivacy()->counts(array_values(array_filter(
+                    array_map(static fn(Site $allowed): ?int => $allowed->id, $this->allowedSites()),
+                    static fn(?int $id): bool => $id !== null,
+                ))),
                 'settings' => $plugin->getSettings(),
                 'isPro' => $plugin->is(Plugin::EDITION_PRO),
             ],
