@@ -184,22 +184,29 @@ test('compaction is idempotent', function() {
         ->toBe(Hll::deserialize(blobOf($first['uniques']))->count());
 });
 
-test('an interrupted compaction is safe to re-run', function() {
+test('a daily row beside hourly rows is history to be added to, not stale state', function() {
     $old = '2026-06-01';
 
-    // A daily row already exists (a previous pass got that far), and the
-    // hourly rows it came from are still present.
-    writeHourlyPage($old, 9, 10, range(1, 50));
+    // This test used to assert the opposite: that the daily row was the
+    // leftover of a pass that got half way, and the hourly rows were the
+    // whole truth. That state cannot happen. compactDay() deletes the daily
+    // row, inserts the merged one and deletes the hourly rows inside a single
+    // transaction, so a pass either lands completely or not at all - and
+    // nothing else in the plugin ever writes hour = -1, because the ingest
+    // path only ever produces hours 0-23.
+    //
+    // So a daily row sitting beside hourly rows means one thing only: the day
+    // compacted, and more traffic for it arrived afterwards. Treating that
+    // daily row as disposable is what silently deleted the day's history.
     writeHourlyPage($old, Compactor::DAILY_HOUR, 999, range(1, 50));
+    writeHourlyPage($old, 9, 10, range(1, 50));
 
     $this->compactor->run(mktime(12, 0, 0, 7, 16, 2026));
 
     $rows = pageRows();
 
-    // The hourly rows are the truth; the stale daily row is replaced, not
-    // added to — 10, not 1,009.
     expect($rows)->toHaveCount(1)
-        ->and((int)$rows[0]['views'])->toBe(10);
+        ->and((int)$rows[0]['views'])->toBe(1009);
 });
 
 test('sessions rollups compact too', function() {
@@ -373,4 +380,71 @@ test('a page with no element at all still compacts', function() {
     expect($rows)->toHaveCount(1)
         ->and((int)$rows[0]['views'])->toBe(7)
         ->and($rows[0]['elementId'])->toBeNull();
+});
+
+/**
+ * A day can be compacted more than once, and the second pass must add to the
+ * first rather than replace it.
+ *
+ * Once a day has compacted, its hourly rows are gone and the daily row is the
+ * only record of them. Rebuilding the day from the hourly rows alone was
+ * therefore right exactly once. Anything that puts a fresh hourly row on an
+ * old date afterwards - a quarantined batch replayed past the hourly window,
+ * a spool file recovered after an outage, seeded history - brought the day
+ * back into range and silently threw the existing total away.
+ */
+test('a late hourly row adds to an already-compacted day instead of replacing it', function() {
+    $old = '2026-06-01';
+    $now = mktime(12, 0, 0, 7, 16, 2026);
+
+    foreach ([9, 10, 11] as $hour) {
+        writeHourlyPage($old, $hour, 100, range(1, 100));
+    }
+
+    $this->compactor->run($now);
+
+    $afterFirst = pageRows();
+    expect($afterFirst)->toHaveCount(1)
+        ->and((int)$afterFirst[0]['views'])->toBe(300);
+
+    // The batch that was stuck in quarantine finally lands, on a date that
+    // compacted weeks ago.
+    writeHourlyPage($old, 14, 40, range(101, 130));
+
+    $this->compactor->run($now);
+
+    $rows = pageRows();
+    $sketch = Hll::deserialize(blobOf($rows[0]['uniques']));
+
+    expect($rows)->toHaveCount(1)
+        ->and((int)$rows[0]['hour'])->toBe(Compactor::DAILY_HOUR)
+        // 300 + 40, not the 40 that arrived last.
+        ->and((int)$rows[0]['views'])->toBe(340)
+        ->and((int)$rows[0]['entrances'])->toBe(4)
+        // The union of both passes: 100 people plus 30 more, not 30.
+        ->and($sketch->count())->toBeGreaterThan(120)
+        ->and($sketch->count())->toBeLessThan(140);
+});
+
+test('an element resolved before compaction survives a later pass that does not know it', function() {
+    $old = '2026-06-01';
+    $now = mktime(12, 0, 0, 7, 16, 2026);
+
+    writeHourlyPage($old, 9, 10, [1], pathDimId: 1, elementId: 42);
+
+    $this->compactor->run($now);
+
+    // A late row for the same path that never resolved an element: the path
+    // stopped resolving to an entry, or the beacon recorded it and beacons
+    // carry no element.
+    writeHourlyPage($old, 15, 5, [2], pathDimId: 1, elementId: null);
+
+    $this->compactor->run($now);
+
+    $rows = pageRows();
+
+    expect($rows)->toHaveCount(1)
+        ->and((int)$rows[0]['views'])->toBe(15)
+        // Still joinable to the Content reports.
+        ->and((int)$rows[0]['elementId'])->toBe(42);
 });
