@@ -30,7 +30,14 @@ use yii\db\Query;
  * *is* the junk. The docs say this plainly rather than implying a ranking
  * that isn't there.
  *
- * Browsers, OSes and channels are naturally bounded and are not capped.
+ * Channels are a fixed list and are not capped. Countries and regions come
+ * from the geo database rather than from the request, so they are bounded by
+ * that. Everything else a caller can influence - the path, the referrer host,
+ * the User-Agent that becomes a browser and an OS, the five campaign columns,
+ * a site-search term, an event name, an outbound target, a crawler name - is
+ * capped, because "naturally bounded" describes real browsers and real
+ * campaigns and says nothing about a caller sending a different string every
+ * time.
  */
 class DimensionCapper extends Component
 {
@@ -47,6 +54,32 @@ class DimensionCapper extends Component
         // values — an undeclared value list means the site's own code decides,
         // and code with a bug in it can decide a great many times.
         DimensionType::Segment->value => [Table::SEGMENTS_ROLLUP, 'segmentDimId'],
+        // Parsed out of the User-Agent header, which is a free-text field the
+        // client writes. "Naturally bounded" is true of real browsers and
+        // says nothing about a caller sending a different string every time:
+        // each distinct one was a devices_rollup row and up to two dimension
+        // rows.
+        DimensionType::Browser->value => [Table::DEVICES_ROLLUP, 'browserDimId'],
+        DimensionType::Os->value => [Table::DEVICES_ROLLUP, 'osDimId'],
+        // Five uncapped columns in one unique key, every one of them read
+        // from the query string. `?utm_source=<random>` on any URL was a new
+        // campaigns_rollup row per distinct tuple per day.
+        DimensionType::CampaignSource->value => [Table::CAMPAIGNS_ROLLUP, 'sourceDimId'],
+        DimensionType::CampaignMedium->value => [Table::CAMPAIGNS_ROLLUP, 'mediumDimId'],
+        DimensionType::CampaignName->value => [Table::CAMPAIGNS_ROLLUP, 'campaignDimId'],
+        DimensionType::CampaignTerm->value => [Table::CAMPAIGNS_ROLLUP, 'termDimId'],
+        DimensionType::CampaignContent->value => [Table::CAMPAIGNS_ROLLUP, 'contentDimId'],
+        // Free text a visitor typed, and the schema's own note on this table
+        // is that people search their own name and email address.
+        DimensionType::SearchTerm->value => [Table::SEARCH_ROLLUP, 'termDimId'],
+        // Straight off the beacon, which anyone can post to.
+        DimensionType::EventName->value => [Table::EVENTS_ROLLUP, 'eventNameDimId'],
+        DimensionType::OutboundHost->value => [Table::OUTBOUND_ROLLUP, 'targetHostDimId'],
+        DimensionType::OutboundUrl->value => [Table::OUTBOUND_ROLLUP, 'targetDimId'],
+        // The crawler name comes from the User-Agent too. DbRollupSink said
+        // in as many words that this one was "capped like any other
+        // dimension" while it was not in this list at all.
+        DimensionType::Crawler->value => [Table::CRAWLERS_ROLLUP, 'crawlerDimId'],
     ];
 
     public ?Connection $db = null;
@@ -69,19 +102,31 @@ class DimensionCapper extends Component
             return $this->dimensions()->getOrCreateId($type, $value);
         }
 
-        $dimId = $this->dimensions()->getOrCreateId($type, $value);
         $key = $siteId . '|' . $date . '|' . $type->value;
         $admitted = $this->admitted[$key] ??= $this->loadAdmitted($siteId, $date, $type);
 
+        // Looked up, not created. Creating the row first and checking the cap
+        // afterwards meant the cap bounded the rollups and nothing else: a
+        // flood of one-off values folded into `__other__` where it was
+        // counted, and still left one dimensions row per distinct value
+        // behind - which is the traffic-driven growth this class exists to
+        // prevent, moved one table along.
+        $dimId = $this->dimensions()->getId($type, $value);
+
         // Already counted today: it stays individually tracked for the rest
         // of the day, cap or no cap.
-        if (isset($admitted[$dimId])) {
+        if ($dimId !== null && isset($admitted[$dimId])) {
             return $dimId;
         }
 
         if (count($admitted) >= $this->settings()->dimensionCap) {
             return $this->otherId($type);
         }
+
+        // Inside the cap, so this value earns a row of its own. Known from an
+        // earlier day but not yet seen today still costs one of today's
+        // places, as it always did.
+        $dimId ??= $this->dimensions()->getOrCreateId($type, $value);
 
         $this->admitted[$key][$dimId] = true;
 

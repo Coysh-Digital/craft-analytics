@@ -28,6 +28,12 @@ class GcService extends Component
     /** Unique-counter override, handed to the compactor. Set in tests. */
     public ?UniqueCounterInterface $counter = null;
 
+    /** Rows removed per statement when expiring aged-out data. */
+    private const DELETE_CHUNK = 5000;
+
+    /** Dimension rows examined per pass when hunting for orphans. */
+    private const ORPHAN_CHUNK = 1000;
+
     /**
      * @return array<string,int> what was done, for the console command
      */
@@ -100,12 +106,45 @@ class GcService extends Component
         $deleted = 0;
 
         foreach (SchemaBuilder::expiringRollups() as $table) {
-            $deleted += $this->db()->createCommand()
-                ->delete($table, ['<', 'date', $cutoff])
-                ->execute();
+            $deleted += $this->deleteInBatches($table, ['<', 'date', $cutoff]);
         }
 
         return $deleted;
+    }
+
+    /**
+     * Deletes matching rows a batch at a time.
+     *
+     * The first run after a retention period elapses is the big one - on a
+     * wide table like page sources that is every row of every day that has
+     * just aged out, and doing it in one statement is a long transaction
+     * holding locks on a table the drain is trying to write to. Batching
+     * gives the same result in slices each of which commits on its own.
+     *
+     * Selected by primary key rather than deleted with a LIMIT, because
+     * `DELETE ... LIMIT` is MySQL-only and this has to work on Postgres too.
+     *
+     * @param array<mixed> $condition
+     */
+    private function deleteInBatches(string $table, array $condition): int
+    {
+        $db = $this->db();
+        $deleted = 0;
+
+        while (true) {
+            $ids = (new Query())
+                ->select('id')
+                ->from($table)
+                ->where($condition)
+                ->limit(self::DELETE_CHUNK)
+                ->column($db);
+
+            if ($ids === []) {
+                return $deleted;
+            }
+
+            $deleted += $db->createCommand()->delete($table, ['id' => $ids])->execute();
+        }
     }
 
     /**
@@ -118,7 +157,15 @@ class GcService extends Component
     private function deleteExpiredUniqueMembers(int $now): int
     {
         $interval = $this->settings()->saltRotationInterval;
-        $cutoff = gmdate('Y-m-d', $now - $interval * 2);
+
+        // Site time, not UTC. The `date` column is written in the site's
+        // timezone like every other date in the schema, so comparing it
+        // against gmdate() put the cutoff up to a day out either way -
+        // keeping a day longer than intended west of UTC, and dropping a day
+        // early east of it.
+        $cutoff = (new \DateTimeImmutable('@' . ($now - $interval * 2)))
+            ->setTimezone(new \DateTimeZone(Craft::$app->getTimeZone()))
+            ->format('Y-m-d');
 
         return $this->db()->createCommand()
             ->delete(Table::UNIQUE_MEMBERS, ['<', 'date', $cutoff])
@@ -142,30 +189,66 @@ class GcService extends Component
      */
     private function deleteOrphanedDimensions(): int
     {
-        $referenced = [];
+        $db = $this->db();
+        $deleted = 0;
+        $lastId = 0;
 
-        // Every dimension column in the plugin, from the one list that the
-        // schema itself owns. Hardcoding a subset here is how every Pro
-        // report's dimensions got deleted the first time this ran.
-        foreach (SchemaBuilder::dimensionReferences() as [$table, $column]) {
-            foreach ((new Query())->select($column)->distinct()->from($table)->column($this->db()) as $id) {
-                $referenced[(int)$id] = true;
+        // Walked in chunks by id rather than resolved in one pass. The
+        // previous version loaded every referenced id in the plugin into a
+        // PHP array, built `NOT IN (<all of them>)`, and then deleted with
+        // `IN (<every orphan>)`. All three grow with the table, so the method
+        // fell over - out of memory, or past max_allowed_packet - on exactly
+        // the cardinality spike it exists to clean up after. It runs on
+        // Craft's Gc event as well as the console command, so that failure
+        // lands on somebody's web request.
+        //
+        // Deleting only ids at or below the chunk's high-water mark keeps the
+        // keyset walk correct while rows are disappearing underneath it.
+        while (true) {
+            $candidates = (new Query())
+                ->select('id')
+                ->from(Table::DIMENSIONS)
+                ->where(['>', 'id', $lastId])
+                ->orderBy(['id' => SORT_ASC])
+                ->limit(self::ORPHAN_CHUNK)
+                ->column($db);
+
+            if ($candidates === []) {
+                break;
+            }
+
+            $lastId = (int)end($candidates);
+            /** @var array<int,true> $orphans */
+            $orphans = array_fill_keys(array_map('intval', $candidates), true);
+
+            // Every dimension column in the plugin, from the one list that the
+            // schema itself owns. Hardcoding a subset here is how every Pro
+            // report's dimensions got deleted the first time this ran.
+            foreach (SchemaBuilder::dimensionReferences() as [$table, $column]) {
+                if ($orphans === []) {
+                    break;
+                }
+
+                $referenced = (new Query())
+                    ->select($column)
+                    ->distinct()
+                    ->from($table)
+                    ->where([$column => array_keys($orphans)])
+                    ->column($db);
+
+                foreach ($referenced as $id) {
+                    unset($orphans[(int)$id]);
+                }
+            }
+
+            if ($orphans !== []) {
+                $deleted += $db->createCommand()
+                    ->delete(Table::DIMENSIONS, ['id' => array_keys($orphans)])
+                    ->execute();
             }
         }
 
-        $orphans = (new Query())
-            ->select('id')
-            ->from(Table::DIMENSIONS)
-            ->where(['not in', 'id', array_keys($referenced) ?: [0]])
-            ->column($this->db());
-
-        if ($orphans === []) {
-            return 0;
-        }
-
-        return $this->db()->createCommand()
-            ->delete(Table::DIMENSIONS, ['id' => $orphans])
-            ->execute();
+        return $deleted;
     }
 
     private function retentionCutoff(int $now): string
