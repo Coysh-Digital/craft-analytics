@@ -285,6 +285,100 @@ class CaptureService extends Component
     }
 
     /**
+     * Turns a browser's `location.pathname` into the path Craft's own
+     * getPathInfo() would have produced for the same URL.
+     *
+     * The server records getPathInfo(), which is not the raw path: Craft
+     * decodes it, trims and collapses its slashes, removes the site's base
+     * path, and strips a path-style pagination segment. The beacon sends
+     * location.pathname, which has had none of that done to it.
+     *
+     * Left alone the two disagree, so in hybrid mode one page becomes two
+     * rows - the view on one, its dwell and scroll on the other - and on a
+     * subfolder install, or a multi-site setup that separates its sites by
+     * path, every page splits that way.
+     *
+     * This runs on the beacon's path only, never on the server's. Decoding
+     * and base-path stripping are not idempotent: a URL containing `%2520`
+     * decodes to `%20` once and to a space twice, and a site based at `/de`
+     * serving a page at `/de/de/x` would lose the second segment. The server
+     * has already had both done to it exactly once, so doing them again is
+     * how the two would come apart the other way.
+     *
+     * @param string|null $basePath override, for tests; resolved from the
+     *                              current site otherwise
+     * @param string|null $pageTrigger override, for tests
+     */
+    public function beaconPathInfo(string $pathname, ?string $basePath = null, ?string $pageTrigger = null): string
+    {
+        $path = self::trimPath(rawurldecode($pathname));
+        $basePath ??= self::siteBasePath();
+
+        if ($basePath !== '' && str_starts_with($path . '/', $basePath . '/')) {
+            $path = ltrim(substr($path, strlen($basePath)), '/');
+        }
+
+        $pageTrigger ??= self::pageTrigger();
+
+        // Query-string pagination stays in the query, where both halves of
+        // the pipeline already agree about it.
+        if ($path !== '' && $pageTrigger !== '' && !str_starts_with($pageTrigger, '?')) {
+            $quoted = preg_quote($pageTrigger, '/');
+
+            // Matched against the whole path, not the last segment, so
+            // "/page/2"-style triggers are handled the way Craft handles them.
+            if (preg_match("/^(?:(.*)\/)?$quoted(\d+)$/", $path, $match) === 1) {
+                $path = $match[1];
+            }
+        }
+
+        return $path;
+    }
+
+    /**
+     * Leading and trailing slashes off, repeated slashes collapsed - Craft's
+     * own path normalisation, which getPathInfo() has already applied.
+     */
+    private static function trimPath(string $path): string
+    {
+        return (string)preg_replace('/\/\/+/', '/', trim($path, '/'));
+    }
+
+    /**
+     * The current site's base path, which Craft removes from getPathInfo()
+     * and the browser does not.
+     *
+     * Empty when there is nothing to remove, or when this is running somewhere
+     * without a resolved site - a missing prefix is a no-op, and guessing one
+     * would be worse than leaving the path alone.
+     */
+    private static function siteBasePath(): string
+    {
+        try {
+            $baseUrl = Craft::$app->getSites()->getCurrentSite()->getBaseUrl();
+        } catch (\Throwable) {
+            return '';
+        }
+
+        if ($baseUrl === null) {
+            return '';
+        }
+
+        $basePath = parse_url($baseUrl, PHP_URL_PATH);
+
+        return is_string($basePath) ? self::trimPath($basePath) : '';
+    }
+
+    private static function pageTrigger(): string
+    {
+        try {
+            return Craft::$app->getConfig()->getGeneral()->getPageTrigger();
+        } catch (\Throwable) {
+            return 'p';
+        }
+    }
+
+    /**
      * Strips excluded query params, keeping the rest in a stable order so the
      * same page doesn't fragment into several path dimensions.
      *

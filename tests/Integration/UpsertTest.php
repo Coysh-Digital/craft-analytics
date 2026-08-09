@@ -28,6 +28,9 @@ beforeEach(function() {
         'pathDimId' => $migration->integer()->notNull(),
         'views' => $migration->integer()->notNull()->defaultValue(0),
         'bounces' => $migration->integer()->notNull()->defaultValue(0),
+        // Nullable and descriptive rather than counted: the shape that
+        // fillIfNull exists for.
+        'elementId' => $migration->integer(),
     ]);
     $migration->createIndex(null, UPSERT_TEST_TABLE, ['siteId', 'date', 'hour', 'pathDimId'], true);
 });
@@ -102,4 +105,36 @@ test('batch upsert accumulates within one call and is transactional', function()
         'SELECT COUNT(*) FROM ' . UPSERT_TEST_TABLE . ' WHERE ' . $db->quoteColumnName('siteId') . ' = 9'
     )->queryScalar();
     expect($site9)->toBe(0);
+});
+
+test('a fill-if-null column fills a null on an existing row', function() {
+    $db = TestDb::connection();
+    $keys = ['siteId' => 1, 'date' => '2026-07-16', 'hour' => 9, 'pathDimId' => 1];
+
+    // The row is created by something that has no element: a beacon on a
+    // cached page, or the entrance/exit write.
+    Upsert::counters($db, UPSERT_TEST_TABLE, $keys, ['views' => 1], [], ['elementId']);
+
+    expect(upsertTestRow()['elementId'])->toBeNull();
+
+    // A later server-rendered view knows the element.
+    Upsert::counters($db, UPSERT_TEST_TABLE, $keys, ['views' => 1], ['elementId' => 42], ['elementId']);
+
+    $row = upsertTestRow();
+
+    expect((int)$row['views'])->toBe(2)
+        ->and((int)$row['elementId'])->toBe(42);
+});
+
+test('a resolved element is never overwritten by a later row that has none', function() {
+    $db = TestDb::connection();
+    $keys = ['siteId' => 1, 'date' => '2026-07-16', 'hour' => 9, 'pathDimId' => 1];
+
+    Upsert::counters($db, UPSERT_TEST_TABLE, $keys, ['views' => 1], ['elementId' => 42], ['elementId']);
+    Upsert::counters($db, UPSERT_TEST_TABLE, $keys, ['views' => 1], [], ['elementId']);
+
+    $row = upsertTestRow();
+
+    expect((int)$row['views'])->toBe(2)
+        ->and((int)$row['elementId'])->toBe(42);
 });

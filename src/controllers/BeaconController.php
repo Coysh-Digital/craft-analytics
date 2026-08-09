@@ -4,6 +4,7 @@ namespace coyshdigital\craftanalytics\controllers;
 
 use coyshdigital\craftanalytics\helpers\RateLimit;
 use coyshdigital\craftanalytics\ingest\Hit;
+use coyshdigital\craftanalytics\models\Campaign;
 use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\Plugin;
 use Craft;
@@ -112,13 +113,19 @@ class BeaconController extends Controller
             && !$isEngagement
             && !$plugin->getNonces()->claim((string)$request->getBodyParam('n', ''), $visitorHash);
 
+        // The beacon sends one string of path-and-query. Split it so the same
+        // normalisation the server-side path gets is applied here, or a
+        // beacon's dwell time lands on a different row from the pageview it
+        // belongs to.
+        [$rawPath, $queryString] = self::splitPath($path);
+
         $plugin->getWriter()->write(new Hit(
             siteId: $site->id,
-            // The beacon sends one string of path-and-query; split it so the
-            // same normalisation the server-side path gets is applied here.
-            // Otherwise a beacon's dwell time lands on a *different* row from
-            // the pageview it belongs to.
-            path: $capture->normalizePath(...self::splitPath($path)),
+            // beaconPathInfo() first, because the browser's pathname is the
+            // raw one: still encoded, still carrying the site's base path and
+            // any pagination segment that Craft strips before the server ever
+            // sees it.
+            path: $capture->normalizePath($capture->beaconPathInfo($rawPath), $queryString),
             visitorHash: $visitorHash,
             sessionKey: $plugin->getIdentity()->sessionKey($visitorHash, $site->id),
             timestamp: time(),
@@ -126,6 +133,17 @@ class BeaconController extends Controller
             userAgent: $userAgent,
             acceptLanguage: (string)$request->getHeaders()->get('accept-language', ''),
             dwellMs: self::sanitizeDwell($request->getBodyParam('d')),
+            // Read from the beacon's own query string, which has carried the
+            // UTM tags all along - normalizePath() strips them a line above,
+            // and nothing here had picked them up first. Behind a full-page
+            // cache the beacon is the only record of the visit, so every
+            // campaign-tagged landing on a cached page was being filed as
+            // Direct. The referrer stays deliberately absent: a
+            // browser-supplied one is forgeable, which a UTM tag in the URL
+            // the visitor actually requested is not.
+            campaign: $settings->enableCampaigns
+                ? Campaign::fromQueryString($queryString)
+                : null,
             countView: $countView,
             kind: $kind,
             eventName: self::sanitizeEventName($request->getBodyParam('en')),

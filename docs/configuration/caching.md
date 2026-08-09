@@ -149,16 +149,41 @@ cache and still counts people who block scripts.
 
 ## Known edges
 
-Four cases worth knowing about:
+Some cases worth knowing about:
 
 **A cached page carries no referrer.** The referrer that feeds the Sources
 report is read from the request PHP handled; the beacon deliberately does not
 send one, because a value supplied by the browser is a value anyone can forge.
 So a session whose entry page came from the cache lands under **Direct** even
 if the visitor arrived from a search engine or another site. The higher your
-cache hit rate, the more of your traffic this applies to. Campaign tracking is
-unaffected - UTM parameters live in the URL, which the beacon does send - so if
-you rely on source data behind an aggressive cache, tag your inbound links.
+cache hit rate, the more of your traffic this applies to.
+
+Campaigns are the exception, and tagging your inbound links is the way to keep
+source data behind an aggressive cache: UTM parameters live in the URL the
+visitor actually requested, so the beacon sends them and they are read there.
+A forgeable referrer and a tag in the requested URL are not the same kind of
+evidence, which is why one is trusted and the other is not.
+
+Here is the whole picture for a page served from a cache:
+
+| What                          | Behind a full-page cache                    |
+| ----------------------------- | ------------------------------------------- |
+| Pageviews                     | Counted, by the beacon                      |
+| Sessions, bounce, duration    | Counted                                     |
+| Unique visitors               | Counted                                     |
+| Time on page, scroll depth    | Counted, by the engagement beacon           |
+| Campaigns (UTM)               | Counted - they travel in the URL            |
+| Referrer / Sources            | **Lost** - reported as Direct               |
+| Entry-type, section and author reports | **Reduced** - see below            |
+| Consented journeys (Pro)      | **Lost** - the beacon resolves no visitor   |
+
+The content reports depend on knowing which entry a path belongs to, and the
+beacon sends a path rather than an element. A page whose row is created by a
+beacon therefore starts out with no element attached. The next time PHP
+renders that same page in the same hour, the row is filled in - so on a site
+with any uncached traffic at all this corrects itself, and on a fully cached
+one those pages stay absent from the content breakdowns while still counting
+in every total.
 
 **A cached page needs JavaScript to be counted.** PHP knows when it built a
 page and when it only served a stored copy, and it counts the first and leaves

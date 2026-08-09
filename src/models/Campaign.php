@@ -48,6 +48,18 @@ final class Campaign
 
         parse_str($queryString, $params);
 
+        // A URL that was HTML-entity-encoded before being linked - sometimes
+        // more than once - arrives with its separators as `&amp;` rather than
+        // `&`, so parse_str reads every parameter after the first as
+        // `amp;utm_medium`, `amp;amp;utm_campaign` and so on. The path
+        // normaliser was hardened for this and this parser was not, so the
+        // campaign behind such a link lost everything but its source.
+        $decoded = [];
+        foreach ($params as $key => $value) {
+            $decoded[preg_replace('/^(?:amp;)+/', '', (string)$key)] = $value;
+        }
+        $params = $decoded;
+
         $source = self::clean($params['utm_source'] ?? null);
 
         // No source, no campaign. Everything else is a refinement of it.
