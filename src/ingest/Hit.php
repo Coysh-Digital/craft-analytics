@@ -96,6 +96,38 @@ final class Hit
      */
     public const KIND_CRAWLER = 'crawler';
 
+    /**
+     * The largest monetary value one event may claim, in either direction.
+     *
+     * The rollup columns that accumulate these are DECIMAL(14,2), and the
+     * beacon is an endpoint anyone can post to: an event "worth" 10^20 is not
+     * a sale, it is either garbage or an attempt to fail the drain with an
+     * out-of-range error. Every path a value enters by — the beacon, a
+     * server-side trackEvent() call, a spool line read back — clamps through
+     * clampEventValue(), so nothing wider than this ever reaches a column.
+     */
+    public const MAX_EVENT_VALUE = 1000000000.0;
+
+    /**
+     * A monetary value cut down to something the schema can always hold:
+     * non-numeric and non-finite become null, everything else is rounded to
+     * cents and clamped to ±MAX_EVENT_VALUE.
+     */
+    public static function clampEventValue(mixed $value): ?float
+    {
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        $number = (float)$value;
+
+        if (!is_finite($number)) {
+            return null;
+        }
+
+        return max(-self::MAX_EVENT_VALUE, min(self::MAX_EVENT_VALUE, round($number, 2)));
+    }
+
     /** Whether this is a pageview rather than a Pro interaction. */
     public function isPageview(): bool
     {
@@ -162,7 +194,10 @@ final class Hit
             region: (string)($data['rg'] ?? ''),
             kind: (string)($data['kd'] ?? self::KIND_VIEW),
             eventName: isset($data['en']) ? (string)$data['en'] : null,
-            eventValue: isset($data['ev']) ? (float)$data['ev'] : null,
+            // Clamped again on the way out of the spool: it is a file, and a
+            // hand-edited or corrupted line must not carry a value the
+            // rollup columns cannot hold.
+            eventValue: self::clampEventValue($data['ev'] ?? null),
             target: isset($data['tg']) ? (string)$data['tg'] : null,
             scrollBucket: isset($data['sb']) ? (int)$data['sb'] : null,
             segments: self::decodeSegments($data['sg'] ?? null),

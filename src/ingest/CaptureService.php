@@ -517,7 +517,10 @@ class CaptureService extends Component
             region: $hit->region,
             kind: Hit::KIND_EVENT,
             eventName: $name,
-            eventValue: $value,
+            // Same clamp the beacon applies: a Commerce order total or a
+            // site module's own number gets no more trust than a browser's,
+            // because both end up summed into the same DECIMAL(14,2).
+            eventValue: Hit::clampEventValue($value),
             segments: $hit->segments,
         );
 
