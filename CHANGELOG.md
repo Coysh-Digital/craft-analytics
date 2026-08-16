@@ -1,6 +1,6 @@
 # Release Notes for Craft Analytics
 
-## Unreleased
+## 2.2.1 - 2026-08-16
 
 ### Fixed
 
