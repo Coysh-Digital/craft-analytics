@@ -28,6 +28,8 @@ beforeEach(function() {
         'pathDimId' => $migration->integer()->notNull(),
         'views' => $migration->integer()->notNull()->defaultValue(0),
         'bounces' => $migration->integer()->notNull()->defaultValue(0),
+        // The shape sumValue and the goal/campaign money columns share.
+        'sumValue' => $migration->decimal(14, 2)->notNull()->defaultValue(0),
         // Nullable and descriptive rather than counted: the shape that
         // fillIfNull exists for.
         'elementId' => $migration->integer(),
@@ -137,4 +139,36 @@ test('a resolved element is never overwritten by a later row that has none', fun
 
     expect((int)$row['views'])->toBe(2)
         ->and((int)$row['elementId'])->toBe(42);
+});
+
+test('a capped counter saturates instead of overflowing its column', function() {
+    $db = TestDb::connection();
+    $keys = ['siteId' => 1, 'date' => '2026-07-16', 'hour' => 10, 'pathDimId' => 7];
+    $caps = ['sumValue' => Upsert::DECIMAL_14_2_MAX];
+
+    // Two writes that individually fit DECIMAL(14,2) but sum past it. Without
+    // the cap, a strict-mode database throws out-of-range here, the drain
+    // batch fails identically on every retry, and it is quarantined with its
+    // hits uncounted.
+    Upsert::counters($db, UPSERT_TEST_TABLE, $keys, ['views' => 1, 'sumValue' => 900000000000.00], caps: $caps);
+    Upsert::counters($db, UPSERT_TEST_TABLE, $keys, ['views' => 1, 'sumValue' => 900000000000.00], caps: $caps);
+
+    $row = upsertTestRow();
+
+    expect((float)$row['sumValue'])->toBe((float)Upsert::DECIMAL_14_2_MAX)
+        // The uncapped counters on the same row are untouched by the clamp.
+        ->and((int)$row['views'])->toBe(2);
+});
+
+test('a capped counter saturates at the negative bound too', function() {
+    $db = TestDb::connection();
+    $keys = ['siteId' => 1, 'date' => '2026-07-16', 'hour' => 11, 'pathDimId' => 7];
+    $caps = ['sumValue' => Upsert::DECIMAL_14_2_MAX];
+
+    // Refund-shaped abuse: event values may be negative, so the sum can walk
+    // off the bottom of the column as well as the top.
+    Upsert::counters($db, UPSERT_TEST_TABLE, $keys, ['views' => 1, 'sumValue' => -900000000000.00], caps: $caps);
+    Upsert::counters($db, UPSERT_TEST_TABLE, $keys, ['views' => 1, 'sumValue' => -900000000000.00], caps: $caps);
+
+    expect((float)upsertTestRow()['sumValue'])->toBe(-(float)Upsert::DECIMAL_14_2_MAX);
 });

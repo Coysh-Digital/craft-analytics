@@ -25,6 +25,15 @@ class DeviceParser extends Component
 
     private const MOBILE_MARKERS = ['mobile', 'iphone', 'ipod', 'android', 'phone', 'blackberry', 'opera mini'];
 
+    /**
+     * No real browser is anywhere near a four-digit major version. The value
+     * lands in a SMALLINT inside the devices rollup's unique key, and the
+     * User-Agent is a free-text field the client writes: a spoofed
+     * "Chrome/73469" must not be able to fail the whole drain batch with an
+     * out-of-range error, nor mint tens of thousands of distinct rollup rows.
+     */
+    private const MAX_MAJOR_VERSION = 999;
+
     private ?UserAgentParser $parser = null;
 
     /**
@@ -57,7 +66,11 @@ class DeviceParser extends Component
             return 0;
         }
 
-        return (int)explode('.', $version)[0];
+        $major = (int)explode('.', $version)[0];
+
+        // Implausible means unknown, not "the largest version we can store":
+        // clamping to the cap would invent a version nobody runs.
+        return $major >= 0 && $major <= self::MAX_MAJOR_VERSION ? $major : 0;
     }
 
     private static function deviceType(string $userAgent, ?string $platform): DeviceType

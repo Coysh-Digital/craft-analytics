@@ -1,6 +1,26 @@
 # Release Notes for Craft Analytics
 
-## 2.2.0 - 2026-08-09
+## Unreleased
+
+### Fixed
+
+- **A spoofed User-Agent version could quarantine a whole drain batch.** The
+  browser major version is stored in a `SMALLINT` inside the devices rollup's
+  unique key, and it was taken from the User-Agent unchecked — so a UA
+  claiming `Chrome/73469` overflowed the column, the batch failed identically
+  on every retry, and it was quarantined with every one of its hits uncounted.
+  Implausible versions (anything past three digits, or negative) now count as
+  version 0, "unknown", the same as a missing one.
+- **Accumulated money columns can no longer overflow.** Event values are
+  clamped at every boundary they cross — the beacon, server-side
+  `trackEvent()` calls (Commerce and Formie included), and the spool decoder —
+  and the rollup upserts that sum them (`sumValue`, goal and campaign value
+  and session credit) now saturate at their column's maximum instead of
+  throwing an out-of-range error that would quarantine the batch. Nightly
+  compaction clamps the same way, so a day of hourly rows can no longer sum
+  past what the daily row can hold and stall compaction for good.
+- **A goal's per-conversion value is now validated against what the schema can
+  store**, instead of failing at the database on save.
 
 > **Before you upgrade.** Three figures will visibly change, and none of the
 > changes is your traffic changing.

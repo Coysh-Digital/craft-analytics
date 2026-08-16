@@ -3,6 +3,7 @@
 namespace coyshdigital\craftanalytics\rollup;
 
 use coyshdigital\craftanalytics\db\Table;
+use coyshdigital\craftanalytics\db\Upsert;
 use coyshdigital\craftanalytics\models\Settings;
 use coyshdigital\craftanalytics\Plugin;
 use coyshdigital\craftanalytics\uniques\Hll;
@@ -170,6 +171,15 @@ class Compactor extends Component
                     $merged[$key][$column] += $decimalColumns[$column] ?? false
                         ? (float)$row[$column]
                         : (int)$row[$column];
+                }
+
+                // 24 hourly rows each within DECIMAL(14,2) can still sum past
+                // it, and this insert is inside the nightly GC: an
+                // out-of-range error here stops the day — and every day after
+                // it — from ever compacting. Saturate, as the upserts do.
+                foreach (array_keys($decimalColumns) as $column) {
+                    $max = (float)Upsert::DECIMAL_14_2_MAX;
+                    $merged[$key][$column] = max(-$max, min($max, $merged[$key][$column]));
                 }
 
                 if ($hasSketch) {

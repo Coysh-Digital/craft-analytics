@@ -15,6 +15,25 @@ use yii\db\Expression;
 final class Upsert
 {
     /**
+     * The largest magnitudes the rollups' decimal columns can hold, as SQL
+     * literals so no float formatting can distort them.
+     *
+     * These exist because accumulation has no natural ceiling: each addend
+     * can be individually valid and the running sum still walk off the end of
+     * its column, at which point a strict-mode database throws out-of-range,
+     * the drain batch fails identically on every retry, and it is quarantined
+     * with its hits uncounted. A counter capped here saturates instead —
+     * a pinned figure on one report row is a curiosity; a quarantined batch
+     * is every metric in it lost.
+     *
+     * The integer counters need no cap: they are bumped by 1 per hit against
+     * day- or hour-grained rows, so reaching 2^31 takes billions of requests
+     * on a single row within one day.
+     */
+    public const DECIMAL_14_2_MAX = '999999999999.99';
+    public const DECIMAL_12_4_MAX = '99999999.9999';
+
+    /**
      * Insert a row, or increment its counter columns if the unique key exists.
      *
      * @param array<string,mixed> $keys key columns (covered by a unique index)
@@ -22,6 +41,10 @@ final class Upsert
      * @param array<string,mixed> $extra columns written on insert only
      * @param string[] $fillIfNull $extra columns that may also fill an
      *                             existing row where the value is still null
+     * @param array<string,string> $caps counter columns whose accumulated
+     *                                   value saturates at ±cap (one of the
+     *                                   DECIMAL_* constants) instead of
+     *                                   overflowing the column
      */
     public static function counters(
         Connection $db,
@@ -30,10 +53,11 @@ final class Upsert
         array $counters,
         array $extra = [],
         array $fillIfNull = [],
+        array $caps = [],
     ): void {
         $update = [];
         foreach (array_keys($counters) as $column) {
-            $update[$column] = self::incrementExpression($db, $table, $column);
+            $update[$column] = self::incrementExpression($db, $table, $column, $caps[$column] ?? null);
         }
 
         foreach ($fillIfNull as $column) {
@@ -72,21 +96,33 @@ final class Upsert
     }
 
     /**
-     * Driver-appropriate "existing + incoming" expression for a counter column.
+     * Driver-appropriate "existing + incoming" expression for a counter
+     * column, saturating at ±$cap when one is given.
      */
-    private static function incrementExpression(Connection $db, string $table, string $column): Expression
-    {
+    private static function incrementExpression(
+        Connection $db,
+        string $table,
+        string $column,
+        ?string $cap = null,
+    ): Expression {
         $quotedColumn = $db->quoteColumnName($column);
 
         if ($db->getDriverName() === 'pgsql') {
             // In ON CONFLICT DO UPDATE, the existing row must be qualified with
             // the table name and the proposed row is EXCLUDED.
             $quotedTable = $db->quoteTableName($db->getSchema()->getRawTableName($table));
-
-            return new Expression("$quotedTable.$quotedColumn + EXCLUDED.$quotedColumn");
+            $sum = "$quotedTable.$quotedColumn + EXCLUDED.$quotedColumn";
+        } else {
+            $sum = "$quotedColumn + VALUES($quotedColumn)";
         }
 
-        return new Expression("$quotedColumn + VALUES($quotedColumn)");
+        if ($cap !== null) {
+            // LEAST/GREATEST exist on both supported drivers. The cap is one
+            // of this class's own constants, never caller data.
+            $sum = "GREATEST(-$cap, LEAST($cap, $sum))";
+        }
+
+        return new Expression($sum);
     }
 
     /**
