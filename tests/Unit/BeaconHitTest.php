@@ -146,3 +146,32 @@ test('a session built only from dwell beacons has no pageviews', function() {
 
     expect($delta->views)->toBe(0);
 });
+
+test('event values are clamped at every boundary they cross', function() {
+    // The clamp itself: rounding, both signs, and refusal of the non-finite.
+    expect(Hit::clampEventValue('49.999'))->toBe(50.0)
+        ->and(Hit::clampEventValue(1e20))->toBe(Hit::MAX_EVENT_VALUE)
+        ->and(Hit::clampEventValue(-1e20))->toBe(-Hit::MAX_EVENT_VALUE)
+        ->and(Hit::clampEventValue('not a number'))->toBeNull()
+        // is_numeric admits '1e400', which floats to INF.
+        ->and(Hit::clampEventValue('1e400'))->toBeNull()
+        ->and(Hit::clampEventValue(null))->toBeNull();
+});
+
+test('a spool line cannot smuggle an oversized event value past the clamp', function() {
+    // The spool is a file. A line written by hand — or by an older build with
+    // a looser clamp — must come back within range, because whatever decodes
+    // here is summed straight into a DECIMAL(14,2) column.
+    $restored = Hit::fromArray([
+        'si' => 1,
+        'p' => '/checkout',
+        'v' => 'aaaaaaaaaaaaaaaa',
+        'k' => 'k',
+        't' => mktime(10, 0, 0, 7, 16, 2026),
+        'kd' => Hit::KIND_EVENT,
+        'en' => 'purchase',
+        'ev' => 1e20,
+    ]);
+
+    expect($restored->eventValue)->toBe(Hit::MAX_EVENT_VALUE);
+});

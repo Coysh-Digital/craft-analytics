@@ -206,21 +206,12 @@ class BeaconController extends Controller
 
     /**
      * A monetary value. Clamped rather than trusted: the client can say
-     * anything, and an event worth 10^20 is not a sale.
+     * anything, and an event worth 10^20 is not a sale. The rule itself lives
+     * on Hit so the beacon, trackEvent() and the spool decoder cannot drift.
      */
     private static function sanitizeEventValue(mixed $value): ?float
     {
-        if (!is_numeric($value)) {
-            return null;
-        }
-
-        $number = (float)$value;
-
-        if (!is_finite($number)) {
-            return null;
-        }
-
-        return max(-1000000000, min(1000000000, round($number, 2)));
+        return Hit::clampEventValue($value);
     }
 
     private static function sanitizeTarget(mixed $value): ?string

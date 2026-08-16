@@ -90,6 +90,8 @@ class ProRollupWriter extends Component
             ], [
                 'conversions' => 1,
                 'value' => $goal->value,
+            ], caps: [
+                'value' => Upsert::DECIMAL_14_2_MAX,
             ]);
         }
     }
@@ -139,6 +141,9 @@ class ProRollupWriter extends Component
             ], [
                 'conversions' => $count * $weight,
                 'value' => $value * $weight,
+            ], caps: [
+                'conversions' => Upsert::DECIMAL_12_4_MAX,
+                'value' => Upsert::DECIMAL_14_2_MAX,
             ]);
         }
     }
@@ -193,7 +198,13 @@ class ProRollupWriter extends Component
                 'pathDimId' => $this->dimId($event['siteId'], $event['date'], DimensionType::Path, $event['path']),
             ], [
                 'count' => $event['count'],
+                // Saturating: every addend is individually clamped
+                // (Hit::MAX_EVENT_VALUE), but a day of hostile beacons can
+                // still sum past what DECIMAL(14,2) holds, and an
+                // out-of-range error here quarantines the whole batch.
                 'sumValue' => $event['value'],
+            ], caps: [
+                'sumValue' => Upsert::DECIMAL_14_2_MAX,
             ]);
         }
 
@@ -282,6 +293,9 @@ class ProRollupWriter extends Component
             ], [
                 'sessions' => $weight,
                 'bounces' => $isBounce ? $weight : 0,
+            ], caps: [
+                'sessions' => Upsert::DECIMAL_12_4_MAX,
+                'bounces' => Upsert::DECIMAL_12_4_MAX,
             ]);
         }
     }

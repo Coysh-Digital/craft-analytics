@@ -129,7 +129,11 @@ class Goal extends Model
             [['handle'], 'string', 'max' => 64],
             [['handle'], 'match', 'pattern' => '/^[a-zA-Z][a-zA-Z0-9_]*$/', 'message' => Craft::t('craft-analytics', 'Handles must start with a letter and contain only letters, numbers and underscores.')],
             [['type'], 'in', 'range' => array_map(static fn(GoalType $t) => $t->value, GoalType::cases())],
-            [['value'], 'number', 'min' => 0],
+            // The ceiling is the beacon's own event-value clamp
+            // (Hit::MAX_EVENT_VALUE): the goals and campaigns tables store
+            // DECIMAL(14,2), and a per-conversion value bigger than this
+            // would race the rollup sums to the end of that column.
+            [['value'], 'number', 'min' => 0, 'max' => Hit::MAX_EVENT_VALUE],
             [['enabled'], 'boolean'],
             [['target'], 'validateTarget'],
         ]);
