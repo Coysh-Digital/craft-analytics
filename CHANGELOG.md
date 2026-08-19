@@ -22,6 +22,8 @@
 - **A goal's per-conversion value is now validated against what the schema can
   store**, instead of failing at the database on save.
 
+## 2.2.0 - 2026-08-09
+
 > **Before you upgrade.** Three figures will visibly change, and none of the
 > changes is your traffic changing.
 >
