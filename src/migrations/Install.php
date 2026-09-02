@@ -23,6 +23,7 @@ class Install extends Migration
         SchemaBuilder::createCrawlerTable($this);
         SchemaBuilder::createSegmentTable($this);
         SchemaBuilder::createConsentTables($this);
+        SchemaBuilder::createGa4Table($this);
 
         return true;
     }

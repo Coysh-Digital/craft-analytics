@@ -22,6 +22,9 @@ use coyshdigital\craftanalytics\services\ConversionStatsService;
 use coyshdigital\craftanalytics\services\DeviceParser;
 use coyshdigital\craftanalytics\services\DimensionsService;
 use coyshdigital\craftanalytics\services\FunnelsService;
+use coyshdigital\craftanalytics\services\Ga4AuthStore;
+use coyshdigital\craftanalytics\services\Ga4Client;
+use coyshdigital\craftanalytics\services\Ga4ImportService;
 use coyshdigital\craftanalytics\services\GcService;
 use coyshdigital\craftanalytics\services\GeoService;
 use coyshdigital\craftanalytics\services\GoalsService;
@@ -37,6 +40,7 @@ use coyshdigital\craftanalytics\uniques\ExactUniqueCounter;
 use coyshdigital\craftanalytics\uniques\HllUniqueCounter;
 use coyshdigital\craftanalytics\uniques\RedisUniqueCounter;
 use coyshdigital\craftanalytics\uniques\UniqueCounterInterface;
+use coyshdigital\craftanalytics\utilities\Ga4ImportUtility;
 use coyshdigital\craftanalytics\variables\CraftAnalyticsVariable;
 use coyshdigital\craftanalytics\widgets\LiveWidget;
 use coyshdigital\craftanalytics\widgets\OverviewWidget;
@@ -62,6 +66,7 @@ use craft\services\Dashboard;
 use craft\services\Gc;
 use craft\services\Gql as GqlService;
 use craft\services\UserPermissions;
+use craft\services\Utilities;
 use craft\web\Application as WebApplication;
 use craft\web\Request as WebRequest;
 use craft\web\Response;
@@ -97,8 +102,9 @@ class Plugin extends BasePlugin
 
     // Bumped whenever a migration is added: Craft only runs them when the
     // installed schema version is behind this one. 2.0.0 lifts goals and
-    // funnels out of project config into the tables that used to mirror them.
-    public string $schemaVersion = '2.0.0';
+    // funnels out of project config into the tables that used to mirror them;
+    // 2.1.0 adds the GA4 history import's connection table.
+    public string $schemaVersion = '2.1.0';
     public bool $hasCpSettings = true;
     public bool $hasCpSection = true;
 
@@ -145,6 +151,9 @@ class Plugin extends BasePlugin
                 'conversionStats' => ConversionStatsService::class,
                 'reportMailer' => ReportMailer::class,
                 'segments' => SegmentRegistry::class,
+                'ga4Client' => Ga4Client::class,
+                'ga4Auth' => Ga4AuthStore::class,
+                'ga4Import' => Ga4ImportService::class,
             ],
         ];
     }
@@ -322,6 +331,30 @@ class Plugin extends BasePlugin
     {
         /** @var SegmentRegistry */
         return $this->get('segments');
+    }
+
+    /**
+     * Talks to Google for the GA4 history import, and only when an operator
+     * asks it to.
+     */
+    public function getGa4Client(): Ga4Client
+    {
+        /** @var Ga4Client */
+        return $this->get('ga4Client');
+    }
+
+    /** The GA4 import's stored Google connection. */
+    public function getGa4Auth(): Ga4AuthStore
+    {
+        /** @var Ga4AuthStore */
+        return $this->get('ga4Auth');
+    }
+
+    /** Writes imported GA4 aggregates into the rollups. */
+    public function getGa4Import(): Ga4ImportService
+    {
+        /** @var Ga4ImportService */
+        return $this->get('ga4Import');
     }
 
     /**
@@ -818,6 +851,12 @@ class Plugin extends BasePlugin
                 $event->rules['settings/plugins/craft-analytics/funnels/new'] = 'craft-analytics/goals/edit-funnel';
                 $event->rules['settings/plugins/craft-analytics/funnels/<uid:{uid}>'] = 'craft-analytics/goals/edit-funnel';
 
+                // A clean, stable path for Google to redirect back to after the
+                // operator approves access. It must match the redirect URI the
+                // wizard shows and the one sent to Google exactly, so both are
+                // built from Ga4ImportController::redirectUri().
+                $event->rules['craft-analytics/ga4-import/oauth-callback'] = 'craft-analytics/ga4-import/oauth-callback';
+
                 foreach (['pages', 'sources', 'devices', 'trend', 'content', 'goals'] as $kind) {
                     $event->rules["craft-analytics/export/$kind"] = "craft-analytics/export/$kind";
                 }
@@ -830,6 +869,16 @@ class Plugin extends BasePlugin
             static function(RegisterComponentTypesEvent $event) {
                 $event->types[] = OverviewWidget::class;
                 $event->types[] = LiveWidget::class;
+            },
+        );
+
+        // The GA4 history import, in both editions: the Pro datasets are just
+        // hidden on Lite, not the whole tool.
+        Event::on(
+            Utilities::class,
+            Utilities::EVENT_REGISTER_UTILITIES,
+            static function(RegisterComponentTypesEvent $event) {
+                $event->types[] = Ga4ImportUtility::class;
             },
         );
 

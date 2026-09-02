@@ -427,6 +427,37 @@
     </div>
 {% endif %}
 
+<hr>
+
+<h2>{{ 'Import from Google Analytics 4'|t('craft-analytics') }}</h2>
+
+<p class="light">
+    {{ 'Bring your history across from GA4 so the reports do not start empty. These two values name this site to Google and nothing else; they read what Google already holds and send nothing about your visitors. Once they are saved, run the import from'|t('craft-analytics') }}
+    <a href="{{ cpUrl('utilities/ga4-import') }}">{{ 'Utilities → Import GA4 History'|t('craft-analytics') }}</a>{{ ', which walks you through creating them.'|t('craft-analytics') }}
+</p>
+
+{{ forms.autosuggestField({
+    label: 'Client ID'|t('craft-analytics'),
+    instructions: 'The OAuth client ID from your Google Cloud project. An $ENV_VAR reference works here too.'|t('craft-analytics'),
+    id: 'ga4ClientId',
+    name: 'ga4ClientId',
+    suggestEnvVars: true,
+    value: settings.ga4ClientId,
+    placeholder: '000000000000-xxxxxxxx.apps.googleusercontent.com',
+    errors: settings.getErrors('ga4ClientId'),
+}) }}
+
+{{ forms.autosuggestField({
+    label: 'Client secret'|t('craft-analytics'),
+    instructions: 'The matching client secret. Prefer a $ENV_VAR reference: a value pasted here is saved to your project config, while the secret is better kept in the environment.'|t('craft-analytics'),
+    id: 'ga4ClientSecret',
+    name: 'ga4ClientSecret',
+    suggestEnvVars: true,
+    value: settings.ga4ClientSecret,
+    placeholder: 'GOCSPX-…',
+    errors: settings.getErrors('ga4ClientSecret'),
+}) }}
+
 <p class="light" style="margin-top: 24px">
     {{ 'Every setting here can be overridden per environment in config/craft-analytics.php, which is the better place for anything that should differ between staging and production.'|t('craft-analytics') }}
 </p>

@@ -459,6 +459,39 @@ final class SchemaBuilder
     }
 
     /**
+     * The GA4 history import's Google connection.
+     *
+     * One row, ever: a site imports from one Google account and one property at
+     * a time. The tokens are stored encrypted (Craft's security component), so
+     * the column is plain text holding ciphertext rather than the tokens
+     * themselves. It is neither a rollup nor date-keyed, so the retention and
+     * dimension-reference rules that govern every other table do not apply -
+     * which is why it is absent from expiringRollups() and retainedElsewhere()
+     * without RetentionCoverageTest minding.
+     */
+    public static function createGa4Table(Migration $m): void
+    {
+        $m->createTable(Table::GA4_AUTH, [
+            'id' => $m->primaryKey(),
+            // Encrypted. The refresh token is the long-lived secret; the access
+            // token is short-lived and re-minted from it.
+            'refreshToken' => $m->text(),
+            'accessToken' => $m->text(),
+            'accessTokenExpires' => $m->dateTime(),
+            // Shown in the CP so an operator can see which account is connected.
+            'googleEmail' => $m->string(),
+            // The chosen GA4 property, e.g. "properties/123456789", and the
+            // Craft site its history is imported into.
+            'propertyId' => $m->string(64),
+            'propertyName' => $m->string(),
+            'siteId' => $m->integer(),
+            'connectedAt' => $m->dateTime(),
+            'dateCreated' => $m->dateTime()->notNull(),
+            'dateUpdated' => $m->dateTime()->notNull(),
+        ]);
+    }
+
+    /**
      * Every column in the plugin that points at the dimensions table.
      *
      * The single source of truth for "is this dimension still in use", which
@@ -573,6 +606,7 @@ final class SchemaBuilder
     public static function allTables(): array
     {
         return [
+            Table::GA4_AUTH,
             Table::SEGMENTS_ROLLUP,
             Table::CRAWLERS_ROLLUP,
             Table::FUNNEL_STEP_ROLLUP,

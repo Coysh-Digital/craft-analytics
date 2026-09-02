@@ -1,5 +1,27 @@
 # Release Notes for Craft Analytics
 
+## 2.3.0 - 2026-09-02
+
+### Added
+
+- **Import your history from Google Analytics 4.** A new utility (Utilities →
+  Import GA4 History) connects to your own Google account, lists your GA4
+  properties, and backfills the days before you installed the plugin, so the
+  reports do not start empty on the changeover. You connect once with an OAuth
+  client ID and secret you create in about five minutes; the wizard walks you
+  through it. The Client ID and Client secret are ordinary plugin settings, so
+  either can be a `$ENV_VAR` reference, which is the better home for the
+  secret. Available in both editions; campaigns, geography and events are
+  imported on Pro. See [Importing from GA4](docs/get-started/importing-from-ga4.md).
+  - The plugin only ever reads what Google already holds, and only when you
+    ask it to: nothing about your visitors is sent, and no Google call is made
+    on the plugin's own initiative (C7). The OAuth tokens are stored encrypted
+    and are deleted when you disconnect.
+  - Days the plugin has already tracked itself are left untouched. Views,
+    sessions and events come across exactly as GA4 reported them; unique
+    visitor counts are approximate for imported days, since the visitors
+    behind an aggregate cannot be imported.
+
 ## 2.2.1 - 2026-08-16
 
 ### Fixed
