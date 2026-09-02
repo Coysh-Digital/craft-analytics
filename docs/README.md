@@ -43,6 +43,8 @@ worth putting in front of everyone.
   each one costs you
 - **[Static & edge caching](configuration/caching.md)** - **read this if you
   run Blitz, Cloudflare or Varnish**
+- **[Importing from GA4](get-started/importing-from-ga4.md)** - bring your
+  history across so the reports do not start empty
 
 ## Reports
 

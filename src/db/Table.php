@@ -47,4 +47,11 @@ final class Table
     public const FUNNELS = '{{%craftanalytics_funnels}}';
     public const FUNNEL_STEPS = '{{%craftanalytics_funnelsteps}}';
     public const FUNNEL_STEP_ROLLUP = '{{%craftanalytics_funnelsteprollup}}';
+
+    /**
+     * The single-row store for the GA4 history import's Google connection:
+     * the OAuth tokens and the chosen property. Not a rollup and not
+     * date-keyed, so no retention or dimension rules apply to it.
+     */
+    public const GA4_AUTH = '{{%craftanalytics_ga4auth}}';
 }

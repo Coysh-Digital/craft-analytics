@@ -109,6 +109,15 @@ return [
         // Bump when your privacy policy changes materially, so old consents
         // evidence the old policy.
         'policyVersion' => '1',
+
+        // --- GA4 history import -------------------------------------------
+        // The OAuth client ID and secret used to backfill history from Google
+        // Analytics 4 (Utilities > Import GA4 History). Both only name this
+        // site to Google; nothing about your visitors is ever sent. Set them
+        // here from the environment rather than pasting into the CP, so the
+        // secret never lands in project config.
+        'ga4ClientId' => App::env('CRAFT_ANALYTICS_GA4_CLIENT_ID') ?: null,
+        'ga4ClientSecret' => App::env('CRAFT_ANALYTICS_GA4_CLIENT_SECRET') ?: null,
     ],
 
     'dev' => [

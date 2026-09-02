@@ -311,6 +311,22 @@ class Settings extends Model
      */
     public string $reportPeriod = '7d';
 
+    // ------------------------------------------------ GA4 history import
+
+    /**
+     * The OAuth client ID and secret for importing history from Google
+     * Analytics 4. Both name this site to Google and nothing else; they read
+     * what Google already holds and send nothing about your visitors.
+     *
+     * Either may be a `$ENV_VAR` reference rather than the literal value,
+     * resolved at use with App::parseEnv() - the better home for the secret,
+     * since a literal pasted in the CP persists to project config. Validation
+     * leaves `$`-prefixed values alone, the same way reportRecipients does: the
+     * value belongs to the environment, which this may not be running in.
+     */
+    public ?string $ga4ClientId = null;
+    public ?string $ga4ClientSecret = null;
+
     /**
      * Normalises settings on the way in.
      *
@@ -441,6 +457,11 @@ class Settings extends Model
             [['reportPeriod'], 'in', 'range' => array_keys(DateRange::presets())],
             [['reportRecipients'], 'each', 'rule' => ['string']],
             [['reportRecipients'], 'validateRecipients'],
+
+            // GA4 import. No format is enforced: the client ID and secret are
+            // opaque strings Google issues, and either may be a `$ENV_VAR`
+            // reference whose value belongs to the environment.
+            [['ga4ClientId', 'ga4ClientSecret'], 'string'],
         ];
     }
 

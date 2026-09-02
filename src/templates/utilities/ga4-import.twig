@@ -1,0 +1,185 @@
+{% import '_includes/forms.twig' as forms %}
+{% do craft.app.view.registerAssetBundle('coyshdigital\\craftanalytics\\assets\\Ga4ImportAsset') %}
+
+{% set connected = connection.connected ?? false %}
+
+<div class="readable"
+     data-ga4-import
+     data-connected="{{ connected ? '1' : '0' }}"
+     data-properties-url="{{ actionUrl('craft-analytics/ga4-import/properties') }}">
+
+    <p>
+        {{ 'Bring your history across from Google Analytics 4, so the reports do not start empty on the day you installed the plugin. Connect once, choose a property and a date range, and the days you already have in GA4 are written straight into your analytics.'|t('craft-analytics') }}
+    </p>
+
+    {% if connected %}
+
+        {# ---------------------------------------------------------------- #}
+        {# Connected: the import form.                                       #}
+        {# ---------------------------------------------------------------- #}
+
+        <div class="pane" style="margin-top: 14px;">
+            <p>
+                <span class="status green"></span>
+                {{ 'Connected to Google{email}.'|t('craft-analytics', { email: connection.googleEmail ? ' as ' ~ connection.googleEmail : '' }) }}
+            </p>
+            <form method="post" accept-charset="UTF-8">
+                {{ csrfInput() }}
+                {{ actionInput('craft-analytics/ga4-import/disconnect') }}
+                <button type="submit" class="btn small">{{ 'Disconnect'|t('craft-analytics') }}</button>
+            </form>
+        </div>
+
+        <form method="post" accept-charset="UTF-8" style="margin-top: 18px;">
+            {{ csrfInput() }}
+            {{ actionInput('craft-analytics/ga4-import/start') }}
+
+            <div class="field">
+                <div class="heading">
+                    <label>{{ 'GA4 property'|t('craft-analytics') }}</label>
+                </div>
+                <div class="instructions">
+                    <p>{{ 'The property to bring history across from.'|t('craft-analytics') }}</p>
+                </div>
+                <div class="input ltr">
+                    <div class="select">
+                        <select name="propertyId" data-ga4-property disabled>
+                            <option>{{ 'Loading properties…'|t('craft-analytics') }}</option>
+                        </select>
+                    </div>
+                    <p class="light" data-ga4-property-status
+                       data-loading="{{ 'Loading properties…'|t('craft-analytics') }}"
+                       data-empty="{{ 'No GA4 properties found for this account.'|t('craft-analytics') }}"
+                       data-failed="{{ 'Could not load the property list.'|t('craft-analytics') }}"></p>
+                    <input type="hidden" name="propertyName" data-ga4-property-name value="">
+                </div>
+            </div>
+
+            {% set siteOptions = [] %}
+            {% for s in sites %}
+                {% set siteOptions = siteOptions|merge([{ label: s.name, value: s.id }]) %}
+            {% endfor %}
+
+            {{ forms.selectField({
+                label: 'Import into site'|t('craft-analytics'),
+                instructions: 'Which Craft site the history is written to.'|t('craft-analytics'),
+                name: 'siteId',
+                options: siteOptions,
+            }) }}
+
+            <div class="flex">
+                <div class="field">
+                    <div class="heading"><label>{{ 'From'|t('craft-analytics') }}</label></div>
+                    <div class="input">
+                        <input type="date" name="from" value="{{ now|date_modify('-90 days')|date('Y-m-d') }}" max="{{ now|date('Y-m-d') }}" class="text">
+                    </div>
+                </div>
+                <div class="field">
+                    <div class="heading"><label>{{ 'To'|t('craft-analytics') }}</label></div>
+                    <div class="input">
+                        <input type="date" name="to" value="{{ now|date('Y-m-d') }}" max="{{ now|date('Y-m-d') }}" class="text">
+                    </div>
+                </div>
+            </div>
+
+            <div class="field">
+                <div class="heading">
+                    <label>{{ 'What to import'|t('craft-analytics') }}</label>
+                </div>
+                <div class="input">
+                    <div class="checkbox">
+                        <input type="checkbox" id="ga4-g-pages" name="groups[]" value="pages" checked>
+                        <label for="ga4-g-pages">{{ 'Pages and daily totals'|t('craft-analytics') }}</label>
+                    </div>
+                    <div class="checkbox">
+                        <input type="checkbox" id="ga4-g-sources" name="groups[]" value="sources" checked>
+                        <label for="ga4-g-sources">{{ (isPro ? 'Traffic sources and campaigns' : 'Traffic sources')|t('craft-analytics') }}</label>
+                    </div>
+                    <div class="checkbox">
+                        <input type="checkbox" id="ga4-g-devices" name="groups[]" value="devices" checked>
+                        <label for="ga4-g-devices">{{ (isPro ? 'Devices and geography' : 'Devices')|t('craft-analytics') }}</label>
+                    </div>
+                    {% if isPro %}
+                        <div class="checkbox">
+                            <input type="checkbox" id="ga4-g-events" name="groups[]" value="events" checked>
+                            <label for="ga4-g-events">{{ 'Events'|t('craft-analytics') }}</label>
+                        </div>
+                    {% endif %}
+                </div>
+                {% if not isPro %}
+                    <p class="light">{{ 'Campaigns, geography and events need Craft Analytics Pro, and are not imported on Lite.'|t('craft-analytics') }}</p>
+                {% endif %}
+            </div>
+
+            <blockquote class="note" style="margin-top: 6px;">
+                <p>{{ 'Days this site has already tracked are left untouched: only days with no data yet are imported. Views, sessions and events come across exactly as GA4 reported them; unique visitor counts are approximate for imported days, since the visitors behind them are not available to import.'|t('craft-analytics') }}</p>
+            </blockquote>
+
+            <div class="buttons">
+                <button type="submit" class="btn submit">{{ 'Start import'|t('craft-analytics') }}</button>
+            </div>
+            <p class="light">{{ 'The import runs in the background. Follow its progress in the queue (Utilities → Queue Manager).'|t('craft-analytics') }}</p>
+        </form>
+
+    {% else %}
+
+        {# ---------------------------------------------------------------- #}
+        {# Not connected: the setup wizard.                                  #}
+        {# ---------------------------------------------------------------- #}
+
+        <h2>{{ 'Connecting to Google'|t('craft-analytics') }}</h2>
+
+        <p>
+            {{ 'Google will not let anything read your analytics until you tell Google that this site is allowed to ask. That is what the two values in the plugin settings are: a name and a password that identify this site to Google, and nothing else.'|t('craft-analytics') }}
+        </p>
+        <p>
+            {{ 'It takes about five minutes and costs nothing. You will not be asked for a card, and you do not need to understand any of it afterwards. Nothing about your visitors is sent to Google at any point; this only reads what Google already has.'|t('craft-analytics') }}
+        </p>
+
+        <h3>{{ 'Step 1. Copy this address'|t('craft-analytics') }}</h3>
+        <p class="light">{{ 'Google asks for it in step 4, and matches it exactly, so copy it rather than typing it out.'|t('craft-analytics') }}</p>
+        <div class="flex">
+            <input type="text" class="text code" readonly data-ga4-redirect value="{{ redirectUri }}" style="flex: 1; min-width: 0;">
+            <button type="button" class="btn" data-ga4-copy data-copied="{{ 'Copied'|t('craft-analytics') }}">{{ 'Copy'|t('craft-analytics') }}</button>
+        </div>
+
+        <h3>{{ 'Step 2. Make a Google project'|t('craft-analytics') }}</h3>
+        <p>
+            {{ 'Open the'|t('craft-analytics') }}
+            <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">{{ 'Google Cloud console'|t('craft-analytics') }}</a>
+            {{ 'and sign in with the Google account that can already see the analytics you want to bring across. Create a project. The name is only for you, and no billing is involved.'|t('craft-analytics') }}
+        </p>
+
+        <h3>{{ 'Step 3. Switch on the two things it needs to read'|t('craft-analytics') }}</h3>
+        <p>{{ 'Open each link below and choose Enable, in the same Google Cloud project. Miss the first and your property list comes back empty; miss the second and the import stops as soon as it starts.'|t('craft-analytics') }}</p>
+        <p>
+            <a href="https://console.cloud.google.com/apis/library/analyticsadmin.googleapis.com" target="_blank" rel="noopener"><code>{{ 'Google Analytics Admin API'|t('craft-analytics') }}</code></a><br>
+            <a href="https://console.cloud.google.com/apis/library/analyticsdata.googleapis.com" target="_blank" rel="noopener"><code>{{ 'Google Analytics Data API'|t('craft-analytics') }}</code></a>
+        </p>
+
+        <h3>{{ 'Step 4. Create the sign-in details'|t('craft-analytics') }}</h3>
+        <p>{{ 'Fill in the consent screen when the console asks: an app name, and your own email address twice. If your Google account belongs to a Workspace, choose Internal; otherwise choose External and add your own address as a test user.'|t('craft-analytics') }}</p>
+        <p>{{ 'Go to Credentials, then Create credentials, then OAuth client ID. Choose Web application, not Desktop. Under Authorised redirect URIs, paste the address you copied in step 1. Create it, and keep the two values it shows you.'|t('craft-analytics') }}</p>
+
+        <h3>{{ 'Step 5. Add them to the plugin'|t('craft-analytics') }}</h3>
+        <p>
+            {{ 'Paste the Client ID and Client secret into the GA4 import fields on the'|t('craft-analytics') }}
+            <a href="{{ settingsUrl }}">{{ 'plugin settings page'|t('craft-analytics') }}</a>{{ ', then save. A $ENV_VAR reference works there too, and is the better home for the secret: a value pasted directly is saved to your project config.'|t('craft-analytics') }}
+        </p>
+        <p class="light">{{ 'Both are stored on this site only. The secret is never sent to a browser, never appears in a report, and is deleted when you disconnect.'|t('craft-analytics') }}</p>
+
+        <hr>
+
+        {% if hasCredentials %}
+            <a href="{{ actionUrl('craft-analytics/ga4-import/oauth-start') }}" class="btn submit">{{ 'Connect to Google'|t('craft-analytics') }}</a>
+        {% else %}
+            <p class="light">{{ 'Once the Client ID and Client secret are saved in settings, a Connect to Google button appears here.'|t('craft-analytics') }}</p>
+            <a href="{{ settingsUrl }}" class="btn">{{ 'Open settings'|t('craft-analytics') }}</a>
+        {% endif %}
+
+        <p class="light" style="margin-top: 14px;">
+            {{ 'Stuck, or something above not matching what you are seeing? The full instructions, including what to do when Google says it has not verified this app, are in the plugin\'s GA4 import documentation.'|t('craft-analytics') }}
+        </p>
+
+    {% endif %}
+</div>
