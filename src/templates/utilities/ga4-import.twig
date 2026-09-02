@@ -67,49 +67,51 @@
                 options: siteOptions,
             }) }}
 
-            <div class="flex">
+            {{ forms.checkboxField({
+                label: 'Import everything (all time)'|t('craft-analytics'),
+                instructions: 'Bring across every day GA4 holds for this property. When this is on, the dates below are ignored.'|t('craft-analytics'),
+                id: 'ga4-all-time',
+                name: 'allTime',
+                value: '1',
+                checked: false,
+            }) }}
+
+            <div class="flex" data-ga4-dates>
                 <div class="field">
                     <div class="heading"><label>{{ 'From'|t('craft-analytics') }}</label></div>
                     <div class="input">
-                        <input type="date" name="from" value="{{ now|date_modify('-90 days')|date('Y-m-d') }}" max="{{ now|date('Y-m-d') }}" class="text">
+                        <input type="date" name="from" value="{{ now|date_modify('-90 days')|date('Y-m-d') }}" max="{{ now|date('Y-m-d') }}" class="text" data-ga4-date>
                     </div>
                 </div>
                 <div class="field">
                     <div class="heading"><label>{{ 'To'|t('craft-analytics') }}</label></div>
                     <div class="input">
-                        <input type="date" name="to" value="{{ now|date('Y-m-d') }}" max="{{ now|date('Y-m-d') }}" class="text">
+                        <input type="date" name="to" value="{{ now|date('Y-m-d') }}" max="{{ now|date('Y-m-d') }}" class="text" data-ga4-date>
                     </div>
                 </div>
             </div>
 
-            <div class="field">
-                <div class="heading">
-                    <label>{{ 'What to import'|t('craft-analytics') }}</label>
-                </div>
-                <div class="input">
-                    <div class="checkbox">
-                        <input type="checkbox" id="ga4-g-pages" name="groups[]" value="pages" checked>
-                        <label for="ga4-g-pages">{{ 'Pages and daily totals'|t('craft-analytics') }}</label>
-                    </div>
-                    <div class="checkbox">
-                        <input type="checkbox" id="ga4-g-sources" name="groups[]" value="sources" checked>
-                        <label for="ga4-g-sources">{{ (isPro ? 'Traffic sources and campaigns' : 'Traffic sources')|t('craft-analytics') }}</label>
-                    </div>
-                    <div class="checkbox">
-                        <input type="checkbox" id="ga4-g-devices" name="groups[]" value="devices" checked>
-                        <label for="ga4-g-devices">{{ (isPro ? 'Devices and geography' : 'Devices')|t('craft-analytics') }}</label>
-                    </div>
-                    {% if isPro %}
-                        <div class="checkbox">
-                            <input type="checkbox" id="ga4-g-events" name="groups[]" value="events" checked>
-                            <label for="ga4-g-events">{{ 'Events'|t('craft-analytics') }}</label>
-                        </div>
-                    {% endif %}
-                </div>
-                {% if not isPro %}
-                    <p class="light">{{ 'Campaigns, geography and events need Craft Analytics Pro, and are not imported on Lite.'|t('craft-analytics') }}</p>
-                {% endif %}
-            </div>
+            {% set groupOptions = [
+                { label: 'Pages and daily totals'|t('craft-analytics'), value: 'pages' },
+                { label: (isPro ? 'Traffic sources and campaigns' : 'Traffic sources')|t('craft-analytics'), value: 'sources' },
+                { label: (isPro ? 'Devices and geography' : 'Devices')|t('craft-analytics'), value: 'devices' },
+            ] %}
+            {% set groupValues = ['pages', 'sources', 'devices'] %}
+            {% if isPro %}
+                {% set groupOptions = groupOptions|merge([{ label: 'Events'|t('craft-analytics'), value: 'events' }]) %}
+                {% set groupValues = groupValues|merge(['events']) %}
+            {% endif %}
+
+            {{ forms.checkboxGroupField({
+                label: 'What to import'|t('craft-analytics'),
+                name: 'groups',
+                options: groupOptions,
+                values: groupValues,
+            }) }}
+
+            {% if not isPro %}
+                <p class="light">{{ 'Campaigns, geography and events need Craft Analytics Pro, and are not imported on Lite.'|t('craft-analytics') }}</p>
+            {% endif %}
 
             <blockquote class="note" style="margin-top: 6px;">
                 <p>{{ 'Days this site has already tracked are left untouched: only days with no data yet are imported. Views, sessions and events come across exactly as GA4 reported them; unique visitor counts are approximate for imported days, since the visitors behind them are not available to import.'|t('craft-analytics') }}</p>

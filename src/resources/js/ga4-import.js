@@ -126,6 +126,28 @@
     }
   }
 
+  function wireAllTimeToggle(root) {
+    var toggle = root.querySelector('#ga4-all-time');
+    var dates = root.querySelector('[data-ga4-dates]');
+
+    if (!toggle || !dates) {
+      return;
+    }
+
+    var inputs = dates.querySelectorAll('[data-ga4-date]');
+
+    var apply = function () {
+      var off = toggle.checked;
+      dates.style.opacity = off ? '0.5' : '';
+      inputs.forEach(function (input) {
+        input.disabled = off;
+      });
+    };
+
+    toggle.addEventListener('change', apply);
+    apply();
+  }
+
   ready(function () {
     var root = document.querySelector('[data-ga4-import]');
 
@@ -134,6 +156,7 @@
     }
 
     wireCopyButton(root);
+    wireAllTimeToggle(root);
 
     if (root.getAttribute('data-connected') === '1') {
       loadProperties(root);

@@ -1,5 +1,19 @@
 # Release Notes for Craft Analytics
 
+## 2.4.0 - 2026-09-02
+
+### Added
+
+- **An "all time" option on the GA4 history import.** Tick it to bring across
+  every day the property holds, without picking a start and end date. The date
+  fields are ignored (and greyed out) while it is on.
+
+### Fixed
+
+- **The GA4 import's "What to import" checkboxes rendered twice.** The options
+  used hand-rolled markup that drew both a native checkbox and the styled one;
+  they now use Craft's checkbox field macros and render once.
+
 ## 2.3.1 - 2026-09-02
 
 ### Fixed

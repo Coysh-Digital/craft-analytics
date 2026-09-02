@@ -25,6 +25,13 @@ class Ga4ImportController extends Controller
 {
     private const STATE_SESSION_KEY = 'craftAnalytics.ga4.oauthState';
 
+    /**
+     * The floor for an "all time" import. GA4 has no data before its own era,
+     * so a fixed early date brings across everything a property holds while
+     * staying within the dates the GA4 Data API accepts.
+     */
+    private const EARLIEST_DATE = '2015-08-14';
+
     public function beforeAction($action): bool
     {
         if (!parent::beforeAction($action)) {
@@ -149,8 +156,16 @@ class Ga4ImportController extends Controller
         $propertyId = (string)$this->request->getBodyParam('propertyId');
         $propertyName = (string)$this->request->getBodyParam('propertyName');
         $siteId = (int)$this->request->getBodyParam('siteId');
+        $allTime = (bool)$this->request->getBodyParam('allTime');
         $from = (string)$this->request->getBodyParam('from');
         $to = (string)$this->request->getBodyParam('to');
+
+        // "All time" ignores the date inputs and takes everything the property
+        // has, from GA4's earliest possible date up to today.
+        if ($allTime) {
+            $from = self::EARLIEST_DATE;
+            $to = date('Y-m-d');
+        }
         /** @var string[] $groups */
         $groups = array_values(array_intersect(
             Ga4Dataset::groups(),
