@@ -1,5 +1,16 @@
 # Release Notes for Craft Analytics
 
+## 2.4.1 - 2026-09-02
+
+### Fixed
+
+- **The GA4 import screen's script 404'd, leaving the property list stuck on
+  "Loading properties…".** Its script shared a resources directory with the
+  front-end tracker, which is published a file at a time; that left the shared
+  directory holding only the tracker, so Craft treated it as already published
+  and never copied the import script. The import script now lives in its own
+  directory and publishes reliably.
+
 ## 2.4.0 - 2026-09-02
 
 ### Added
