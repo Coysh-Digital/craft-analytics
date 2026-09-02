@@ -202,7 +202,10 @@ class Ga4AuthStore extends Component
             return null;
         }
 
-        return Craft::$app->getSecurity()->encryptByKey($value);
+        // encryptByKey() returns raw binary, which a utf8mb4 text column
+        // rejects (SQLSTATE 1366). base64 keeps the ciphertext to the plain
+        // text the column is declared to hold.
+        return base64_encode(Craft::$app->getSecurity()->encryptByKey($value));
     }
 
     private function decrypt(mixed $value): ?string
@@ -211,7 +214,13 @@ class Ga4AuthStore extends Component
             return null;
         }
 
-        $plain = Craft::$app->getSecurity()->decryptByKey($value);
+        $ciphertext = base64_decode($value, true);
+
+        if ($ciphertext === false) {
+            return null;
+        }
+
+        $plain = Craft::$app->getSecurity()->decryptByKey($ciphertext);
 
         return $plain === false ? null : $plain;
     }

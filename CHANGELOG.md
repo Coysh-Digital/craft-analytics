@@ -1,5 +1,16 @@
 # Release Notes for Craft Analytics
 
+## 2.3.1 - 2026-09-02
+
+### Fixed
+
+- **Connecting a GA4 account failed to save on utf8mb4 databases.** The OAuth
+  tokens are encrypted before they are stored, and the encrypted bytes are
+  binary, which a `utf8mb4` text column rejects (`SQLSTATE[HY000] 1366
+  Incorrect string value ... for column 'refreshToken'`). The ciphertext is
+  now base64-encoded at rest, matching the plain-text column it lives in.
+  Reconnect from **Utilities → Import GA4 History** after upgrading.
+
 ## 2.3.0 - 2026-09-02
 
 ### Added
