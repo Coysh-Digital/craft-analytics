@@ -55,6 +55,43 @@ This is a consequence of the design rather than a bug, but it does mean:
 Plausible works this way for the same reason, as does any analytics tool that
 manages without a banner.
 
+## Why the totals differ from GA4, Cloudflare or your server logs
+
+Every tool measures a different slice of the same traffic, so their totals
+never line up. It helps to hold three reference points in mind.
+
+**Expect it to read higher than Google Analytics - often much higher.** GA4 is
+JavaScript loaded from a Google domain, so ad and tracking blockers stop it
+dead, and a consent banner keeps it from running until someone accepts. Both
+are common, and on a technical audience the blocked share alone can be a third
+to a half of real people. Craft Analytics is served first-party from your own
+domain and needs no banner, so it counts the visitors GA4 silently missed.
+When you switch across, the numbers usually jump. That jump is real people, not
+inflation - it is the traffic GA4 was never seeing.
+
+**Expect it to read lower than Cloudflare, a CDN dashboard or raw server
+logs.** Those count every request that reaches the edge, keyed by IP, which
+means crawlers, scrapers, AI bots, uptime monitors and security scanners are
+all in the figure - and on any public site that automated traffic is a large
+slice, often several times the human total. Craft Analytics filters bots (a
+maintained crawler list plus heuristics for automation that doesn't announce
+itself), so it sits well below an edge or log count. A Cloudflare "unique
+visitors" number three to five times larger than what you see here is normal,
+and is mostly the bots this plugin is leaving out.
+
+So the honest human total sits **between** the two: above GA4, which drops
+blocked and unconsented people, and below the edge count, which adds every bot.
+That is the number this plugin aims for.
+
+If a figure ever looks too high to believe, two quick checks settle it:
+
+- ✅ **Pageviews per session.** Humans run about 1.5 to 3; a value near 1.0
+  across the board is the signature of bots landing on one page and leaving.
+- ✅ **The top pages.** They should be real content. If the busiest paths are
+  probes like `wp-login.php` or `.env`, non-human traffic is leaking through;
+  if they're your actual pages, the traffic is sound. A CDN's own bot breakdown
+  reconciles the rest.
+
 ## "Unique visitors" is also an estimate
 
 Separately from the above: the unique count is computed with HyperLogLog, a
