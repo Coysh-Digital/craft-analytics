@@ -4,14 +4,12 @@
 
 ### Added
 
-- **Connect to Client Reporter.** A new *Client Reporter* section in the plugin
-  settings takes a connection code that lets [Client Reporter][cr] pull this
-  site's aggregated stats into branded client reports. The read API is signed
-  (HMAC, short timestamp window, one-shot nonce) and aggregate-only — the same
-  figures the dashboard shows, with no visitor identifiers. Available in every
-  edition.
-
-[cr]: https://github.com/coysh-digital/client-reporter
+- **A read-only reporting API.** A new *Reporting API* section in the plugin
+  settings takes a connection code that lets an external reporting tool pull
+  this site's aggregate stats — visitors, page views, top pages, sources,
+  devices and countries. The API is signed (HMAC, short timestamp window,
+  one-shot nonce) and aggregate-only — the same figures the dashboard shows,
+  with no visitor identifiers. Available in every edition.
 
 ## 2.4.1 - 2026-09-02
 
