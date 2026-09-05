@@ -458,6 +458,24 @@
     errors: settings.getErrors('ga4ClientSecret'),
 }) }}
 
+<hr>
+
+<h2>{{ 'Client Reporter'|t('craft-analytics') }}</h2>
+
+<p class="readable light">
+    {{ 'Connect this site to Client Reporter so it can pull your analytics into branded client reports. Paste the connection code from Client Reporter here, then add the site there. The read API is signed and aggregate-only.'|t('craft-analytics') }}
+</p>
+
+{{ forms.autosuggestField({
+    label: 'Connection code'|t('craft-analytics'),
+    instructions: 'The shared code shown in Client Reporter when you add this site. Prefer an $ENV_VAR reference so the secret stays out of project config.'|t('craft-analytics'),
+    id: 'clientReporterConnectionCode',
+    name: 'clientReporterConnectionCode',
+    suggestEnvVars: true,
+    value: settings.clientReporterConnectionCode,
+    errors: settings.getErrors('clientReporterConnectionCode'),
+}) }}
+
 <p class="light" style="margin-top: 24px">
     {{ 'Every setting here can be overridden per environment in config/craft-analytics.php, which is the better place for anything that should differ between staging and production.'|t('craft-analytics') }}
 </p>

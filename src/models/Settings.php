@@ -328,6 +328,17 @@ class Settings extends Model
     public ?string $ga4ClientSecret = null;
 
     /**
+     * The shared connection code (secret) an agency pastes here from Client
+     * Reporter, so its signed read API can pull this site's aggregated stats
+     * into branded reports. Empty disables the connector. Prefer an `$ENV_VAR`
+     * reference so the secret stays out of project config.
+     */
+    public string $clientReporterConnectionCode = '';
+
+    /** How far a Client Reporter request timestamp may drift, in seconds. */
+    public int $clientReporterTolerance = 300;
+
+    /**
      * Normalises settings on the way in.
      *
      * The CP's editable table posts recipients as `[['email' => '…'], …]`
@@ -462,6 +473,8 @@ class Settings extends Model
             // opaque strings Google issues, and either may be a `$ENV_VAR`
             // reference whose value belongs to the environment.
             [['ga4ClientId', 'ga4ClientSecret'], 'string'],
+            [['clientReporterConnectionCode'], 'string'],
+            [['clientReporterTolerance'], 'integer', 'min' => 30, 'max' => 3600],
         ];
     }
 

@@ -1,5 +1,18 @@
 # Release Notes for Craft Analytics
 
+## Unreleased
+
+### Added
+
+- **Connect to Client Reporter.** A new *Client Reporter* section in the plugin
+  settings takes a connection code that lets [Client Reporter][cr] pull this
+  site's aggregated stats into branded client reports. The read API is signed
+  (HMAC, short timestamp window, one-shot nonce) and aggregate-only — the same
+  figures the dashboard shows, with no visitor identifiers. Available in every
+  edition.
+
+[cr]: https://github.com/coysh-digital/client-reporter
+
 ## 2.4.1 - 2026-09-02
 
 ### Fixed
