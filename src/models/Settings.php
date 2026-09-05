@@ -328,15 +328,15 @@ class Settings extends Model
     public ?string $ga4ClientSecret = null;
 
     /**
-     * The shared connection code (secret) an agency pastes here from Client
-     * Reporter, so its signed read API can pull this site's aggregated stats
-     * into branded reports. Empty disables the connector. Prefer an `$ENV_VAR`
-     * reference so the secret stays out of project config.
+     * Shared secret for the read-only reporting API. When set, an external
+     * reporting tool can pull this site's aggregate stats over a signed request.
+     * Empty disables the API. Prefer an `$ENV_VAR` reference so the secret stays
+     * out of project config.
      */
-    public string $clientReporterConnectionCode = '';
+    public string $reportingConnectionCode = '';
 
-    /** How far a Client Reporter request timestamp may drift, in seconds. */
-    public int $clientReporterTolerance = 300;
+    /** How far a reporting-API request timestamp may drift, in seconds. */
+    public int $reportingTolerance = 300;
 
     /**
      * Normalises settings on the way in.
@@ -473,8 +473,8 @@ class Settings extends Model
             // opaque strings Google issues, and either may be a `$ENV_VAR`
             // reference whose value belongs to the environment.
             [['ga4ClientId', 'ga4ClientSecret'], 'string'],
-            [['clientReporterConnectionCode'], 'string'],
-            [['clientReporterTolerance'], 'integer', 'min' => 30, 'max' => 3600],
+            [['reportingConnectionCode'], 'string'],
+            [['reportingTolerance'], 'integer', 'min' => 30, 'max' => 3600],
         ];
     }
 

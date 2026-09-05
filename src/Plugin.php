@@ -614,9 +614,9 @@ class Plugin extends BasePlugin
                 $event->rules[$settings->beaconPath] = 'craft-analytics/beacon/index';
                 $event->rules[$settings->consentPath] = 'craft-analytics/consent/index';
 
-                // Client Reporter's signed read API (verify handshake + report).
-                $event->rules['craft-analytics/v1/verify'] = 'craft-analytics/client-reporter/verify';
-                $event->rules['craft-analytics/v1/report'] = 'craft-analytics/client-reporter/report';
+                // Signed, read-only reporting API (verify handshake + report).
+                $event->rules['craft-analytics/v1/verify'] = 'craft-analytics/api/verify';
+                $event->rules['craft-analytics/v1/report'] = 'craft-analytics/api/report';
             },
         );
 

@@ -460,20 +460,20 @@
 
 <hr>
 
-<h2>{{ 'Client Reporter'|t('craft-analytics') }}</h2>
+<h2>{{ 'Reporting API'|t('craft-analytics') }}</h2>
 
 <p class="readable light">
-    {{ 'Connect this site to Client Reporter so it can pull your analytics into branded client reports. Paste the connection code from Client Reporter here, then add the site there. The read API is signed and aggregate-only.'|t('craft-analytics') }}
+    {{ 'Let an external reporting tool pull this site’s aggregate analytics over a signed, read-only request. Paste the connection code from that tool below. Leave blank to keep the API off.'|t('craft-analytics') }}
 </p>
 
 {{ forms.autosuggestField({
     label: 'Connection code'|t('craft-analytics'),
-    instructions: 'The shared code shown in Client Reporter when you add this site. Prefer an $ENV_VAR reference so the secret stays out of project config.'|t('craft-analytics'),
-    id: 'clientReporterConnectionCode',
-    name: 'clientReporterConnectionCode',
+    instructions: 'A shared secret. Prefer an $ENV_VAR reference so it stays out of project config.'|t('craft-analytics'),
+    id: 'reportingConnectionCode',
+    name: 'reportingConnectionCode',
     suggestEnvVars: true,
-    value: settings.clientReporterConnectionCode,
-    errors: settings.getErrors('clientReporterConnectionCode'),
+    value: settings.reportingConnectionCode,
+    errors: settings.getErrors('reportingConnectionCode'),
 }) }}
 
 <p class="light" style="margin-top: 24px">

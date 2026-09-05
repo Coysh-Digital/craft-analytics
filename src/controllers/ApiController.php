@@ -13,15 +13,15 @@ use yii\web\ForbiddenHttpException;
 use yii\web\Response;
 
 /**
- * Read-only, HMAC-signed endpoints for Client Reporter.
+ * Read-only, HMAC-signed reporting API.
  *
- * Mirrors the security model of Client Reporter's own connectors so the same
- * signed client verifies here: an HMAC over method, path, timestamp, nonce and
- * a hash of the (empty) body, with a short timestamp window and a one-shot
- * nonce. Everything returned is aggregate-only — the same figures the dashboard
- * shows — so connecting a site leaks nothing a visitor could be identified by.
+ * Lets an external reporting tool pull this site's aggregate analytics over a
+ * signed request: an HMAC over method, path, timestamp, nonce and a hash of the
+ * (empty) body, with a short timestamp window and a one-shot nonce. Everything
+ * returned is aggregate-only — the same figures the dashboard shows — so
+ * connecting a tool leaks nothing a visitor could be identified by.
  */
-class ClientReporterController extends Controller
+class ApiController extends Controller
 {
     protected array|bool|int $allowAnonymous = true;
 
@@ -44,11 +44,11 @@ class ClientReporterController extends Controller
         }
 
         $settings = Plugin::getInstance()->getSettings();
-        $secret = (string) App::parseEnv($settings->clientReporterConnectionCode);
-        $tolerance = $settings->clientReporterTolerance ?: 300;
+        $secret = (string) App::parseEnv($settings->reportingConnectionCode);
+        $tolerance = $settings->reportingTolerance ?: 300;
 
         if ($secret === '') {
-            throw new ForbiddenHttpException('Connector not configured.');
+            throw new ForbiddenHttpException('Reporting API not configured.');
         }
 
         $timestamp = (string) $this->request->getHeaders()->get('X-CR-Timestamp');
@@ -64,7 +64,7 @@ class ClientReporterController extends Controller
         }
 
         $cache = Craft::$app->getCache();
-        $nonceKey = 'cr_nonce_' . md5($nonce);
+        $nonceKey = 'ca_report_nonce_' . md5($nonce);
         if ($cache?->get($nonceKey)) {
             throw new ForbiddenHttpException('Nonce already used.');
         }
@@ -82,7 +82,8 @@ class ClientReporterController extends Controller
     }
 
     /**
-     * MUST match Client Reporter's SignedConnectorClient::sign().
+     * Compute a request signature over method, path, timestamp, nonce and a
+     * hash of the body. The consuming client signs requests the same way.
      */
     private function sign(string $method, string $path, string $timestamp, string $nonce, string $body, string $secret): string
     {
@@ -92,7 +93,7 @@ class ClientReporterController extends Controller
     }
 
     /**
-     * The verify handshake, mirroring Client Reporter's other connectors.
+     * A verify handshake, so a client can confirm the connection.
      */
     public function actionVerify(): Response
     {
@@ -105,7 +106,8 @@ class ClientReporterController extends Controller
     }
 
     /**
-     * The period report, in the shape Client Reporter's analytics layer expects.
+     * The period report, in a normalised shape a reporting tool can map to
+     * visitors, page views and the usual breakdowns.
      */
     public function actionReport(): Response
     {
