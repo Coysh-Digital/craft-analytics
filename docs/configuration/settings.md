@@ -11,6 +11,7 @@ setting supports Craft's multi-environment config format and env vars.
 | `nonceTtl` | `1800` | Seconds a hybrid dedupe nonce stays claimable. Must outlast how long a visitor might sit on a page before leaving, or that view can be counted twice. |
 | `beaconRateLimit` | `120` | Maximum beacons accepted per visitor per minute. |
 | `writeDriver` | `spool` | `spool` appends to Redis/NDJSON and relies on the drain command. `queue` uses a dedicated queue component (worker required). `direct` writes synchronously after the response is flushed - low-traffic sites only. |
+| `autoDrain` | `true` | Spool driver only. When no cron runs the drain, an ordinary web request runs it instead - after the response is sent, throttled to ~once a minute, and skipped once the spool passes 2 MB. A fallback for hosts without cron; harmless to leave on when cron is present. See [installation](../get-started/installation.md#put-the-drain-on-your-cron). |
 | `uniqueCounterDriver` | `auto` | `auto` picks `redis` when a Redis cache is configured, else `hll`. `exact` suits small sites. See [storage](../configuration/retention.md). |
 | `hllPrecision` | `12` | HyperLogLog precision (11–14) for the `hll` driver. 12 = 4 KB dense/±1.6%; 14 = 16 KB/±0.8%. Sparse sketches cost far less. |
 | `excludePaths` | `[]` | Glob patterns of site paths never tracked. |
@@ -25,6 +26,8 @@ setting supports Craft's multi-environment config format and env vars.
 | `spoolMaxBytes` | `52428800` | Back-pressure guard: beyond this spool size, oldest data is dropped and a CP warning raised - the site never falls over. |
 | `honourGpc` | `true` | Visitors sending `Sec-GPC: 1` are never tracked beyond the anonymous tier. |
 | `honourDnt` | `false` | Legacy `DNT: 1` support. |
+| `reportingConnectionCode` | `''` | Shared secret for the read-only reporting API (configured under **Settings → Craft Analytics → Reporting API**). Empty disables the API. Prefer an `$ENV_VAR` reference so the secret stays out of project config. |
+| `reportingTolerance` | `300` | Seconds a reporting-API request timestamp may drift (30–3600). |
 
 ## A note on multi-day unique visitors
 
