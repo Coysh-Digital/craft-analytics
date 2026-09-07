@@ -44,6 +44,27 @@ class CaptureService extends Component
         'token',
     ];
 
+    /**
+     * Path prefixes that belong to the CMS's own machinery, never to a page a
+     * visitor navigates to. Craft/Blitz dynamic includes render the uncached
+     * parts of a statically-cached page from their own `/_dynamic_include_<n>`
+     * routes — a GET that returns 200 text/html and so otherwise sails through
+     * every gate below, one sub-request per fragment per page. Counting them
+     * turns a global header or footer into the "most popular page" and buries
+     * the real long tail in `__other__`.
+     *
+     * Kept separate from the user-facing `excludePaths`, which config replaces
+     * wholesale: this filter must hold whatever the site sets there.
+     */
+    public const RESERVED_ROUTE_PREFIXES = ['/_dynamic_include'];
+
+    /**
+     * `Sec-Fetch-Dest` values that mean a top-level document the visitor sees
+     * in the address bar. Anything else the browser sends — `empty` for
+     * fetch/XHR, `script`, `style`, … — is a sub-resource, not a pageview.
+     */
+    private const DOCUMENT_FETCH_DESTS = ['document', 'iframe', 'frame', 'nested-document'];
+
     public ?Settings $settings = null;
     public ?IdentityService $identity = null;
     public ?BotFilter $bots = null;
@@ -155,6 +176,13 @@ class CaptureService extends Component
             return false;
         }
 
+        // Not a top-level page navigation: a CMS fragment route, or a request
+        // the browser itself tells us is a fetch/XHR sub-request rather than a
+        // document. Either way it is machinery filling in a page, not a visit.
+        if ($this->isReservedRoute('/' . $request->getPathInfo()) || $this->isNonDocumentRequest($request)) {
+            return false;
+        }
+
         // Previews and tokenised requests are the author looking at their own
         // work, not an audience.
         if ($request->getIsPreview() || $request->getIsLivePreview() || $request->getToken() !== null) {
@@ -262,6 +290,8 @@ class CaptureService extends Component
             && !$request->getIsCpRequest()
             && $request->getIsGet()
             && !$request->getIsActionRequest()
+            && !$this->isReservedRoute('/' . $request->getPathInfo())
+            && !$this->isNonDocumentRequest($request)
             && !$request->getIsPreview()
             && !$request->getIsLivePreview()
             && $request->getToken() === null
@@ -286,6 +316,46 @@ class CaptureService extends Component
         }
 
         return $settings->honourDnt && (string)$headers->get('dnt') === '1';
+    }
+
+    /**
+     * Whether the path belongs to a reserved CMS route (a dynamic-include
+     * fragment) rather than a page. Always on, unlike the user's excludePaths.
+     */
+    public function isReservedRoute(string $path): bool
+    {
+        // The path may still carry the fragment's `?entryUri=...`; the prefix
+        // is all that identifies the route.
+        $path = explode('?', $path, 2)[0];
+
+        foreach (self::RESERVED_ROUTE_PREFIXES as $prefix) {
+            if (str_starts_with($path, $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether the browser itself says this request is not a top-level document
+     * — a fetch/XHR sub-request from Blitz, Sprig, htmx or hand-rolled AJAX
+     * pulling in part of a page.
+     *
+     * Fails open: `Sec-Fetch-Dest` is absent on old browsers, some bots and
+     * edge-side includes, and its absence must never cost a real navigation a
+     * count. Only an explicit non-document destination (or the legacy
+     * `X-Requested-With` header) is treated as a sub-request.
+     */
+    public function isNonDocumentRequest(Request $request): bool
+    {
+        $dest = strtolower((string)$request->getHeaders()->get('sec-fetch-dest', ''));
+
+        if ($dest !== '' && !in_array($dest, self::DOCUMENT_FETCH_DESTS, true)) {
+            return true;
+        }
+
+        return $request->getIsAjax();
     }
 
     public function isExcludedPath(string $path): bool

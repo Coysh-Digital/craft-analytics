@@ -145,11 +145,18 @@
         </tr>
         </tbody>
     </table>
-    {% if settings.writeDriver in ['spool', 'queue'] %}
+    {% if settings.writeDriver == 'spool' %}
         <p class="light" style="font-size: 13px">
-            {{ 'Both Spool and Queue need this on your cron, or the reports stay empty:'|t('craft-analytics') }}
+            {{ 'Put the drain on your cron so the spool is read regularly:'|t('craft-analytics') }}
         </p>
         <pre class="ca-code" style="font-size: 12px">*/5 * * * * php craft craft-analytics/drain/run</pre>
+        <p class="light" style="font-size: 13px">
+            {{ 'No cron? Leave the automatic fallback below switched on and it drains on ordinary traffic instead.'|t('craft-analytics') }}
+        </p>
+    {% elseif settings.writeDriver == 'queue' %}
+        <p class="light" style="font-size: 13px">
+            {{ 'The Queue driver needs its own worker running the dedicated craftAnalyticsQueue component — not the drain command, and not Craft’s web-triggered runner. Without a worker running, the reports stay empty.'|t('craft-analytics') }}
+        </p>
     {% endif %}
 </div>
 

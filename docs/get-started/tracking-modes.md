@@ -68,11 +68,14 @@ single transaction.
 A thousand pageviews become a handful of database writes rather than a
 thousand. **Use this.**
 
-Needs the drain on cron:
+Put the drain on cron so the spool is read regularly:
 
 ```
 */5 * * * * php craft craft-analytics/drain/run
 ```
+
+No cron? An automatic fallback drains on ordinary traffic instead — see
+[Installation](installation.md#put-the-drain-on-your-cron).
 
 ### Queue
 

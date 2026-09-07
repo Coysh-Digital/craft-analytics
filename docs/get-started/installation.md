@@ -19,12 +19,13 @@ composer require coyshdigital/craft-analytics
 php craft plugin/install craft-analytics
 ```
 
-That installs the plugin. One more step before it collects anything useful.
+That installs the plugin, and it starts counting straight away. To keep the
+numbers flowing efficiently, give the drain a cron entry.
 
 ## Put the drain on your cron
 
-Without this, the plugin records pageviews but never adds them up, and your
-reports stay empty.
+Pageviews land in a fast spool first; the *drain* reads that spool and adds
+them into your reports. On a cron, that happens in the background:
 
 ```
 */5 * * * * /usr/bin/php /path/to/your/site/craft craft-analytics/drain/run
@@ -42,10 +43,19 @@ While you're in there, add the housekeeping job:
 That compacts old hourly rows into daily ones and deletes anything past your
 retention period. Once a day at a quiet hour is enough.
 
+::: tip No cron? It still works.
+If your host doesn't offer cron, the plugin drains itself: at most once a
+minute, an ordinary page request runs the drain — after the visitor already has
+their page, so it costs them nothing. This fallback is on by default (**Settings
+→ Craft Analytics → How data is written**). It skips a spool that has grown past
+2 MB, so a busy site, or one clearing a backlog, still wants a real cron entry.
+Leave the fallback on even with cron; it only ever fires in the gap between runs.
+:::
+
 ::: tip
-Not sure the drain is running? **Analytics → Dashboard** will tell you when it
-last ran. If that says "never", the cron isn't firing, and nothing else you do
-will make the numbers appear.
+Not sure hits are being counted? If pageviews have arrived but nothing has
+drained them yet, **Analytics → Dashboard** says so with a *"Data is waiting to
+be counted"* notice, and tells you how to clear it.
 :::
 
 ## Check it's working

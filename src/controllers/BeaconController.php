@@ -67,7 +67,10 @@ class BeaconController extends Controller
 
         $path = self::sanitizePath((string)$request->getBodyParam('p', ''));
 
-        if ($path === null || $capture->isExcludedPath($path)) {
+        // Reserved-route filter, but not the non-document guard: this request
+        // is the beacon's own POST, whose Sec-Fetch headers describe the
+        // beacon, not the page in `p`. The path is all we can judge here.
+        if ($path === null || $capture->isExcludedPath($path) || $capture->isReservedRoute($path)) {
             return $this->noContent();
         }
 
