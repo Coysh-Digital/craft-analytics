@@ -92,6 +92,26 @@ If a figure ever looks too high to believe, two quick checks settle it:
   if they're your actual pages, the traffic is sound. A CDN's own bot breakdown
   reconciles the rest.
 
+## Fragment sub-requests are not pageviews
+
+A statically-cached page often serves its uncached parts — a personalised
+greeting, a cart count, a CSRF-protected form — from a separate request the
+CMS fires in the background. Craft and Blitz do this with dynamic includes,
+which arrive on their own `/_dynamic_include_…` routes; Sprig, htmx and
+hand-rolled `fetch()` do the equivalent. Each returns `200 text/html`, so on
+the face of it it looks exactly like a page.
+
+The plugin does not count them. A dynamic-include route is filtered by name,
+and any request the browser labels a sub-resource — through the `Sec-Fetch-Dest`
+header or the legacy `X-Requested-With` — is dropped as well, on both the
+server-side and beacon paths. Without this a global header or footer fragment,
+pulled into every page, would top your "most popular pages" while its flood of
+distinct fragment URLs pushed real pages into `__other__`. GA4 never saw these
+requests either, so filtering them also keeps the two totals comparable.
+
+If your site renders fragments under a different route prefix, add it to
+[`excludePaths`](../configuration/settings.md) and it is treated the same way.
+
 ## "Unique visitors" is also an estimate
 
 Separately from the above: the unique count is computed with HyperLogLog, a

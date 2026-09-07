@@ -11,6 +11,20 @@
   one-shot nonce) and aggregate-only — the same figures the dashboard shows,
   with no visitor identifiers. Available in every edition.
 
+### Fixed
+
+- **CMS fragment sub-requests are no longer counted as pageviews.** A
+  statically-cached page often fetches its uncached parts — a personalised
+  greeting, a cart count — from a separate request (Craft/Blitz dynamic
+  includes on `/_dynamic_include_…` routes; Sprig, htmx or hand-rolled
+  `fetch()` do the equivalent). Each returns `200 text/html`, so previously a
+  global header or footer fragment could top the "most popular pages" report
+  while its flood of distinct fragment URLs pushed real pages into `__other__`.
+  These are now dropped on both the server-side and beacon paths — by route
+  name, and by any request the browser marks a sub-resource (`Sec-Fetch-Dest`,
+  or the legacy `X-Requested-With`). Sites rendering fragments under a different
+  prefix can add it to `excludePaths`.
+
 ## 2.4.1 - 2026-09-02
 
 ### Fixed
