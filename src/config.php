@@ -74,6 +74,15 @@ return [
         'honourGpc' => true,
         'honourDnt' => false,
 
+        // --- Crawlers -----------------------------------------------------
+        // An optional second bot signal: the name of a request header your CDN
+        // or WAF stamps with a bot score (e.g. a Cloudflare bot-management
+        // score surfaced by a Transform Rule). Blank leaves detection UA-only.
+        // No IP is stored and nothing is fetched - the edge did the work, we
+        // read its verdict. A score at or below the threshold counts as a bot.
+        'botScoreHeader' => '',
+        'botScoreThreshold' => 30,
+
         // --- Consent (Pro) ------------------------------------------------
         // All off by default: the plugin is cookieless unless you decide
         // otherwise, and each of these changes your compliance posture.

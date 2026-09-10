@@ -207,6 +207,27 @@
     errors: settings.getErrors('trackCrawlers'),
 }) }}
 
+{{ forms.autosuggestField({
+    label: 'Edge bot-score header'|t('craft-analytics'),
+    instructions: 'Optional. The name of a request header your CDN or WAF stamps with a bot score - for example a Cloudflare bot-management score surfaced by a Transform Rule. This catches data-centre traffic that fakes a browser user agent, which no user-agent list can. Leave blank to detect from the user agent only. No address is stored and nothing is fetched: the edge did the work, this only reads its verdict.'|t('craft-analytics'),
+    id: 'botScoreHeader',
+    name: 'botScoreHeader',
+    value: settings.botScoreHeader,
+    suggestEnvVars: true,
+    errors: settings.getErrors('botScoreHeader'),
+}) }}
+
+{{ forms.textField({
+    label: 'Bot-score threshold'|t('craft-analytics'),
+    instructions: 'A score at or below this counts as a crawler. The scale is whatever your edge uses (Cloudflare is 1-99, where low means bot-like), so tune it to your provider. Ignored while the header above is blank.'|t('craft-analytics'),
+    id: 'botScoreThreshold',
+    name: 'botScoreThreshold',
+    type: 'number',
+    size: 5,
+    value: settings.botScoreThreshold,
+    errors: settings.getErrors('botScoreThreshold'),
+}) }}
+
 <hr>
 
 <h2>{{ 'Retention'|t('craft-analytics') }}</h2>
