@@ -293,6 +293,25 @@ class Settings extends Model
      */
     public bool $trackCrawlers = true;
 
+    /**
+     * Name of a request header carrying a bot score your CDN or WAF has already
+     * worked out from the network (for example a Cloudflare bot-management
+     * score surfaced by a Transform Rule). Left blank, this second signal is
+     * off and detection is UA-only.
+     *
+     * Reading a header the edge stamped keeps the plugin's promises: no IP is
+     * stored (C5) and nothing is fetched on the request (C7) - the network did
+     * the work, we only read its verdict.
+     */
+    public string $botScoreHeader = '';
+
+    /**
+     * A score at or below this is treated as a crawler. The scale is whatever
+     * your edge uses (Cloudflare's is 1-99, where low means bot-like), so tune
+     * it to your provider. Ignored when botScoreHeader is blank.
+     */
+    public int $botScoreThreshold = 30;
+
     /** Email a periodic summary from the site's own mailer (Pro). */
     public bool $enableScheduledReports = false;
 
@@ -462,6 +481,8 @@ class Settings extends Model
 
             // Crawlers
             [['blockCrawlers', 'trackCrawlers'], 'boolean'],
+            [['botScoreHeader'], 'string', 'max' => 128],
+            [['botScoreThreshold'], 'integer', 'min' => 0, 'max' => 100],
 
             // Scheduled reports
             [['enableScheduledReports'], 'boolean'],

@@ -1,5 +1,38 @@
 # Release Notes for Craft Analytics
 
+## 2.6.0 - 2026-09-10
+
+### Added
+
+- **An optional second bot signal from your CDN or WAF.** A new *Edge bot-score
+  header* setting names a request header your edge (for example a Cloudflare
+  bot-management score surfaced by a Transform Rule) stamps with a bot score,
+  plus a threshold below which the request is treated as a crawler. This catches
+  data-centre traffic that fakes a browser user agent, which no user-agent list
+  can. It is off unless you name a header, stores no address and fetches
+  nothing: the edge did the work, the plugin only reads its verdict. Available
+  in every edition.
+
+### Fixed
+
+- **Prefetched and prerendered pages are no longer counted as pageviews.** When
+  a browser speculatively fetches a page ahead of a likely click — Chromium
+  speculation rules (`Sec-Purpose`), Safari (`Purpose`, `X-Purpose`) and Firefox
+  (`X-moz`) all do this — that request was previously counted as a real visit,
+  inflating the human figure for pages nobody had opened yet. Those requests are
+  now skipped. If the click does follow, the page is served from the browser's
+  prefetch cache and the on-load beacon counts it once, as before.
+
+### Changed
+
+- **A missing `Accept-Language` header no longer marks a request as a bot.**
+  Real people send requests without it — some in-app browsers, privacy tools and
+  simple HTTP clients — and dropping them silently deleted genuine traffic from
+  the numbers, which is worse than counting the occasional scripted client.
+  Detection now rests on the user-agent list, the automation markers and the
+  optional edge signal above. Self-identifying tools such as `curl` and
+  `python-requests` are still recognised by their user agent.
+
 ## 2.5.0 - 2026-09-07
 
 ### Added

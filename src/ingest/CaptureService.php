@@ -201,6 +201,14 @@ class CaptureService extends Component
             return false;
         }
 
+        // A prefetch/prerender is a real browser reading ahead, not a visit.
+        // It outranks the crawler check: it must be neither counted as a view
+        // nor recorded as a crawler. If the click follows, the on-load beacon
+        // counts it once (see isPrefetch()).
+        if ($this->isPrefetch($request)) {
+            return false;
+        }
+
         if ($this->isCrawler($request)) {
             // Crawlers are never mixed into the reports (`blockCrawlers`).
             // Turning that off does not turn the *detection* off - it stops
@@ -252,7 +260,10 @@ class CaptureService extends Component
             return false;
         }
 
-        $name = $this->bots()->crawlerName((string)$request->getUserAgent());
+        $name = $this->bots()->crawlerName(
+            (string)$request->getUserAgent(),
+            $this->lowercaseHeaders($request),
+        );
 
         Plugin::getInstance()->getWriter()->write(new Hit(
             siteId: $siteId,
@@ -292,6 +303,7 @@ class CaptureService extends Component
             && !$request->getIsActionRequest()
             && !$this->isReservedRoute('/' . $request->getPathInfo())
             && !$this->isNonDocumentRequest($request)
+            && !$this->isPrefetch($request)
             && !$request->getIsPreview()
             && !$request->getIsLivePreview()
             && $request->getToken() === null
@@ -356,6 +368,38 @@ class CaptureService extends Component
         }
 
         return $request->getIsAjax();
+    }
+
+    /**
+     * Whether the browser is speculatively fetching this page ahead of a click
+     * rather than showing it to someone now — a prefetch or prerender.
+     *
+     * This outranks every other signal: a prefetch is neither a person to count
+     * nor a crawler to record. It is a real browser getting ready for a click
+     * that may never come. If the click does follow, the page is served from
+     * the browser's prefetch cache and the on-load beacon counts it then, once
+     * — its nonce was never recorded here, so the beacon claims it and counts.
+     *
+     * The four headers cover every engine: `Sec-Purpose` (Chromium speculation
+     * rules), `Purpose` (older Chromium and Safari), `X-moz` (Firefox) and
+     * `X-Purpose` (Safari).
+     */
+    public function isPrefetch(Request $request): bool
+    {
+        $headers = $request->getHeaders();
+
+        if (str_contains(strtolower((string)$headers->get('sec-purpose', '')), 'prefetch')
+            || str_contains(strtolower((string)$headers->get('sec-purpose', '')), 'prerender')) {
+            return true;
+        }
+
+        $purpose = strtolower((string)$headers->get('purpose', ''));
+        $xMoz = strtolower((string)$headers->get('x-moz', ''));
+        $xPurpose = strtolower((string)$headers->get('x-purpose', ''));
+
+        return $purpose === 'prefetch'
+            || in_array($xMoz, ['prefetch', 'prerender'], true)
+            || in_array($xPurpose, ['preview', 'prefetch', 'prerender'], true);
     }
 
     public function isExcludedPath(string $path): bool
