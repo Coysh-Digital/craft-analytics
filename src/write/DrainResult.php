@@ -15,6 +15,13 @@ final class DrainResult
     public int $closedSessions = 0;
     public int $malformedLines = 0;
 
+    /**
+     * Batches left part-way through because the run's slice budget ran out
+     * (see Drainer::$maxChunks). Still claimed, nothing lost; the next pass
+     * resumes them.
+     */
+    public int $deferredBatches = 0;
+
     /** Batches that threw. Counted whether they were retried or quarantined. */
     public int $failedBatches = 0;
 

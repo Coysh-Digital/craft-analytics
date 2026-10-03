@@ -135,7 +135,7 @@ test('a second request inside the throttle window is skipped', function() {
         ->and($second->called)->toBeFalse();
 });
 
-test('a backlog over the safety cap is left for cron rather than drained inline', function() {
+test('a large backlog is drained one slice at a time rather than skipped', function() {
     // The content doesn't need to be real hits - AutoDrain only ever looks at
     // the byte count before deciding whether to hand this request the drain.
     file_put_contents($this->spool->spoolPath(), str_repeat('x', 3 * 1024 * 1024));
@@ -143,5 +143,20 @@ test('a backlog over the safety cap is left for cron rather than drained inline'
 
     makeAutoDrain($this->spoolDir, $drainer)->run(new Settings());
 
-    expect($drainer->called)->toBeFalse();
+    // It used to stand aside past 2 MB "for cron" - which on a host with no
+    // cron meant for good. Now it takes one slice and leaves the rest claimed
+    // for the next pass.
+    expect($drainer->called)->toBeTrue()
+        ->and($drainer->maxChunks)->toBe(1);
+});
+
+test('a file left claimed by an earlier pass is enough to run again', function() {
+    // Nothing in the live spool, but a previous pass stopped part-way through
+    // a claimed file. "Spool empty" must not mean "nothing to do".
+    file_put_contents($this->spoolDir . '/spool-deadbeef.processing', "{}\n");
+    $drainer = spiedDrainer();
+
+    makeAutoDrain($this->spoolDir, $drainer)->run(new Settings());
+
+    expect($drainer->called)->toBeTrue();
 });

@@ -746,3 +746,61 @@ test('closeIdle() folds idle sessions in without touching the spool', function()
         ->and(glob($this->spoolDir . '/*.processing'))->toBeEmpty()
         ->and(filesize($this->spoolDir . '/spool.ndjson'))->toBeGreaterThan(0);
 });
+
+test('a slice budget leaves the rest of the file claimed for the next pass', function() {
+    $hits = [];
+    for ($i = 0; $i < 250; $i++) {
+        $hits[] = makeHit('/pricing', str_pad((string)$i, 16, '0', STR_PAD_LEFT));
+    }
+    makeSpool($this->spoolDir, $hits);
+
+    // What the automatic drain does inside a web request: one slice, then
+    // hand the worker back. It used to skip a large spool outright, which on
+    // a host with no cron meant nothing was ever drained again.
+    $first = makeDrainer($this);
+    $first->chunkHits = 100;
+    $first->maxChunks = 1;
+    $result = $first->run();
+
+    expect($result->hits)->toBe(100)
+        ->and($result->batches)->toBe(0)
+        ->and($result->deferredBatches)->toBe(1)
+        ->and($result->failedBatches)->toBe(0)
+        ->and($this->sink->flushedViews)->toBe(100)
+        // Still claimed, not quarantined, and nothing counted against it.
+        ->and(glob($this->spoolDir . '/*.processing'))->toHaveCount(1)
+        ->and(glob($this->spoolDir . '/*.failed'))->toBeEmpty()
+        ->and(glob($this->spoolDir . '/*.attempts'))->toBeEmpty();
+
+    // The next pass - cron, say - resumes from the first slice not yet
+    // committed and finishes the file, counting nothing twice.
+    $second = makeDrainer($this);
+    $second->chunkHits = 100;
+    $result = $second->run();
+
+    expect($result->hits)->toBe(150)
+        ->and($result->batches)->toBe(1)
+        ->and($this->sink->flushedViews)->toBe(250)
+        ->and(glob($this->spoolDir . '/*.processing'))->toBeEmpty();
+});
+
+test('a spent budget leaves later files untouched', function() {
+    // Two claimed files waiting, as a backlog leaves them. With a budget of
+    // one slice, the second file must not even be opened - it stays exactly
+    // as it was for the next pass.
+    makeSpool($this->spoolDir, [makeHit('/a')]);
+    rename($this->spoolDir . '/spool.ndjson', $this->spoolDir . '/spool-aaaaaaaaaaaaaaaa.processing');
+    makeSpool($this->spoolDir, [makeHit('/b')]);
+    rename($this->spoolDir . '/spool.ndjson', $this->spoolDir . '/spool-bbbbbbbbbbbbbbbb.processing');
+
+    $drainer = makeDrainer($this);
+    $drainer->maxChunks = 1;
+    $result = $drainer->run();
+
+    expect($result->hits)->toBe(1)
+        ->and($result->batches)->toBe(1)
+        ->and(glob($this->spoolDir . '/*.processing'))->toBe([$this->spoolDir . '/spool-bbbbbbbbbbbbbbbb.processing']);
+
+    expect(makeDrainer($this)->run()->hits)->toBe(1)
+        ->and($this->sink->flushedViews)->toBe(2);
+});

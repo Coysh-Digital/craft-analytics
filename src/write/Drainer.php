@@ -91,6 +91,21 @@ class Drainer extends Component
     public int $chunkHits = 20000;
 
     /**
+     * The most slices one run may apply, or null for all of them.
+     *
+     * Set by the automatic drain, which runs inside a web request and must
+     * hand the worker back: it applies this many slices and stops, leaving the
+     * file claimed with every finished slice committed under its own id, so
+     * the next pass - cron's or the next request's - picks the file up and
+     * carries on from the first slice not yet in the drain log. The console
+     * command leaves it null and drains everything.
+     */
+    public ?int $maxChunks = null;
+
+    /** Slices applied so far this run, against $maxChunks. */
+    private int $chunksApplied = 0;
+
+    /**
      * Separates a slice's number from its file's batch id.
      *
      * Part of the drain-log identity, so it has to be as stable as the file
@@ -138,8 +153,14 @@ class Drainer extends Component
     private function drain(int $now): DrainResult
     {
         $result = new DrainResult();
+        $this->chunksApplied = 0;
 
         foreach ($this->claim() as $file) {
+            if ($this->budgetSpent()) {
+                // Left claimed, untouched, for the next pass.
+                break;
+            }
+
             // One bad batch costs that batch. Letting it out of here would
             // strand its file as claimed-but-unfinished, and every subsequent
             // run would reclaim it, fail on it again, and never reach the
@@ -262,6 +283,7 @@ class Drainer extends Component
         $chunkIndex = 0;
         $hits = 0;
         $buckets = 0;
+        $finished = false;
 
         try {
             while (true) {
@@ -269,6 +291,7 @@ class Drainer extends Component
                 $result->malformedLines += $malformed;
 
                 if ($chunk === []) {
+                    $finished = true;
                     break;
                 }
 
@@ -278,11 +301,33 @@ class Drainer extends Component
                     continue;
                 }
 
+                // Checked after the committed-slice skip, so a pass that only
+                // ever reaches slices already in the log still gets to the
+                // first one that is not.
+                if ($this->budgetSpent()) {
+                    break;
+                }
+
                 $buckets += $this->applyChunk($chunkId, $chunk);
+                $this->chunksApplied++;
                 $hits += count($chunk);
             }
         } finally {
             fclose($handle);
+        }
+
+        $result->hits += $hits;
+        $result->buckets += $buckets;
+
+        // Budget spent with slices still unread. Everything applied is
+        // committed under its own slice id and the file stays claimed, which
+        // is exactly the state an interrupted run leaves and the next pass
+        // already knows how to resume from. Not a failure, so no attempt is
+        // counted against the file.
+        if (!$finished) {
+            $result->deferredBatches++;
+
+            return;
         }
 
         // The whole-file marker goes in last. A replay that finds it skips the
@@ -292,8 +337,11 @@ class Drainer extends Component
         $this->discard($file);
 
         $result->batches++;
-        $result->hits += $hits;
-        $result->buckets += $buckets;
+    }
+
+    private function budgetSpent(): bool
+    {
+        return $this->maxChunks !== null && $this->chunksApplied >= $this->maxChunks;
     }
 
     /**

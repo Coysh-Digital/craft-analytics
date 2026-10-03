@@ -32,6 +32,19 @@ final class SpoolStatus
         return $this->backlogBytes() > 0;
     }
 
+    /**
+     * Whether a previous pass left a claimed file part-way through.
+     *
+     * The automatic drain applies one slice per pass and leaves the rest of
+     * the file claimed, so "nothing in the live spool" no longer means
+     * "nothing to drain": the backlog may be sitting in a `.processing` file
+     * waiting for the next pass to resume it.
+     */
+    public function hasClaimed(): bool
+    {
+        return (glob($this->spool()->spoolDir() . DIRECTORY_SEPARATOR . '*.processing') ?: []) !== [];
+    }
+
     private function spool(): SpoolWriter
     {
         return $this->spool ??= new SpoolWriter();
