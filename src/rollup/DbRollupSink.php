@@ -177,6 +177,15 @@ class DbRollupSink extends Component implements RollupSinkInterface
      */
     private function writeSession(Session $session): void
     {
+        // A session nobody viewed a page in is not a visit, and counting it
+        // as one - a session, a bounce, an entrance and an exit - is how the
+        // bounce rate crept up. The hot layer no longer starts such sessions
+        // (SessionStore::apply()), but ones it started before that rule, and
+        // anything still cached from an older build, close through here.
+        if ($session->pageviews <= 0) {
+            return;
+        }
+
         [$date, $hour] = $this->dateAndHour($session->startedAt);
         $isBounce = $session->isBounce();
 
