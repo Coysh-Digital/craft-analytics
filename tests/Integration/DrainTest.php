@@ -676,3 +676,48 @@ test('a second drain running concurrently declines rather than double-counting',
     }
     @rmdir($lockDir);
 });
+
+test('a crawler hit never opens a session', function() {
+    $now = time();
+    makeSpool($this->spoolDir, [makeCrawlerHit('Googlebot'), makeCrawlerHit('Bingbot', '/about')]);
+
+    makeDrainer($this)->run($now);
+
+    $sessions = new SessionStore(['settings' => $this->settings, 'cache' => $this->cache, 'siteIds' => [1]]);
+
+    // Every crawler shares one reserved session key, so one let through here
+    // was a permanent visitor on the Real-time screen with no pageviews.
+    expect($sessions->activeSessions(1, $now))->toBeEmpty();
+
+    // And nothing to close later either: once the crawlers go quiet there is
+    // no idle session to count as a visit, a bounce and a device.
+    $result = makeDrainer($this)->run($now + $this->settings->sessionWindow + 60);
+
+    expect($result->closedSessions)->toBe(0)
+        ->and($this->sink->flushedSessions)->toBe(0);
+});
+
+test('an engagement beacon with no visit to belong to does not start one', function() {
+    $now = time();
+
+    // countView false: the beacon reporting time on page for a view the
+    // server counted earlier - but that visit has already closed and gone.
+    makeSpool($this->spoolDir, [new Hit(
+        siteId: 1,
+        path: '/pricing',
+        visitorHash: 'aaaaaaaaaaaaaaaa',
+        sessionKey: 'session-aaaaaaaaaaaaaaaa',
+        timestamp: $now,
+        dwellMs: 42000,
+        countView: false,
+    )]);
+
+    $result = makeDrainer($this)->run($now);
+    $sessions = new SessionStore(['settings' => $this->settings, 'cache' => $this->cache, 'siteIds' => [1]]);
+
+    // The dwell still reaches the page bucket; only the session is refused,
+    // because a visit with no pageview in it is not a visit.
+    expect($result->hits)->toBe(1)
+        ->and($this->sink->flushedBuckets)->toBe(1)
+        ->and($sessions->activeSessions(1, $now))->toBeEmpty();
+});

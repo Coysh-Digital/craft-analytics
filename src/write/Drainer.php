@@ -537,6 +537,18 @@ class Drainer extends Component
         $deltas = [];
 
         foreach ($hits as $hit) {
+            // A crawler is not a visitor and has no session. Every crawler hit
+            // on a site shares one reserved session key, so letting it through
+            // here opened a single session that every bot on the internet kept
+            // alive: a permanent "visitor" on the Real-time screen with no
+            // pageviews, and a session, a bounce and a device row written each
+            // time the crawlers went quiet for half an hour. The aggregator
+            // already files these under the crawlers rollup and nowhere else;
+            // this is the same rule, applied to the hot layer.
+            if ($hit->kind === Hit::KIND_CRAWLER) {
+                continue;
+            }
+
             $key = $hit->siteId . ':' . $hit->sessionKey;
 
             if (isset($deltas[$key])) {

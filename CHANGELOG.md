@@ -1,5 +1,27 @@
 # Release Notes for Craft Analytics
 
+## Unreleased
+
+### Fixed
+
+- **Crawlers no longer appear as a visitor on the Real-time screen, or as a
+  session in the reports.** Every crawler request on a site travels under one
+  reserved session key, and the drain opened a session for it like any other
+  hit. Because bots never stop, that session never went idle: the Real-time
+  screen and the dashboard's live banner showed one permanent extra visitor
+  with zero pageviews, sitting on whatever page a bot had fetched last. When
+  the crawlers did go quiet for half an hour it closed, and was written as a
+  session, a bounce, a Direct source, a device parsed from the bot's user agent
+  and an entrance and exit on its path. Crawler hits now touch the Crawlers
+  rollup and nothing else, on every write driver.
+- **A visit with no pageview in it is no longer counted as a session.** An
+  engagement beacon arriving after the visit it describes had already closed
+  started a fresh session with zero pages, which showed on Real-time as a
+  visitor who had read nothing and was later counted as a session and a bounce.
+  The time on page it carries still lands on the page row; only the session is
+  refused. Sessions already in the hot layer in that state close without being
+  written.
+
 ## 2.6.0 - 2026-09-10
 
 ### Added
