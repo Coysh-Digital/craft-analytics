@@ -63,6 +63,17 @@
   row the site held, uncached. Limits are now clamped to between 1 and 200
   everywhere a caller can supply one.
 
+### Changed
+
+- **The automatic drain no longer gives up on a spool over 2 MB.** It stood
+  aside past that size "for cron", which on a host with no cron - the one the
+  fallback exists for - meant for good: one traffic spike over the line and
+  nothing was drained again until the spool hit its own ceiling and new hits
+  were dropped. Each pass now applies one slice of the spool (up to 20,000
+  hits) and leaves the rest claimed for the next pass, so a backlog is worked
+  off a slice a minute. A cron entry still clears it far faster and is still
+  recommended on any busy site.
+
 ## 2.6.0 - 2026-09-10
 
 ### Added

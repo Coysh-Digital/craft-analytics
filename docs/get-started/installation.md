@@ -47,9 +47,10 @@ retention period. Once a day at a quiet hour is enough.
 If your host doesn't offer cron, the plugin drains itself: at most once a
 minute, an ordinary page request runs the drain — after the visitor already has
 their page, so it costs them nothing. This fallback is on by default (**Settings
-→ Craft Analytics → How data is written**). It skips a spool that has grown past
-2 MB, so a busy site, or one clearing a backlog, still wants a real cron entry.
-Leave the fallback on even with cron; it only ever fires in the gap between runs.
+→ Craft Analytics → How data is written**). Each pass applies at most one slice
+of the spool - up to 20,000 hits - so a busy site, or one clearing a backlog,
+still wants a real cron entry to keep the numbers close to live. Leave the
+fallback on even with cron; it only ever fires in the gap between runs.
 :::
 
 ::: tip

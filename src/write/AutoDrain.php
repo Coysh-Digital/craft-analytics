@@ -14,11 +14,17 @@ use yii\caching\CacheInterface;
  * {@see \coyshdigital\craftanalytics\Plugin::attachAutoDrain()} only calls
  * this after the connection to the visitor is already closed, so it costs
  * that visitor nothing (C1) — it costs a PHP-FPM worker for the duration of
- * the drain, which is why it is throttled to about once a minute and skips a
- * spool past a modest size rather than draining a large backlog inside one
- * request. A real cron entry left in place still wins every race: this only
- * ever fires when the live spool has grown since the last pass, cron's or
- * its own.
+ * the drain, which is why it is throttled to about once a minute and applies
+ * at most one slice of the spool per pass rather than a whole backlog inside
+ * one request. A real cron entry left in place still wins every race: this
+ * only ever fires when the live spool has grown since the last pass, cron's
+ * or its own.
+ *
+ * It used to skip a spool past 2 MB altogether, leaving it "for cron". On a
+ * host with no cron - the one this exists for - that was permanent: one
+ * traffic spike over the line and nothing was ever drained again, until the
+ * spool hit its own ceiling and new hits were dropped. A bounded pass works a
+ * backlog off a slice a minute instead.
  *
  * On the `queue` and `direct` drivers there is no spool, but there are still
  * sessions to close: a visit only becomes a session, a bounce, a source and a
@@ -34,12 +40,13 @@ final class AutoDrain
     private const INTERVAL = 60;
 
     /**
-     * Above this, a backlog needs cron's batching, not one request eating it
-     * whole — see the OOM risk noted on {@see Drainer::readHits()}. A few
-     * thousand hits is comfortably more than a site with no cron option
-     * accumulates between requests.
+     * Slices applied per pass. One slice is up to Drainer::$chunkHits hits
+     * (20,000), a few seconds of a worker at most; the rest of the file waits
+     * for the next pass, already claimed and resumable. The slice size itself
+     * is never changed here: slice ids derive from it, and a file sliced one
+     * way by this pass and another by cron would be counted twice.
      */
-    private const MAX_BYTES = 2097152;
+    private const MAX_CHUNKS = 1;
 
     public ?CacheInterface $cache = null;
     public ?Drainer $drainer = null;
@@ -67,24 +74,13 @@ final class AutoDrain
             return;
         }
 
-        $backlog = $this->status()->backlogBytes();
-
-        if ($backlog === 0) {
+        if ($this->status()->backlogBytes() === 0 && !$this->status()->hasClaimed()) {
             return;
         }
 
-        if ($backlog > self::MAX_BYTES) {
-            Craft::warning(
-                'craft-analytics: the spool is over ' . self::MAX_BYTES . ' bytes with no cron apparently '
-                . 'running the drain; skipping the automatic pass rather than draining a large backlog inside '
-                . 'one request. Add craft-analytics/drain/run to cron to clear it.',
-                __METHOD__,
-            );
-
-            return;
-        }
-
-        $this->drainer()->run();
+        $drainer = $this->drainer();
+        $drainer->maxChunks = self::MAX_CHUNKS;
+        $drainer->run();
     }
 
     private function cache(): ?CacheInterface
