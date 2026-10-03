@@ -50,6 +50,12 @@
   closes idle sessions on those drivers too, throttled as before. A real cron
   entry still does the whole job and still wins every race. There is no
   backfill: the sessions were never written.
+- **The dashboard heatmap counted one weekday twice.** It read from the
+  compaction boundary, which is the oldest date *still* held hourly, so with
+  the default seven-day window it covered eight dates - and the weekday today
+  shares with the eighth day back was summed into one row, up to double the
+  others. It now covers exactly `hourlyWindowDays` days ending today, each
+  weekday once, and the card's "Since" date says so.
 
 ## 2.6.0 - 2026-09-10
 
