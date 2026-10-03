@@ -40,6 +40,16 @@
   instead. Rows written before this release carry no sketch, so for them the
   Redis key remains the only copy: this protects history from the upgrade
   onwards and cannot recover a clear that has already happened.
+- **Sites on the `queue` or `direct` write driver with no drain on cron never
+  recorded a session.** Neither driver has a spool, and the documentation said
+  no cron was needed - but a visit only becomes a session, a bounce, a source,
+  a device and an entrance and exit once something notices it has gone idle,
+  and only `drain/run` did. Without it, every one of those figures read zero
+  for as long as the site had run, while pageviews looked fine. The automatic
+  fallback (*Drain automatically when there's no cron*, on by default) now
+  closes idle sessions on those drivers too, throttled as before. A real cron
+  entry still does the whole job and still wins every race. There is no
+  backfill: the sessions were never written.
 
 ## 2.6.0 - 2026-09-10
 

@@ -139,8 +139,10 @@ class Settings extends Model
     /**
      * Runs the drain from an ordinary web request when cron isn't an option,
      * throttled to roughly once a minute and skipped once the spool has grown
-     * past a modest size. Only applies to the spool driver; queue and direct
-     * need no draining.
+     * past a modest size. On the queue and direct drivers there is no spool to
+     * read, but the pass still closes idle sessions - the step that turns a
+     * visit into a session, a bounce, a source and a device, and which
+     * otherwise only `drain/run` performs.
      */
     public bool $autoDrain = true;
 

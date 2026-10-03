@@ -721,3 +721,28 @@ test('an engagement beacon with no visit to belong to does not start one', funct
         ->and($this->sink->flushedBuckets)->toBe(1)
         ->and($sessions->activeSessions(1, $now))->toBeEmpty();
 });
+
+test('closeIdle() folds idle sessions in without touching the spool', function() {
+    $now = time();
+    $sessions = new SessionStore(['settings' => $this->settings, 'cache' => $this->cache, 'siteIds' => [1]]);
+
+    // A visit that ended an hour ago, as the direct and queue writers leave
+    // it: applied to the hot layer, waiting for something to notice.
+    $sessions->apply(
+        coyshdigital\craftanalytics\session\SessionDelta::fromHit(makeHit('/pricing', 'aaaaaaaaaaaaaaaa', $now - 7200)),
+        'single-abc',
+    );
+
+    // Something spooled too, which this pass must leave for the drain proper.
+    makeSpool($this->spoolDir, [makeHit('/about', 'bbbbbbbbbbbbbbbb', $now)]);
+
+    $result = makeDrainer($this)->closeIdle($now);
+
+    expect($result->closedSessions)->toBe(1)
+        ->and($result->hits)->toBe(0)
+        ->and($this->sink->flushedSessions)->toBe(1)
+        ->and($this->sink->flushedViews)->toBe(0)
+        ->and($sessions->activeSessions(1, $now))->toBeEmpty()
+        ->and(glob($this->spoolDir . '/*.processing'))->toBeEmpty()
+        ->and(filesize($this->spoolDir . '/spool.ndjson'))->toBeGreaterThan(0);
+});
