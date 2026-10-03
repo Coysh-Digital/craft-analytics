@@ -56,6 +56,12 @@
   shares with the eighth day back was summed into one row, up to double the
   others. It now covers exactly `hourlyWindowDays` days ending today, each
   weekday once, and the card's "Since" date says so.
+- **A negative `limit` no longer removes the row cap on the GraphQL and Twig
+  report queries.** The cap was a `min()`, which `-1` passes straight through,
+  and no `LIMIT` clause is emitted for a value that is not a run of digits - so
+  `craftAnalyticsTopPages(limit: -1)` on a public schema returned every path
+  row the site held, uncached. Limits are now clamped to between 1 and 200
+  everywhere a caller can supply one.
 
 ## 2.6.0 - 2026-09-10
 

@@ -3,6 +3,7 @@
 namespace coyshdigital\craftanalytics\variables;
 
 use coyshdigital\craftanalytics\charts\ChartData;
+use coyshdigital\craftanalytics\helpers\Limits;
 use coyshdigital\craftanalytics\helpers\Sparkline;
 use coyshdigital\craftanalytics\models\DateRange;
 use coyshdigital\craftanalytics\Plugin;
@@ -71,7 +72,7 @@ class CraftAnalyticsVariable
      */
     public function popularPages(int $limit = 5, string $preset = DateRange::PRESET_30_DAYS, ?int $siteId = null): array
     {
-        return $this->stats()->topPages($this->siteId($siteId), DateRange::fromParam($preset), $limit);
+        return $this->stats()->topPages($this->siteId($siteId), DateRange::fromParam($preset), Limits::rows($limit));
     }
 
     /**
@@ -94,6 +95,7 @@ class CraftAnalyticsVariable
         ?int $siteId = null,
     ): EntryQuery {
         $siteId = $this->siteId($siteId);
+        $limit = Limits::rows($limit);
         $ranked = $this->stats()->topElements($siteId, DateRange::fromParam($preset), $limit * 4);
 
         $query = Entry::find()->siteId($siteId);
