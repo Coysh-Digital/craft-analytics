@@ -91,9 +91,13 @@ capped.
   hard cap 26). This covers **every** aggregate table, Lite and Pro alike:
   pages, page sources, sessions, sources, devices, crawlers, campaigns, geo,
   events, scroll, search, outbound, segments, goals and funnel steps.
-- **Unique membership rows** (`exact` driver) are dropped once the salt that
-  produced their hashes is gone - after that they cannot be matched to
-  anything, by us or anyone.
+- **Unique membership rows** (`exact` driver) are kept for the same
+  `rollupRetentionMonths` as the rollups they count for, because on this driver
+  they *are* the unique figure: nothing is stored on the rollup row, so a day
+  can only be read by counting them. Compaction folds a day's hourly rows into
+  one row per visitor and path, so the table is bounded by daily visitors, not
+  by traffic. The hashes are meaningless once the salt that produced them has
+  rotated - they can be counted, never matched to anyone.
 - **Orphaned dimensions** - values no rollup references any more - are pruned.
 
 Schedule it; don't rely on Craft's GC alone:

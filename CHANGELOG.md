@@ -21,6 +21,14 @@
   The time on page it carries still lands on the page row; only the session is
   refused. Sessions already in the hot layer in that state close without being
   written.
+- **The `exact` unique-counter driver read zero unique visitors for every day
+  older than about three days.** Its figure is the membership table - nothing
+  is kept on the rollup row - and garbage collection dropped those rows two
+  salt rotations after they were written, five nights before compaction came to
+  fold them into the daily scope. The rows now live as long as the rollups they
+  count for, and are deleted in batches like everything else. Days already
+  stripped cannot be recovered; from the first GC after upgrading, every day is
+  kept. Sites on the `redis` or `hll` drivers are unaffected.
 
 ## 2.6.0 - 2026-09-10
 
