@@ -322,11 +322,16 @@ test('GC prunes dimensions nothing references any more', function() {
     expect($remaining)->toBe(['/referenced']);
 });
 
-test('GC drops unique membership rows once their salt is gone', function() {
+test('GC keeps unique membership rows for as long as the rollups they count for', function() {
     $db = TestDb::connection();
     $now = mktime(12, 0, 0, 7, 16, 2026);
 
-    foreach (['2026-07-01', '2026-07-16'] as $date) {
+    // Two weeks old, today, and past the 26-month retention window. These
+    // used to go two salt rotations after they were written, which on the
+    // exact driver deleted the unique figure itself: nothing is kept on the
+    // rollup row, so a day is read by counting these rows, and the compactor
+    // copied them to the daily scope five nights after they had gone.
+    foreach (['2026-07-01', '2026-07-16', '2024-01-01'] as $date) {
         $db->createCommand()->insert(Table::UNIQUE_MEMBERS, [
             'scopeKey' => "p:1:$date:-1:1",
             'siteId' => 1,
@@ -337,10 +342,9 @@ test('GC drops unique membership rows once their salt is gone', function() {
 
     $result = (new GcService(['db' => $db, 'settings' => new Settings()]))->run($now);
 
-    // The old row's hashes were made with a salt that no longer exists, so
-    // they can never be matched to anything again.
+    // Only the row older than the rollups it would have counted for.
     expect($result['expiredMembers'])->toBe(1)
-        ->and((new Query())->from(Table::UNIQUE_MEMBERS)->count('*', $db))->toEqual(1);
+        ->and((new Query())->from(Table::UNIQUE_MEMBERS)->count('*', $db))->toEqual(2);
 });
 
 test('one path with two different elements compacts to one row', function() {
@@ -508,18 +512,18 @@ test('the unique-member cutoff is read in the site timezone, not UTC', function(
     $db = TestDb::connection();
     $original = Craft::$app->timeZone;
 
-    // Noon UTC on the 16th is already the 17th in Auckland, and the salt
-    // cutoff two rotations back lands on the 14th in UTC and the 15th there.
-    // A row dated the 14th is therefore expired in site time and not in UTC -
+    // Noon UTC on 16 July 2026 is already the 17th in Auckland, so the
+    // 26-month retention cutoff lands on 16 May 2024 in UTC and 17 May there.
+    // A row dated 16 May is therefore expired in site time and not in UTC -
     // which is the whole disagreement, since the `date` column is written in
     // site time like every other date in the schema.
     Craft::$app->timeZone = 'Pacific/Auckland';
 
     try {
         $db->createCommand()->insert(Table::UNIQUE_MEMBERS, [
-            'scopeKey' => 'page:1:2026-07-14:9:1',
+            'scopeKey' => 'page:1:2024-05-16:9:1',
             'siteId' => 1,
-            'date' => '2026-07-14',
+            'date' => '2024-05-16',
             'visitorHash' => str_repeat('a', 16),
         ])->execute();
 

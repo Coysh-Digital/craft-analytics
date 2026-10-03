@@ -148,28 +148,30 @@ class GcService extends Component
     }
 
     /**
-     * Drops membership rows once the salt that produced their hashes is gone.
+     * Drops the `exact` driver's membership rows once the rollups they count
+     * for have aged out.
      *
-     * After rotation those hashes cannot be matched to anything — not by us,
-     * not by anyone — so keeping them would be storing bytes with no meaning
-     * and a nonzero liability.
+     * These used to go two salt rotations after they were written, on the
+     * reasoning that once the salt behind the hashes is destroyed they cannot
+     * be matched to anything. True, and beside the point: the exact driver
+     * keeps no sketch on the rollup row, so these rows *are* its unique
+     * figure - COUNT(DISTINCT) over them is the only way a day is ever read.
+     * Compaction copies them from the hourly scopes to the daily one after
+     * `hourlyWindowDays` (7), which was five nights after they had already
+     * been deleted, so every day older than about three days read zero unique
+     * visitors on exactly the driver whose point is exactness.
+     *
+     * Kept for the rollup retention window instead, and deleted in batches
+     * like the rollups. An eight-byte hash under a destroyed salt is
+     * pseudonymous storage, not a liability: nothing can be matched to it, by
+     * us or anyone, and the table is bounded by daily visitors rather than
+     * traffic. The hourly scopes are dropped by compaction itself once the
+     * daily scope holds them (ExactUniqueCounter::discardCompacted()), so the
+     * steady state is one row per path, visitor and day.
      */
     private function deleteExpiredUniqueMembers(int $now): int
     {
-        $interval = $this->settings()->saltRotationInterval;
-
-        // Site time, not UTC. The `date` column is written in the site's
-        // timezone like every other date in the schema, so comparing it
-        // against gmdate() put the cutoff up to a day out either way -
-        // keeping a day longer than intended west of UTC, and dropping a day
-        // early east of it.
-        $cutoff = (new \DateTimeImmutable('@' . ($now - $interval * 2)))
-            ->setTimezone(new \DateTimeZone(Craft::$app->getTimeZone()))
-            ->format('Y-m-d');
-
-        return $this->db()->createCommand()
-            ->delete(Table::UNIQUE_MEMBERS, ['<', 'date', $cutoff])
-            ->execute();
+        return $this->deleteInBatches(Table::UNIQUE_MEMBERS, ['<', 'date', $this->retentionCutoff($now)]);
     }
 
     /**
