@@ -31,9 +31,23 @@ Merging is what makes a date range answerable:
 
 | Driver | Accuracy | Storage | When |
 |---|---|---|---|
-| `redis` | ±0.8% | ~12 KB per counter, in Redis | Default when Redis is configured - native `PFADD`/`PFCOUNT`/`PFMERGE`, effectively free |
+| `redis` | ±0.8% | ~12 KB per counter, in Redis, plus the `hll` sketch on the row as the durable copy | Default when Redis is configured - native `PFADD`/`PFCOUNT`/`PFMERGE`, effectively free |
 | `hll` | ±1.6% (p=12) / ±0.8% (p=14) | Sparse: ~30–400 bytes. Dense: 4 KB (p=12) / 16 KB (p=14) | Default fallback; needs no infrastructure |
 | `exact` | exact (within a day) | One row per (scope, visitor) per day | Small sites that want exact figures |
+
+### Redis and clearing caches
+
+The `redis` driver uses the Redis connection behind Craft's **data cache**, so
+its counters share a database with the cache. `php craft clear-caches/data`
+(and `/all`), the **Clear Caches** utility's *Data caches* option, and a Redis
+`maxmemory-policy` such as `allkeys-lru` all remove them. For that reason the
+driver also merges every write into the same portable sketch the `hll` driver
+stores on the rollup row, and a read whose Redis keys are missing is answered
+from those rows instead - at the `hll` driver's accuracy for that read. Redis
+is the fast path; the database is the record.
+
+Rows written before the row sketch was kept carry none, so for them the Redis key is still
+the only copy. Nothing can be done about a clear that already happened.
 
 The `hll` driver starts every sketch **sparse** (a map of touched registers)
 and promotes to dense only when that stops being smaller. A page with 40
