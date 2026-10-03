@@ -2,6 +2,7 @@
 
 namespace coyshdigital\craftanalytics\gql;
 
+use coyshdigital\craftanalytics\helpers\Limits;
 use coyshdigital\craftanalytics\models\DateRange;
 use coyshdigital\craftanalytics\Plugin;
 use Craft;
@@ -75,7 +76,7 @@ class AnalyticsQuery extends Query
                 'resolve' => static function($source, array $arguments) {
                     $siteId = self::siteId($arguments);
                     $range = DateRange::fromParam($arguments['period'] ?? DateRange::PRESET_30_DAYS);
-                    $limit = min((int)($arguments['limit'] ?? 10), 200);
+                    $limit = Limits::rows((int)($arguments['limit'] ?? 10));
 
                     return Plugin::getInstance()->getStats()->topPages($siteId, $range, $limit);
                 },
