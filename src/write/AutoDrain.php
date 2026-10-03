@@ -19,6 +19,12 @@ use yii\caching\CacheInterface;
  * request. A real cron entry left in place still wins every race: this only
  * ever fires when the live spool has grown since the last pass, cron's or
  * its own.
+ *
+ * On the `queue` and `direct` drivers there is no spool, but there are still
+ * sessions to close: a visit only becomes a session, a bounce, a source and a
+ * device once something notices it has gone idle, and only the drain does
+ * that. So on those drivers the throttled pass closes idle sessions and
+ * nothing else - the part of "no cron needed" that was not true before.
  */
 final class AutoDrain
 {
@@ -41,7 +47,7 @@ final class AutoDrain
 
     public function run(Settings $settings): void
     {
-        if (!$settings->autoDrain || $settings->writeDriver !== Settings::WRITE_DRIVER_SPOOL) {
+        if (!$settings->autoDrain) {
             return;
         }
 
@@ -51,6 +57,13 @@ final class AutoDrain
         // unavailable this fails open and drains every request rather than
         // never draining at all.
         if ($cache !== null && !$cache->add(self::CACHE_KEY, true, self::INTERVAL)) {
+            return;
+        }
+
+        // Nothing spooled on the other drivers, but sessions still go idle.
+        if ($settings->writeDriver !== Settings::WRITE_DRIVER_SPOOL) {
+            $this->drainer()->closeIdle();
+
             return;
         }
 
