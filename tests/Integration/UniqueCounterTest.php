@@ -126,10 +126,13 @@ test('every driver states its accuracy honestly', function() {
         ->and((new RedisUniqueCounter())->accuracy())->toBe('±0.8%');
 });
 
-test('only the sketch driver stores its counters on the rollup row', function() {
+test('the exact driver is the only one that keeps nothing on the rollup row', function() {
+    // Redis used to answer false here, and its counters lived only in the
+    // Redis database behind Craft's data cache - so a cache clear took every
+    // unique figure with it. It now keeps the portable sketch on the row too.
     expect((new HllUniqueCounter())->storesOnRow())->toBeTrue()
         ->and((new ExactUniqueCounter())->storesOnRow())->toBeFalse()
-        ->and((new RedisUniqueCounter())->storesOnRow())->toBeFalse();
+        ->and((new RedisUniqueCounter())->storesOnRow())->toBeTrue();
 });
 
 test('the exact driver really is exact', function() {
@@ -161,4 +164,83 @@ test('the redis driver uses native HyperLogLog', function() {
     expect($ttl)->toBeGreaterThan(0);
 
     expect(abs($counter->estimate([$scope]) - 500) / 500)->toBeLessThan(0.05);
+});
+
+test('the redis driver also keeps a sketch on the row', function() {
+    $connection = redisConnection();
+
+    if ($connection === null) {
+        $this->markTestSkipped('No Redis configured (CRAFT_ANALYTICS_TEST_REDIS_HOST).');
+    }
+
+    $counter = new RedisUniqueCounter(['redis' => $connection, 'settings' => new Settings()]);
+    $scope = scope('2026-07-16');
+
+    $blob = $counter->record($scope, hashesFor(1, 100), null);
+
+    // The same visitors, in the portable encoding, readable without Redis.
+    expect($blob)->not->toBeNull();
+
+    $fromRow = (new HllUniqueCounter(['settings' => new Settings()]))->estimate([$scope], [$blob]);
+    expect(abs($fromRow - 100) / 100)->toBeLessThan(0.05);
+
+    // And a second write merges into it rather than starting over.
+    $blob = $counter->record($scope, hashesFor(101, 200), $blob);
+    $fromRow = (new HllUniqueCounter(['settings' => new Settings()]))->estimate([$scope], [$blob]);
+    expect(abs($fromRow - 200) / 200)->toBeLessThan(0.05);
+});
+
+test('the redis driver survives its keys being flushed', function() {
+    $connection = redisConnection();
+
+    if ($connection === null) {
+        $this->markTestSkipped('No Redis configured (CRAFT_ANALYTICS_TEST_REDIS_HOST).');
+    }
+
+    $counter = new RedisUniqueCounter(['redis' => $connection, 'settings' => new Settings()]);
+    $day1 = scope('2026-07-15');
+    $day2 = scope('2026-07-16');
+
+    $sketch1 = $counter->record($day1, hashesFor(1, 150), null);
+    $sketch2 = $counter->record($day2, hashesFor(51, 200), null);
+
+    $before = $counter->estimate([$day1, $day2], [$sketch1, $sketch2]);
+    expect(abs($before - 200) / 200)->toBeLessThan(0.05);
+
+    // What `php craft clear-caches/data` does to the database the cache -
+    // and these counters - live in. Twenty-six months of history used to
+    // read zero from this moment on.
+    $connection->executeCommand('FLUSHDB');
+    expect((int)$connection->executeCommand('EXISTS', ['ca:u:' . $day1->key()]))->toBe(0);
+
+    $after = $counter->estimate([$day1, $day2], [$sketch1, $sketch2]);
+
+    // Answered from the rows: still a union, still within the sketch's error.
+    expect(abs($after - 200) / 200)->toBeLessThan(0.05)
+        ->and($after)->toBeLessThan(260);
+});
+
+test('a range with some keys missing is answered entirely from the rows', function() {
+    $connection = redisConnection();
+
+    if ($connection === null) {
+        $this->markTestSkipped('No Redis configured (CRAFT_ANALYTICS_TEST_REDIS_HOST).');
+    }
+
+    $counter = new RedisUniqueCounter(['redis' => $connection, 'settings' => new Settings()]);
+    $day1 = scope('2026-07-15');
+    $day2 = scope('2026-07-16');
+
+    $sketch1 = $counter->record($day1, hashesFor(1, 150), null);
+    $sketch2 = $counter->record($day2, hashesFor(51, 200), null);
+
+    // One key evicted, the other still there. A Redis HLL and a row sketch
+    // cannot be merged with each other, so mixing the two per scope would
+    // have to sum them - and 150 + 150 is not 200.
+    $connection->executeCommand('DEL', ['ca:u:' . $day1->key()]);
+
+    $count = $counter->estimate([$day1, $day2], [$sketch1, $sketch2]);
+
+    expect(abs($count - 200) / 200)->toBeLessThan(0.05)
+        ->and($count)->toBeLessThan(260);
 });

@@ -29,6 +29,17 @@
   count for, and are deleted in batches like everything else. Days already
   stripped cannot be recovered; from the first GC after upgrading, every day is
   kept. Sites on the `redis` or `hll` drivers are unaffected.
+- **Clearing Craft's data cache no longer destroys unique-visitor history on
+  the `redis` driver** - the one `auto` picks on any site with a Redis cache.
+  The counters live in the Redis database behind the cache, so `php craft
+  clear-caches/data`, the Clear Caches utility and an `allkeys-lru` eviction
+  policy all removed them, and every unique figure for every past day read
+  zero from that moment, with nothing to say why. The driver now also merges
+  each write into the portable sketch on the rollup row, as the `hll` driver
+  does, and a read whose Redis keys are missing is answered from the rows
+  instead. Rows written before this release carry no sketch, so for them the
+  Redis key remains the only copy: this protects history from the upgrade
+  onwards and cannot recover a clear that has already happened.
 
 ## 2.6.0 - 2026-09-10
 

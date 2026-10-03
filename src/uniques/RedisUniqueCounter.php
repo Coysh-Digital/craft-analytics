@@ -10,12 +10,25 @@ use yii\redis\Cache as RedisCache;
 use yii\redis\Connection as RedisConnection;
 
 /**
- * Preferred driver: Redis's native HyperLogLog.
+ * Preferred driver: Redis's native HyperLogLog, with the portable sketch on
+ * the rollup row as the durable copy.
  *
  * `PFADD`/`PFCOUNT`/`PFMERGE` are the same algorithm implemented in C, at
  * ~12 KB and ~0.81% error per counter, with the merge done by Redis. When a
- * site already runs Redis this is effectively free and keeps the sketches out
- * of the database entirely.
+ * site already runs Redis this is effectively free.
+ *
+ * It is not, however, durable. The connection this driver finds is the one
+ * behind Craft's data cache, so the counters share a Redis database with the
+ * cache - and `php craft clear-caches/data`, the Clear Caches utility and an
+ * `allkeys-lru` eviction policy all treat them as cache. Twenty-six months of
+ * unique visitors used to go with one deploy-time cache clear, with nothing
+ * to say so. Every write therefore also merges the visitors into the
+ * portable sketch on the rollup row, exactly as the `hll` driver does, and a
+ * read whose Redis keys have gone answers from those instead. Redis stays
+ * the fast path; the database is the record.
+ *
+ * Rows written before this driver kept a row sketch have none, so for them
+ * the Redis key is still the only copy.
  */
 class RedisUniqueCounter extends Component implements UniqueCounterInterface
 {
@@ -26,6 +39,12 @@ class RedisUniqueCounter extends Component implements UniqueCounterInterface
 
     public ?RedisConnection $redis = null;
     public ?Settings $settings = null;
+
+    /** The row-sketch half of the driver. Injectable for tests. */
+    public ?HllUniqueCounter $rowSketch = null;
+
+    /** Said once per process: a flushed Redis is one event, not one per row. */
+    private static bool $warnedMissingKeys = false;
 
     public function name(): string
     {
@@ -46,15 +65,20 @@ class RedisUniqueCounter extends Component implements UniqueCounterInterface
         return self::resolveConnection() !== null;
     }
 
+    /**
+     * True since the row sketch became the durable copy. The sink pays the
+     * same locked read-modify-write of the blob the `hll` driver does, which
+     * is the price of surviving a cache flush.
+     */
     public function storesOnRow(): bool
     {
-        return false;
+        return true;
     }
 
     public function record(UniqueScope $scope, array $hashes, ?string $currentSketch): ?string
     {
         if ($hashes === []) {
-            return null;
+            return $currentSketch;
         }
 
         $key = self::KEY_PREFIX . $scope->key();
@@ -64,8 +88,9 @@ class RedisUniqueCounter extends Component implements UniqueCounterInterface
         // query at the edge of retention still has them.
         $this->connection()->executeCommand('EXPIRE', [$key, $this->ttlSeconds()]);
 
-        // Nothing to store on the row: Redis is the counter.
-        return null;
+        // And the same visitors into the sketch on the row, which is what a
+        // read falls back to once the key above has been flushed away.
+        return $this->rowSketch()->record($scope, $hashes, $currentSketch);
     }
 
     public function estimate(array $scopes, iterable $sketches = []): int
@@ -77,6 +102,25 @@ class RedisUniqueCounter extends Component implements UniqueCounterInterface
         // Variadic PFCOUNT unions the keys server-side, so a month is the
         // union of its days rather than the sum.
         $keys = array_map(static fn(UniqueScope $scope) => self::KEY_PREFIX . $scope->key(), $scopes);
+
+        // All or nothing: a Redis HLL and the row sketch are different
+        // encodings and cannot be merged with each other, so a range with any
+        // key missing is answered entirely from the rows. A missing key means
+        // the cache was flushed or evicted, and then every key written before
+        // that moment is gone together.
+        if (!$this->allKeysExist($keys)) {
+            if (!self::$warnedMissingKeys) {
+                self::$warnedMissingKeys = true;
+                Craft::warning(
+                    'Unique-visitor counters are missing from Redis (the data cache was cleared, or Redis '
+                    . 'evicted them); answering from the sketches on the rollup rows instead. Rows written '
+                    . 'before the row sketch was kept carry none and read as zero.',
+                    __METHOD__,
+                );
+            }
+
+            return $this->rowSketch()->estimate($scopes, $sketches);
+        }
 
         if (count($keys) <= self::MAX_KEYS_PER_COMMAND) {
             return (int)$this->connection()->executeCommand('PFCOUNT', $keys);
@@ -138,6 +182,31 @@ class RedisUniqueCounter extends Component implements UniqueCounterInterface
             static fn(UniqueScope $scope) => self::KEY_PREFIX . $scope->key(),
             $hourly,
         ));
+    }
+
+    /**
+     * Whether every one of these keys is still in Redis.
+     *
+     * One round trip per thousand scopes - cheap next to the PFCOUNT that
+     * follows, and the only way to know the answer that follows is complete.
+     *
+     * @param string[] $keys
+     */
+    private function allKeysExist(array $keys): bool
+    {
+        $redis = $this->connection();
+        $found = 0;
+
+        foreach (array_chunk($keys, self::MAX_KEYS_PER_COMMAND) as $chunk) {
+            $found += (int)$redis->executeCommand('EXISTS', $chunk);
+        }
+
+        return $found === count($keys);
+    }
+
+    private function rowSketch(): HllUniqueCounter
+    {
+        return $this->rowSketch ??= new HllUniqueCounter(['settings' => $this->settings]);
     }
 
     private function ttlSeconds(): int
