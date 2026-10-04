@@ -1,5 +1,79 @@
 # Release Notes for Craft Analytics
 
+## 2.7.0 - 2026-10-04
+
+### Fixed
+
+- **Crawlers no longer appear as a visitor on the Real-time screen, or as a
+  session in the reports.** Every crawler request on a site travels under one
+  reserved session key, and the drain opened a session for it like any other
+  hit. Because bots never stop, that session never went idle: the Real-time
+  screen and the dashboard's live banner showed one permanent extra visitor
+  with zero pageviews, sitting on whatever page a bot had fetched last. When
+  the crawlers did go quiet for half an hour it closed, and was written as a
+  session, a bounce, a Direct source, a device parsed from the bot's user agent
+  and an entrance and exit on its path. Crawler hits now touch the Crawlers
+  rollup and nothing else, on every write driver.
+- **A visit with no pageview in it is no longer counted as a session.** An
+  engagement beacon arriving after the visit it describes had already closed
+  started a fresh session with zero pages, which showed on Real-time as a
+  visitor who had read nothing and was later counted as a session and a bounce.
+  The time on page it carries still lands on the page row; only the session is
+  refused. Sessions already in the hot layer in that state close without being
+  written.
+- **The `exact` unique-counter driver read zero unique visitors for every day
+  older than about three days.** Its figure is the membership table - nothing
+  is kept on the rollup row - and garbage collection dropped those rows two
+  salt rotations after they were written, five nights before compaction came to
+  fold them into the daily scope. The rows now live as long as the rollups they
+  count for, and are deleted in batches like everything else. Days already
+  stripped cannot be recovered; from the first GC after upgrading, every day is
+  kept. Sites on the `redis` or `hll` drivers are unaffected.
+- **Clearing Craft's data cache no longer destroys unique-visitor history on
+  the `redis` driver** - the one `auto` picks on any site with a Redis cache.
+  The counters live in the Redis database behind the cache, so `php craft
+  clear-caches/data`, the Clear Caches utility and an `allkeys-lru` eviction
+  policy all removed them, and every unique figure for every past day read
+  zero from that moment, with nothing to say why. The driver now also merges
+  each write into the portable sketch on the rollup row, as the `hll` driver
+  does, and a read whose Redis keys are missing is answered from the rows
+  instead. Rows written before this release carry no sketch, so for them the
+  Redis key remains the only copy: this protects history from the upgrade
+  onwards and cannot recover a clear that has already happened.
+- **Sites on the `queue` or `direct` write driver with no drain on cron never
+  recorded a session.** Neither driver has a spool, and the documentation said
+  no cron was needed - but a visit only becomes a session, a bounce, a source,
+  a device and an entrance and exit once something notices it has gone idle,
+  and only `drain/run` did. Without it, every one of those figures read zero
+  for as long as the site had run, while pageviews looked fine. The automatic
+  fallback (*Drain automatically when there's no cron*, on by default) now
+  closes idle sessions on those drivers too, throttled as before. A real cron
+  entry still does the whole job and still wins every race. There is no
+  backfill: the sessions were never written.
+- **The dashboard heatmap counted one weekday twice.** It read from the
+  compaction boundary, which is the oldest date *still* held hourly, so with
+  the default seven-day window it covered eight dates - and the weekday today
+  shares with the eighth day back was summed into one row, up to double the
+  others. It now covers exactly `hourlyWindowDays` days ending today, each
+  weekday once, and the card's "Since" date says so.
+- **A negative `limit` no longer removes the row cap on the GraphQL and Twig
+  report queries.** The cap was a `min()`, which `-1` passes straight through,
+  and no `LIMIT` clause is emitted for a value that is not a run of digits - so
+  `craftAnalyticsTopPages(limit: -1)` on a public schema returned every path
+  row the site held, uncached. Limits are now clamped to between 1 and 200
+  everywhere a caller can supply one.
+
+### Changed
+
+- **The automatic drain no longer gives up on a spool over 2 MB.** It stood
+  aside past that size "for cron", which on a host with no cron - the one the
+  fallback exists for - meant for good: one traffic spike over the line and
+  nothing was drained again until the spool hit its own ceiling and new hits
+  were dropped. Each pass now applies one slice of the spool (up to 20,000
+  hits) and leaves the rest claimed for the next pass, so a backlog is worked
+  off a slice a minute. A cron entry still clears it far faster and is still
+  recommended on any busy site.
+
 ## 2.6.0 - 2026-09-10
 
 ### Added

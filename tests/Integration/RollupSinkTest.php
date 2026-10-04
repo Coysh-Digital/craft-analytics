@@ -299,3 +299,23 @@ test('the element id is recorded so entry stats need no second lookup', function
 
     expect((int)pagesRow()['elementId'])->toBe(42);
 });
+
+test('a session with no pageviews is not a visit and writes nothing', function() {
+    $start = mktime(10, 0, 0, 7, 16, 2026);
+
+    // The shape a late engagement beacon, or a crawler, used to leave in the
+    // hot layer: a session that never saw a page. Folding it in counted a
+    // session, a bounce, an entrance and an exit for a visit that never was.
+    flushHits($this, [], [new Session(
+        siteId: 1, sessionKey: 'k', visitorHash: 'aaaaaaaaaaaaaaaa',
+        startedAt: $start, lastSeenAt: $start + 5, pageviews: 0,
+        entryPath: '/only', lastPath: '/only',
+    )]);
+
+    $db = TestDb::connection();
+
+    expect((new Query())->from(Table::SESSIONS_ROLLUP)->count('*', $db))->toEqual(0)
+        ->and((new Query())->from(Table::SOURCES_ROLLUP)->count('*', $db))->toEqual(0)
+        ->and((new Query())->from(Table::DEVICES_ROLLUP)->count('*', $db))->toEqual(0)
+        ->and((new Query())->from(Table::PAGES_ROLLUP)->count('*', $db))->toEqual(0);
+});

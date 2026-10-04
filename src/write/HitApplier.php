@@ -38,6 +38,19 @@ class HitApplier extends Component
         // so the id only needs to be unique, not stable.
         $batchId = 'single-' . bin2hex(random_bytes(8));
 
+        // A crawler request is counted on its own rollup and touches nothing
+        // else: no session, no goal, no journey. The drain applies the same
+        // rule (Drainer::deltas()); without it here, every bot on a `direct`
+        // or `queue` site shared one never-idle session that showed on the
+        // Real-time screen as a visitor who never viewed a page.
+        if ($hit->kind === Hit::KIND_CRAWLER) {
+            $aggregator = new Aggregator(null, $this->settings());
+            $aggregator->add($hit);
+            $this->sink()->flush($aggregator->buckets(), [], $aggregator->interactions);
+
+            return;
+        }
+
         // Read before apply(): the session's referrer is how the visitor
         // reached the site, and the hit's own referrer is only that for the
         // first page of a visit. Nothing to look up yet on that first hit,

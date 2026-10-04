@@ -314,3 +314,34 @@ test('a range including today is never cached', function() {
     // and the current day are what somebody watches as they happen.
     expect($queries)->toBeGreaterThan(0);
 });
+
+test('the heatmap covers each weekday exactly once', function() {
+    // With hourlyWindowDays at 7 and "now" on the 16th, the compactor's
+    // cutoff is the 9th: that date is the oldest still held hourly, so
+    // counting from it gave eight dates and the 9th and 16th - both
+    // Thursdays - were summed into one row. Seed every one of them at 09:00.
+    foreach (range(9, 16) as $day) {
+        writePage(sprintf('2026-07-%02d', $day), 10, [$day], hour: 9);
+    }
+
+    $rows = $this->stats->hourOfWeek(1, DateRange::fromPreset(DateRange::PRESET_30_DAYS, STATS_NOW), STATS_NOW);
+    $dates = array_column($rows, 'date');
+    sort($dates);
+
+    expect($this->stats->heatmapFrom(STATS_NOW))->toBe('2026-07-10')
+        ->and($dates)->toBe(['2026-07-10', '2026-07-11', '2026-07-12', '2026-07-13', '2026-07-14', '2026-07-15', '2026-07-16']);
+
+    // And so every cell holds one day's views, the Thursday included.
+    $grid = coyshdigital\craftanalytics\charts\Heatmap::grid($rows);
+
+    expect($grid['max'])->toBe(10)
+        ->and($grid['total'])->toBe(70);
+});
+
+test('the trend chart still reaches the oldest hourly date the heatmap leaves out', function() {
+    // The compaction boundary is the right window for an hourly trend - that
+    // date does still have hourly rows - and only the heatmap needs to stop a
+    // day short of it. The two must not be conflated again.
+    expect($this->stats->hourlyWindowFrom(STATS_NOW))->toBe('2026-07-09')
+        ->and($this->stats->heatmapFrom(STATS_NOW))->toBe('2026-07-10');
+});

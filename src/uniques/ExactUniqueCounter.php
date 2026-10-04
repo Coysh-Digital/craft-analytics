@@ -16,9 +16,13 @@ use yii\db\Query;
  * unique visitors*, not by traffic — a site with 10 M pageviews from 50 k
  * daily visitors stores 50 k-ish rows, not 10 M (C2 holds).
  *
- * The rows are pruned on the same cycle as the salt: once the salt that
- * produced these hashes is destroyed they cannot be linked to anything
- * anyway, so keeping them would be storage without meaning.
+ * The rows live as long as the rollups they count for (`rollupRetentionMonths`),
+ * because they *are* the unique figure: nothing is kept on the rollup row, so
+ * a day can only be read by counting them. Compaction copies a day's hourly
+ * scopes into its daily one and drops the hourly rows, so the steady state is
+ * one row per path, visitor and day. The hashes themselves are meaningless
+ * once the salt that produced them has rotated - they can be counted, not
+ * matched.
  *
  * Note the honest limit: because hashes are only comparable within a salt
  * window, a multi-day estimate here is still a daily-unique basis, exactly as
