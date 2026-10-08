@@ -2,6 +2,15 @@
 
 {% set isPro = craft.app.plugins.getPlugin('craft-analytics').is('pro') %}
 
+{% macro overrideNote(setting) -%}
+    {{ 'This is being overridden by the {setting} setting in config/craft-analytics.php.'|t('craft-analytics', {
+        setting: '<code>' ~ setting ~ '</code>',
+    })|raw }}
+{%- endmacro %}
+
+{% from _self import overrideNote %}
+
+<div id="tracking">
 {% if plugin.isFullPageCachingLikely() and settings.trackingMode == 'server' %}
     <div class="readable">
         <blockquote class="note warning">
@@ -19,6 +28,7 @@
     label: 'Tracking mode'|t('craft-analytics'),
     instructions: 'There are two ways to notice a pageview: PHP can record it while building the page, or a small script in the browser can report it. Each misses something the other catches. See the table below.'|t('craft-analytics'),
     id: 'trackingMode',
+    warning: 'trackingMode' in configOverrides ? overrideNote('trackingMode'),
     name: 'trackingMode',
     options: {
         hybrid: 'Hybrid (recommended)'|t('craft-analytics'),
@@ -71,6 +81,7 @@
     label: 'Inject the tracker automatically'|t('craft-analytics'),
     instructions: 'Adds the tracker before </body> on site pages. Turn this off only if you want to place the script yourself.'|t('craft-analytics'),
     id: 'injectScript',
+    warning: 'injectScript' in configOverrides ? overrideNote('injectScript'),
     name: 'injectScript',
     on: settings.injectScript,
     errors: settings.getErrors('injectScript'),
@@ -80,6 +91,7 @@
     label: 'Beacon path'|t('craft-analytics'),
     instructions: 'The path on your own domain that the tracker posts to. It is first-party on purpose: no request ever leaves your server, so ad blockers have nothing to block and no third party sees your visitors.'|t('craft-analytics'),
     id: 'beaconPath',
+    warning: 'beaconPath' in configOverrides ? overrideNote('beaconPath'),
     name: 'beaconPath',
     value: settings.beaconPath,
     errors: settings.getErrors('beaconPath'),
@@ -89,19 +101,123 @@
     label: 'Strip query strings from page paths'|t('craft-analytics'),
     instructions: 'Record the clean path only, dropping everything after the ?. Campaign tags (utm_*, gclid and the like) are always removed and are still credited to your Sources report; this also collapses ad-network and site-specific parameters such as ?ad= or ?cid= onto one row. Site search still works, since it is read separately.'|t('craft-analytics'),
     id: 'stripQueryString',
+    warning: 'stripQueryString' in configOverrides ? overrideNote('stripQueryString'),
     name: 'stripQueryString',
     on: settings.stripQueryString,
     errors: settings.getErrors('stripQueryString'),
 }) }}
 
+{{ forms.textField({
+    label: 'Session window'|t('craft-analytics'),
+    instructions: 'How long someone can be inactive before their next pageview counts as a new visit. 1800 seconds (30 minutes) is the industry norm, and matching it makes your numbers comparable to everyone else’s.'|t('craft-analytics'),
+    id: 'sessionWindow',
+    warning: 'sessionWindow' in configOverrides ? overrideNote('sessionWindow'),
+    name: 'sessionWindow',
+    type: 'number',
+    size: 6,
+    value: settings.sessionWindow,
+    errors: settings.getErrors('sessionWindow'),
+}) }}
+</div>
+
+<div id="exclusions" class="hidden">
+<h2>{{ 'Sections'|t('craft-analytics') }}</h2>
+
+{% if sections|length %}
+    {{ forms.checkboxSelectField({
+        label: 'Exclude these sections'|t('craft-analytics'),
+        instructions: 'Pages in a ticked section are not counted. They get no tracker script, record no events, and do not appear in the crawler counts. Data already collected is kept. If you use a static cache, clear it after changing this: pages cached earlier still carry the tracker.'|t('craft-analytics'),
+        id: 'excludeSections',
+        warning: 'excludeSections' in configOverrides ? overrideNote('excludeSections'),
+        name: 'excludeSections',
+        options: sections,
+        values: settings.excludeSections,
+        showAllOption: false,
+        errors: settings.getErrors('excludeSections'),
+    }) }}
+{% else %}
+    <p class="light">{{ 'This site has no entry sections to exclude.'|t('craft-analytics') }}</p>
+{% endif %}
+
 <hr>
 
+<h2>{{ 'Paths'|t('craft-analytics') }}</h2>
+
+{{ forms.editableTableField({
+    label: 'Exclude these paths'|t('craft-analytics'),
+    instructions: 'One pattern per row, matched against the page path. `*` matches anything, so `/account/*` covers everything under /account. Use this for pages that are not entries; to leave out a whole section, tick it above.'|t('craft-analytics'),
+    id: 'excludePaths',
+    warning: 'excludePaths' in configOverrides ? overrideNote('excludePaths'),
+    name: 'excludePaths',
+    cols: {
+        pattern: { type: 'singleline', heading: 'Path pattern'|t('craft-analytics'), placeholder: '/account/*' },
+    },
+    rows: settings.excludePaths|map(p => { pattern: p }),
+    errors: settings.getErrors('excludePaths'),
+    allowAdd: true,
+    allowDelete: true,
+    allowReorder: true,
+    addRowLabel: 'Add a pattern'|t('craft-analytics'),
+}) }}
+
+<hr>
+
+<h2>{{ 'Crawlers'|t('craft-analytics') }}</h2>
+
+{{ forms.lightswitchField({
+    label: 'Keep crawlers out of the reports'|t('craft-analytics'),
+    instructions: 'Search engines, monitoring services and scrapers are not visitors. With this off, a site with 400 real visitors and 3,000 bot requests reports 3,400, and every number on every screen is wrong in a way that looks entirely plausible.'|t('craft-analytics'),
+    id: 'blockCrawlers',
+    name: 'blockCrawlers',
+    on: settings.blockCrawlers,
+    errors: settings.getErrors('blockCrawlers'),
+    warning: 'blockCrawlers' in configOverrides
+        ? overrideNote('blockCrawlers')
+        : (not settings.blockCrawlers ? 'Crawler traffic is currently being counted as if it were human.'|t('craft-analytics') : null),
+}) }}
+
+{{ forms.lightswitchField({
+    label: 'Count crawlers separately'|t('craft-analytics'),
+    instructions: 'Records what was kept out, on its own screen, so that “my server logs say 4,000 requests and this says 400” has an answer. Costs one row per crawler per day - never a row per request.'|t('craft-analytics'),
+    id: 'trackCrawlers',
+    warning: 'trackCrawlers' in configOverrides ? overrideNote('trackCrawlers'),
+    name: 'trackCrawlers',
+    on: settings.trackCrawlers,
+    errors: settings.getErrors('trackCrawlers'),
+}) }}
+
+{{ forms.autosuggestField({
+    label: 'Edge bot-score header'|t('craft-analytics'),
+    instructions: 'Optional. The name of a request header your CDN or WAF stamps with a bot score - for example a Cloudflare bot-management score surfaced by a Transform Rule. This catches data-centre traffic that fakes a browser user agent, which no user-agent list can. Leave blank to detect from the user agent only. No address is stored and nothing is fetched: the edge did the work, this only reads its verdict.'|t('craft-analytics'),
+    id: 'botScoreHeader',
+    warning: 'botScoreHeader' in configOverrides ? overrideNote('botScoreHeader'),
+    name: 'botScoreHeader',
+    value: settings.botScoreHeader,
+    suggestEnvVars: true,
+    errors: settings.getErrors('botScoreHeader'),
+}) }}
+
+{{ forms.textField({
+    label: 'Bot-score threshold'|t('craft-analytics'),
+    instructions: 'A score at or below this counts as a crawler. The scale is whatever your edge uses (Cloudflare is 1-99, where low means bot-like), so tune it to your provider. Ignored while the header above is blank.'|t('craft-analytics'),
+    id: 'botScoreThreshold',
+    warning: 'botScoreThreshold' in configOverrides ? overrideNote('botScoreThreshold'),
+    name: 'botScoreThreshold',
+    type: 'number',
+    size: 5,
+    value: settings.botScoreThreshold,
+    errors: settings.getErrors('botScoreThreshold'),
+}) }}
+</div>
+
+<div id="data" class="hidden">
 <h2>{{ 'How data is written'|t('craft-analytics') }}</h2>
 
 {{ forms.selectField({
     label: 'Write driver'|t('craft-analytics'),
     instructions: 'A pageview has to get from the web request into the database. This is the route it takes. All the work happens after the page has been sent to the visitor, so none of these slow the page down - the difference is what happens under load.'|t('craft-analytics'),
     id: 'writeDriver',
+    warning: 'writeDriver' in configOverrides ? overrideNote('writeDriver'),
     name: 'writeDriver',
     options: {
         spool: 'Spool (recommended)'|t('craft-analytics'),
@@ -165,70 +281,12 @@
         label: 'Drain automatically when there’s no cron'|t('craft-analytics'),
         instructions: 'A slower backup for hosts where cron isn’t an option. At most once a minute, an ordinary page request runs the drain instead - after the visitor already has their page, so it never costs them anything. Skipped once the spool grows past 2 MB, so a real backlog still needs cron rather than being drained inside one request. Leave this on even if you do have cron; it only ever does anything in the gap between one run and the next.'|t('craft-analytics'),
         id: 'autoDrain',
+        warning: 'autoDrain' in configOverrides ? overrideNote('autoDrain'),
         name: 'autoDrain',
         on: settings.autoDrain,
         errors: settings.getErrors('autoDrain'),
     }) }}
 {% endif %}
-
-{{ forms.textField({
-    label: 'Session window'|t('craft-analytics'),
-    instructions: 'How long someone can be inactive before their next pageview counts as a new visit. 1800 seconds (30 minutes) is the industry norm, and matching it makes your numbers comparable to everyone else’s.'|t('craft-analytics'),
-    id: 'sessionWindow',
-    name: 'sessionWindow',
-    type: 'number',
-    size: 6,
-    value: settings.sessionWindow,
-    errors: settings.getErrors('sessionWindow'),
-}) }}
-
-<hr>
-
-<h2>{{ 'Crawlers'|t('craft-analytics') }}</h2>
-
-{{ forms.lightswitchField({
-    label: 'Keep crawlers out of the reports'|t('craft-analytics'),
-    instructions: 'Search engines, monitoring services and scrapers are not visitors. With this off, a site with 400 real visitors and 3,000 bot requests reports 3,400, and every number on every screen is wrong in a way that looks entirely plausible.'|t('craft-analytics'),
-    id: 'blockCrawlers',
-    name: 'blockCrawlers',
-    on: settings.blockCrawlers,
-    errors: settings.getErrors('blockCrawlers'),
-    warning: not settings.blockCrawlers
-        ? 'Crawler traffic is currently being counted as if it were human.'|t('craft-analytics')
-        : null,
-}) }}
-
-{{ forms.lightswitchField({
-    label: 'Count crawlers separately'|t('craft-analytics'),
-    instructions: 'Records what was kept out, on its own screen, so that “my server logs say 4,000 requests and this says 400” has an answer. Costs one row per crawler per day - never a row per request.'|t('craft-analytics'),
-    id: 'trackCrawlers',
-    name: 'trackCrawlers',
-    on: settings.trackCrawlers,
-    errors: settings.getErrors('trackCrawlers'),
-}) }}
-
-{{ forms.autosuggestField({
-    label: 'Edge bot-score header'|t('craft-analytics'),
-    instructions: 'Optional. The name of a request header your CDN or WAF stamps with a bot score - for example a Cloudflare bot-management score surfaced by a Transform Rule. This catches data-centre traffic that fakes a browser user agent, which no user-agent list can. Leave blank to detect from the user agent only. No address is stored and nothing is fetched: the edge did the work, this only reads its verdict.'|t('craft-analytics'),
-    id: 'botScoreHeader',
-    name: 'botScoreHeader',
-    value: settings.botScoreHeader,
-    suggestEnvVars: true,
-    errors: settings.getErrors('botScoreHeader'),
-}) }}
-
-{{ forms.textField({
-    label: 'Bot-score threshold'|t('craft-analytics'),
-    instructions: 'A score at or below this counts as a crawler. The scale is whatever your edge uses (Cloudflare is 1-99, where low means bot-like), so tune it to your provider. Ignored while the header above is blank.'|t('craft-analytics'),
-    id: 'botScoreThreshold',
-    name: 'botScoreThreshold',
-    type: 'number',
-    size: 5,
-    value: settings.botScoreThreshold,
-    errors: settings.getErrors('botScoreThreshold'),
-}) }}
-
-<hr>
 
 <h2>{{ 'Retention'|t('craft-analytics') }}</h2>
 
@@ -236,6 +294,7 @@
     label: 'Keep aggregates for'|t('craft-analytics'),
     instructions: 'Months of history to keep before the totals are deleted. These are aggregates - counts per page per day - and contain nothing about any individual, so keeping them is cheap and low-risk. 26 months is the usual choice: it lets you compare this month against the same month last year, which 12 months does not. This is also the hard maximum.'|t('craft-analytics'),
     id: 'rollupRetentionMonths',
+    warning: 'rollupRetentionMonths' in configOverrides ? overrideNote('rollupRetentionMonths'),
     name: 'rollupRetentionMonths',
     type: 'number',
     min: 1,
@@ -249,6 +308,7 @@
     label: 'Keep hourly detail for'|t('craft-analytics'),
     instructions: 'Days before hourly rows are folded into daily ones. Nothing is lost when they are - the totals are identical, you just stop being able to ask what happened at 3pm on a Tuesday last March.'|t('craft-analytics'),
     id: 'hourlyWindowDays',
+    warning: 'hourlyWindowDays' in configOverrides ? overrideNote('hourlyWindowDays'),
     name: 'hourlyWindowDays',
     type: 'number',
     min: 1,
@@ -261,24 +321,25 @@
     {{ 'Retention is enforced by the same scheduled command that compacts hourly rows:'|t('craft-analytics') }}
 </p>
 <pre class="ca-code" style="font-size: 12px">0 4 * * * php craft craft-analytics/gc/run</pre>
+</div>
 
-<hr>
-
+<div id="privacy" class="hidden">
 <h2>{{ 'Privacy'|t('craft-analytics') }}</h2>
 
 {{ forms.lightswitchField({
     label: 'Honour Global Privacy Control'|t('craft-analytics'),
     instructions: 'Visitors whose browser sends Sec-GPC: 1 have asked, in a legally recognised way, not to be tracked. With this on they are not counted at all, and nothing a consent tool says can override it.'|t('craft-analytics'),
     id: 'honourGpc',
+    warning: 'honourGpc' in configOverrides ? overrideNote('honourGpc'),
     name: 'honourGpc',
     on: settings.honourGpc,
     errors: settings.getErrors('honourGpc'),
 }) }}
+</div>
 
 {% if isPro %}
-    <hr>
-
-    <h2>{{ 'What gets tracked'|t('craft-analytics') }}</h2>
+<div id="reports" class="hidden">
+<h2>{{ 'What gets tracked'|t('craft-analytics') }}</h2>
 
     <p class="light">
         {{ 'The Pro reports, each turned on or off here. They are additive: a report left off records nothing and costs nothing.'|t('craft-analytics') }}
@@ -288,6 +349,7 @@
         label: 'Geography'|t('craft-analytics'),
         instructions: 'Country and region, resolved on your own server from a local database - no lookup service is ever called. Install the database first with the command below, or this records nothing.'|t('craft-analytics'),
         id: 'enableGeo',
+        warning: 'enableGeo' in configOverrides ? overrideNote('enableGeo'),
         name: 'enableGeo',
         on: settings.enableGeo,
         errors: settings.getErrors('enableGeo'),
@@ -305,6 +367,7 @@
         label: 'Campaigns & attribution'|t('craft-analytics'),
         instructions: 'Reads utm_* tags and ad click IDs to show which tagged links brought people, and what they did next.'|t('craft-analytics'),
         id: 'enableCampaigns',
+        warning: 'enableCampaigns' in configOverrides ? overrideNote('enableCampaigns'),
         name: 'enableCampaigns',
         on: settings.enableCampaigns,
         errors: settings.getErrors('enableCampaigns'),
@@ -316,6 +379,7 @@
             label: 'Attribution model'|t('craft-analytics'),
             instructions: 'How a session with more than one campaign touch divides the credit. With a single touch, every model agrees.'|t('craft-analytics'),
             id: 'attributionModel',
+            warning: 'attributionModel' in configOverrides ? overrideNote('attributionModel'),
             name: 'attributionModel',
             options: attributionModels,
             value: settings.attributionModel,
@@ -327,6 +391,7 @@
         label: 'Events & interactions'|t('craft-analytics'),
         instructions: 'Loads a small extra script so custom events, outbound clicks, downloads and scroll depth can be recorded. Left off, none are, and the core tracker stays smaller.'|t('craft-analytics'),
         id: 'enableEvents',
+        warning: 'enableEvents' in configOverrides ? overrideNote('enableEvents'),
         name: 'enableEvents',
         on: settings.enableEvents,
         errors: settings.getErrors('enableEvents'),
@@ -338,6 +403,7 @@
             label: 'Outbound links'|t('craft-analytics'),
             instructions: 'Count clicks on links that leave your site.'|t('craft-analytics'),
             id: 'trackOutbound',
+            warning: 'trackOutbound' in configOverrides ? overrideNote('trackOutbound'),
             name: 'trackOutbound',
             on: settings.trackOutbound,
             errors: settings.getErrors('trackOutbound'),
@@ -347,6 +413,7 @@
             label: 'Downloads'|t('craft-analytics'),
             instructions: 'Count clicks on links to downloadable files. The extensions that count as a download are in config/craft-analytics.php.'|t('craft-analytics'),
             id: 'trackDownloads',
+            warning: 'trackDownloads' in configOverrides ? overrideNote('trackDownloads'),
             name: 'trackDownloads',
             on: settings.trackDownloads,
             errors: settings.getErrors('trackDownloads'),
@@ -356,6 +423,7 @@
             label: 'Scroll depth'|t('craft-analytics'),
             instructions: 'Record how far down each page people read. It rides the existing pageview beacon, so it adds no extra request.'|t('craft-analytics'),
             id: 'trackScroll',
+            warning: 'trackScroll' in configOverrides ? overrideNote('trackScroll'),
             name: 'trackScroll',
             on: settings.trackScroll,
             errors: settings.getErrors('trackScroll'),
@@ -366,6 +434,7 @@
         label: 'Site search'|t('craft-analytics'),
         instructions: 'Record what people search for on your own site. Read from the search URL, so it needs no JavaScript.'|t('craft-analytics'),
         id: 'trackSiteSearch',
+        warning: 'trackSiteSearch' in configOverrides ? overrideNote('trackSiteSearch'),
         name: 'trackSiteSearch',
         on: settings.trackSiteSearch,
         errors: settings.getErrors('trackSiteSearch'),
@@ -377,6 +446,7 @@
             label: 'Search results path'|t('craft-analytics'),
             instructions: 'The path your search results land on.'|t('craft-analytics'),
             id: 'siteSearchPath',
+            warning: 'siteSearchPath' in configOverrides ? overrideNote('siteSearchPath'),
             name: 'siteSearchPath',
             value: settings.siteSearchPath,
             errors: settings.getErrors('siteSearchPath'),
@@ -386,6 +456,7 @@
             label: 'Search query parameter'|t('craft-analytics'),
             instructions: 'The query-string parameter that holds the search term, e.g. q in ?q=hello.'|t('craft-analytics'),
             id: 'siteSearchParam',
+            warning: 'siteSearchParam' in configOverrides ? overrideNote('siteSearchParam'),
             name: 'siteSearchParam',
             value: settings.siteSearchParam,
             errors: settings.getErrors('siteSearchParam'),
@@ -414,6 +485,7 @@
         label: 'Send a summary by email'|t('craft-analytics'),
         instructions: 'Sent with your own mail settings, from your own server. No third-party email service is involved and there is no tracking pixel in it.'|t('craft-analytics'),
         id: 'enableScheduledReports',
+        warning: 'enableScheduledReports' in configOverrides ? overrideNote('enableScheduledReports'),
         name: 'enableScheduledReports',
         on: settings.enableScheduledReports,
         errors: settings.getErrors('enableScheduledReports'),
@@ -425,12 +497,16 @@
             label: 'Send it to'|t('craft-analytics'),
             instructions: 'One address per row. An $ENV_VAR works here, so staging and production can differ.'|t('craft-analytics'),
             id: 'reportRecipients',
+            warning: 'reportRecipients' in configOverrides ? overrideNote('reportRecipients'),
             name: 'reportRecipients',
             cols: {
                 email: { type: 'singleline', heading: 'Email address'|t('craft-analytics'), placeholder: 'you@example.com' },
             },
             rows: settings.reportRecipients|map(r => { email: r }),
             errors: settings.getErrors('reportRecipients'),
+            allowAdd: true,
+            allowDelete: true,
+            allowReorder: true,
             addRowLabel: 'Add a recipient'|t('craft-analytics'),
         }) }}
 
@@ -438,6 +514,7 @@
             label: 'Covering'|t('craft-analytics'),
             instructions: 'The period each email reports on. How often it is sent is up to your cron, below.'|t('craft-analytics'),
             id: 'reportPeriod',
+            warning: 'reportPeriod' in configOverrides ? overrideNote('reportPeriod'),
             name: 'reportPeriod',
             options: reportPeriods,
             value: settings.reportPeriod,
@@ -453,10 +530,10 @@
         </p>
         <pre class="ca-code" style="font-size: 12px">php craft craft-analytics/report/send --dry-run</pre>
     </div>
+</div>
 {% endif %}
 
-<hr>
-
+<div id="integrations" class="hidden">
 <h2>{{ 'Import from Google Analytics 4'|t('craft-analytics') }}</h2>
 
 <p class="light">
@@ -468,6 +545,7 @@
     label: 'Client ID'|t('craft-analytics'),
     instructions: 'The OAuth client ID from your Google Cloud project. An $ENV_VAR reference works here too.'|t('craft-analytics'),
     id: 'ga4ClientId',
+    warning: 'ga4ClientId' in configOverrides ? overrideNote('ga4ClientId'),
     name: 'ga4ClientId',
     suggestEnvVars: true,
     value: settings.ga4ClientId,
@@ -479,6 +557,7 @@
     label: 'Client secret'|t('craft-analytics'),
     instructions: 'The matching client secret. Prefer a $ENV_VAR reference: a value pasted here is saved to your project config, while the secret is better kept in the environment.'|t('craft-analytics'),
     id: 'ga4ClientSecret',
+    warning: 'ga4ClientSecret' in configOverrides ? overrideNote('ga4ClientSecret'),
     name: 'ga4ClientSecret',
     suggestEnvVars: true,
     value: settings.ga4ClientSecret,
@@ -498,12 +577,10 @@
     label: 'Connection code'|t('craft-analytics'),
     instructions: 'A shared secret. Prefer an $ENV_VAR reference so it stays out of project config.'|t('craft-analytics'),
     id: 'reportingConnectionCode',
+    warning: 'reportingConnectionCode' in configOverrides ? overrideNote('reportingConnectionCode'),
     name: 'reportingConnectionCode',
     suggestEnvVars: true,
     value: settings.reportingConnectionCode,
     errors: settings.getErrors('reportingConnectionCode'),
 }) }}
-
-<p class="light" style="margin-top: 24px">
-    {{ 'Every setting here can be overridden per environment in config/craft-analytics.php, which is the better place for anything that should differ between staging and production.'|t('craft-analytics') }}
-</p>
+</div>

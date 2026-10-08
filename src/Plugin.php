@@ -68,6 +68,7 @@ use craft\services\Gql as GqlService;
 use craft\services\UserPermissions;
 use craft\services\Utilities;
 use craft\web\Application as WebApplication;
+use craft\web\Controller;
 use craft\web\Request as WebRequest;
 use craft\web\Response;
 use craft\web\twig\variables\CraftVariable;
@@ -470,19 +471,143 @@ class Plugin extends BasePlugin
         return new Settings();
     }
 
+    public function getSettingsResponse(): mixed
+    {
+        return $this->settingsPage(false);
+    }
+
+    public function getReadOnlySettingsResponse(): mixed
+    {
+        return $this->settingsPage(true);
+    }
+
+    /**
+     * The settings screen, with tabs.
+     *
+     * Craft's stock plugin-settings page has no tabs, so this renders our own
+     * copy of it (settings/_page.twig). It saves through the same
+     * `plugins/save-plugin-settings` action.
+     */
+    private function settingsPage(bool $readOnly): \yii\web\Response
+    {
+        $view = Craft::$app->getView();
+
+        $settingsHtml = $view->namespaceInputs(function() use ($readOnly) {
+            if ($readOnly) {
+                return (string)Html::disableInputs(fn() => $this->settingsHtml());
+            }
+
+            return (string)$this->settingsHtml();
+        }, 'settings');
+
+        $settings = $this->getSettings();
+        $tabs = [];
+        $selectedTab = null;
+
+        foreach ($this->settingsTabs() as $id => $tab) {
+            $hasErrors = $settings->hasErrors() && array_intersect($tab['attributes'], array_keys($settings->getErrors())) !== [];
+
+            // Ids are namespaced to match the inputs namespaceInputs() wrapped.
+            $tabs["settings-$id"] = [
+                'label' => $tab['label'],
+                'url' => "#settings-$id",
+                'class' => $hasErrors ? 'error' : '',
+            ];
+
+            if ($hasErrors && $selectedTab === null) {
+                $selectedTab = "settings-$id";
+            }
+        }
+
+        /** @var Controller $controller */
+        $controller = Craft::$app->controller;
+
+        return $controller->renderTemplate('craft-analytics/settings/_page.twig', [
+            'plugin' => $this,
+            'settingsHtml' => $settingsHtml,
+            'readOnly' => $readOnly,
+            'tabs' => $tabs,
+            'selectedTab' => $selectedTab,
+        ]);
+    }
+
+    /**
+     * The settings tabs, in order, and which settings live on each so a
+     * validation error can mark the right one. Reports is Pro-only.
+     *
+     * @return array<string,array{label:string,attributes:string[]}>
+     */
+    private function settingsTabs(): array
+    {
+        $tabs = [
+            'tracking' => [
+                'label' => Craft::t('craft-analytics', 'Tracking'),
+                'attributes' => ['trackingMode', 'injectScript', 'beaconPath', 'stripQueryString', 'sessionWindow'],
+            ],
+            'exclusions' => [
+                'label' => Craft::t('craft-analytics', 'Exclusions'),
+                'attributes' => [
+                    'excludeSections', 'excludePaths', 'blockCrawlers', 'trackCrawlers',
+                    'botScoreHeader', 'botScoreThreshold',
+                ],
+            ],
+            'data' => [
+                'label' => Craft::t('craft-analytics', 'Data & retention'),
+                'attributes' => ['writeDriver', 'autoDrain', 'rollupRetentionMonths', 'hourlyWindowDays'],
+            ],
+            'privacy' => [
+                'label' => Craft::t('craft-analytics', 'Privacy'),
+                'attributes' => ['honourGpc'],
+            ],
+        ];
+
+        if ($this->is(self::EDITION_PRO)) {
+            $tabs['reports'] = [
+                'label' => Craft::t('craft-analytics', 'Reports'),
+                'attributes' => [
+                    'enableGeo', 'enableCampaigns', 'attributionModel', 'enableEvents', 'trackOutbound',
+                    'trackDownloads', 'trackScroll', 'trackSiteSearch', 'siteSearchPath', 'siteSearchParam',
+                    'enableScheduledReports', 'reportRecipients', 'reportPeriod',
+                ],
+            ];
+        }
+
+        $tabs['integrations'] = [
+            'label' => Craft::t('craft-analytics', 'Integrations'),
+            'attributes' => ['ga4ClientId', 'ga4ClientSecret', 'reportingConnectionCode'],
+        ];
+
+        return $tabs;
+    }
+
     protected function settingsHtml(): ?string
     {
+        Craft::$app->getView()->registerAssetBundle(CpAsset::class);
+
         $attributionModels = [];
 
         foreach (AttributionModel::cases() as $model) {
             $attributionModels[$model->value] = Craft::t('craft-analytics', $model->label());
         }
 
+        $sections = [];
+
+        foreach (Craft::$app->getEntries()->getAllSections() as $section) {
+            $sections[] = ['label' => $section->name, 'value' => $section->uid];
+        }
+
+        // Settings the config file sets win over whatever is saved here, so
+        // each of their fields says so rather than silently ignoring an edit.
+        $configFile = Craft::$app->getConfig()->getConfigFromFile('craft-analytics');
+        $configOverrides = is_array($configFile) ? array_keys($configFile) : [];
+
         return Craft::$app->getView()->renderTemplate('craft-analytics/_settings.twig', [
             'plugin' => $this,
             'settings' => $this->getSettings(),
             'reportPeriods' => DateRange::presets(),
             'attributionModels' => $attributionModels,
+            'sections' => $sections,
+            'configOverrides' => $configOverrides,
         ]);
     }
 

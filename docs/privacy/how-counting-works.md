@@ -112,6 +112,11 @@ requests either, so filtering them also keeps the two totals comparable.
 If your site renders fragments under a different route prefix, add it to
 [`excludePaths`](../configuration/settings.md) and it is treated the same way.
 
+To leave a whole entry section out of the reports (a members area, internal
+notices), tick it under Exclusions in the settings, or list its handle in
+[`excludeSections`](../configuration/settings.md). Its pages are not counted and
+get no tracker script at all.
+
 ## "Unique visitors" is also an estimate
 
 Separately from the above: the unique count is computed with HyperLogLog, a

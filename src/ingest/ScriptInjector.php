@@ -95,7 +95,9 @@ class ScriptInjector extends Component
 
         // A page we would never count doesn't need a beacon that would be
         // ignored on arrival.
-        if (Plugin::getInstance()->getCapture()->isExcludedPath('/' . $request->getPathInfo())) {
+        $capture = Plugin::getInstance()->getCapture();
+
+        if ($capture->isExcludedPath('/' . $request->getPathInfo()) || $capture->isExcludedMatchedElement()) {
             return null;
         }
 
