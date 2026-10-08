@@ -30,6 +30,10 @@ return [
         // ad-network parameters (gad_source, _gl, ...) and Craft's preview token
         // are always stripped; list any site-specific ones here.
         'excludePaths' => [],
+
+        // Entry sections whose pages are never tracked: no pageview, no
+        // tracker script, no events. Section handles here; the CP stores UIDs.
+        'excludeSections' => [],
         'excludeQueryParams' => [],
 
         // Drop the whole query string from tracked page paths. Attribution is

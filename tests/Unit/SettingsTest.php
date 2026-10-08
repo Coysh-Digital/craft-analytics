@@ -74,3 +74,40 @@ test('settings are populated from a config-file style array', function() {
         ->and($settings->excludePaths)->toBe(['/admin*', '/preview/*'])
         ->and($settings->dimensionCap)->toBe(500);
 });
+
+test('excluded sections and paths accept a config-style plain list', function() {
+    $settings = new Settings([
+        'excludeSections' => ['members', 'a1b2c3d4-0000-4000-8000-000000000000'],
+        'excludePaths' => ['/account/*'],
+    ]);
+
+    expect($settings->validate())->toBeTrue()
+        ->and($settings->excludeSections)->toBe(['members', 'a1b2c3d4-0000-4000-8000-000000000000'])
+        ->and($settings->excludePaths)->toBe(['/account/*']);
+});
+
+test('the CP posts excluded paths as table rows and they flatten to a list', function() {
+    $settings = new Settings();
+    $settings->setAttributes([
+        'excludePaths' => [['pattern' => ' /account/* '], ['pattern' => ''], ['pattern' => '/staff']],
+    ]);
+
+    expect($settings->excludePaths)->toBe(['/account/*', '/staff']);
+});
+
+test('clearing the last section or path saves as an empty list', function() {
+    // A checkbox group with nothing ticked, and a table with no rows, both
+    // post an empty string - not an empty array.
+    $settings = new Settings(['excludeSections' => ['members'], 'excludePaths' => ['/a']]);
+    $settings->setAttributes(['excludeSections' => '', 'excludePaths' => '']);
+
+    expect($settings->validate())->toBeTrue()
+        ->and($settings->excludeSections)->toBe([])
+        ->and($settings->excludePaths)->toBe([]);
+});
+
+test('excluded sections reject non-string values', function() {
+    $settings = new Settings(['excludeSections' => [['nested']]]);
+
+    expect($settings->validate(['excludeSections']))->toBeFalse();
+});

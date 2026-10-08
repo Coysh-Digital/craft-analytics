@@ -9,6 +9,8 @@ use coyshdigital\craftanalytics\Plugin;
 use coyshdigital\craftanalytics\services\BotFilter;
 use coyshdigital\craftanalytics\services\IdentityService;
 use Craft;
+use craft\base\ElementInterface;
+use craft\elements\Entry;
 use craft\helpers\StringHelper;
 use craft\web\Request;
 use craft\web\Response;
@@ -68,6 +70,14 @@ class CaptureService extends Component
     public ?Settings $settings = null;
     public ?IdentityService $identity = null;
     public ?BotFilter $bots = null;
+
+    /**
+     * Ids of the sections in `excludeSections`, resolved once per request.
+     * Settable so a test can supply them without a Craft install behind it.
+     *
+     * @var int[]|null
+     */
+    public ?array $excludedSectionIds = null;
 
     /**
      * Captures the current request, if it is trackable at all.
@@ -197,7 +207,7 @@ class CaptureService extends Component
             return false;
         }
 
-        if ($this->isExcludedPath('/' . $request->getPathInfo())) {
+        if ($this->isExcludedPath('/' . $request->getPathInfo()) || $this->isExcludedMatchedElement()) {
             return false;
         }
 
@@ -309,7 +319,8 @@ class CaptureService extends Component
             && $request->getToken() === null
             && $response->getStatusCode() === 200
             && self::isHtml($response)
-            && !$this->isExcludedPath('/' . $request->getPathInfo());
+            && !$this->isExcludedPath('/' . $request->getPathInfo())
+            && !$this->isExcludedMatchedElement();
     }
 
     /**
@@ -411,6 +422,53 @@ class CaptureService extends Component
         }
 
         return false;
+    }
+
+    /**
+     * Whether the element Craft matched this request to is an entry in a
+     * section the site has asked not to be tracked.
+     */
+    public function isExcludedMatchedElement(): bool
+    {
+        if ($this->settings()->excludeSections === []) {
+            return false;
+        }
+
+        return $this->isExcludedElement(Craft::$app->getUrlManager()->getMatchedElement());
+    }
+
+    public function isExcludedElement(ElementInterface|false|null $element): bool
+    {
+        if (!$element instanceof Entry || $element->sectionId === null) {
+            return false;
+        }
+
+        return in_array((int)$element->sectionId, $this->excludedSectionIds(), true);
+    }
+
+    /**
+     * @return int[]
+     */
+    private function excludedSectionIds(): array
+    {
+        if ($this->excludedSectionIds !== null) {
+            return $this->excludedSectionIds;
+        }
+
+        $entries = Craft::$app->getEntries();
+        $ids = [];
+
+        foreach ($this->settings()->excludeSections as $value) {
+            // UIDs are what the CP saves; a config file may use handles.
+            $section = $entries->getSectionByUid($value) ?? $entries->getSectionByHandle($value);
+
+            // A section that has since been deleted simply stops matching.
+            if ($section !== null && $section->id !== null) {
+                $ids[] = (int)$section->id;
+            }
+        }
+
+        return $this->excludedSectionIds = $ids;
     }
 
     /**

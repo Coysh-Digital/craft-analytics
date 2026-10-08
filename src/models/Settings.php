@@ -70,6 +70,18 @@ class Settings extends Model
     public array $excludePaths = [];
 
     /**
+     * Entry sections whose pages are never tracked: no pageview, no crawler
+     * count, no tracker script and no events.
+     *
+     * Holds section UIDs, which survive a trip through project config to
+     * another environment. A config file may use handles instead, which
+     * are easier to write by hand. Past data is not touched.
+     *
+     * @var string[]
+     */
+    public array $excludeSections = [];
+
+    /**
      * Query parameters stripped from tracked URIs, on top of the campaign and
      * ad-network parameters that are always removed.
      *
@@ -360,17 +372,30 @@ class Settings extends Model
     /**
      * Normalises settings on the way in.
      *
-     * The CP's editable table posts recipients as `[['email' => '…'], …]`
-     * while a config file writes a plain list of addresses. Both are the same
-     * setting, so both are flattened to the same shape here rather than every
-     * reader having to know which one it is looking at.
+     * The CP's editable tables post rows as `[['email' => '…'], …]` (`pattern`
+     * for excludePaths) while a config file writes a plain list. Both are the
+     * same setting, so both are flattened to the same shape here rather than
+     * every reader having to know which one it is looking at.
      *
      * @param array<string,mixed> $values
      */
     public function setAttributes($values, $safeOnly = true): void
     {
         if (isset($values['reportRecipients']) && is_array($values['reportRecipients'])) {
-            $values['reportRecipients'] = self::flattenRecipients($values['reportRecipients']);
+            $values['reportRecipients'] = self::flattenRows($values['reportRecipients'], 'email');
+        }
+
+        if (isset($values['excludePaths']) && is_array($values['excludePaths'])) {
+            $values['excludePaths'] = self::flattenRows($values['excludePaths'], 'pattern');
+        }
+
+        // A checkbox group with nothing ticked, or a table with no rows, posts
+        // an empty string rather than an empty array, so clearing the last
+        // value would otherwise never save.
+        foreach (['excludeSections', 'excludePaths'] as $attribute) {
+            if (array_key_exists($attribute, $values) && $values[$attribute] === '') {
+                $values[$attribute] = [];
+            }
         }
 
         parent::setAttributes($values, $safeOnly);
@@ -380,20 +405,20 @@ class Settings extends Model
      * @param array<int|string,mixed> $rows
      * @return string[]
      */
-    private static function flattenRecipients(array $rows): array
+    private static function flattenRows(array $rows, string $column): array
     {
-        $recipients = [];
+        $values = [];
 
         foreach ($rows as $row) {
-            $value = is_array($row) ? ($row['email'] ?? '') : $row;
+            $value = is_array($row) ? ($row[$column] ?? '') : $row;
             $value = trim((string)$value);
 
             if ($value !== '') {
-                $recipients[] = $value;
+                $values[] = $value;
             }
         }
 
-        return $recipients;
+        return $values;
     }
 
     /**
@@ -431,7 +456,7 @@ class Settings extends Model
             [['beaconPath', 'consentPath'], 'string'],
             [['beaconPath', 'consentPath'], 'match', 'pattern' => '/^[A-Za-z0-9\-_\/\.]+$/'],
             [['honourGpc', 'honourDnt', 'injectScript', 'stripQueryString', 'autoDrain'], 'boolean'],
-            [['excludePaths', 'excludeQueryParams'], 'each', 'rule' => ['string']],
+            [['excludePaths', 'excludeQueryParams', 'excludeSections'], 'each', 'rule' => ['string']],
 
             // Consent (Pro)
             [

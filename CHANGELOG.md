@@ -1,5 +1,35 @@
 # Release Notes for Craft Analytics
 
+## 2.7.0 - 2026-10-08
+
+### Added
+
+- **Exclude entry sections from analytics.** Tick a section under the new
+  Exclusions tab in the plugin settings and its pages stop being counted. They
+  also get no tracker script, record no events and are left out of the crawler
+  counts. Data already collected stays. If your site uses a static cache, clear
+  it after changing the setting, since pages cached earlier still carry the
+  tracker. In `config/craft-analytics.php` the setting is `excludeSections` and
+  takes section handles.
+- **Excluded paths can now be set in the control panel.** `excludePaths` used to
+  be config-file only. It now sits beside the section list on the Exclusions tab.
+
+### Changed
+
+- **The settings screen is split into tabs:** Tracking, Exclusions, Data &
+  retention, Privacy, Reports (Pro) and Integrations. The crawler settings moved
+  to Exclusions. A tab is flagged when a field inside it fails validation, and a
+  field that `config/craft-analytics.php` overrides now says so, instead of
+  quietly ignoring edits made in the control panel.
+
+### Fixed
+
+- **Report recipients can be added from the control panel again.** The table
+  under Emailed summary had no add button, so addresses could only come from the
+  config file.
+- **Code snippets on the settings screen are styled.** The screen did not load
+  the plugin's stylesheet, so the cron examples showed as plain text.
+
 ## 2.6.0 - 2026-09-10
 
 ### Added
