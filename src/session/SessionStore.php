@@ -51,8 +51,16 @@ class SessionStore extends Component
      * Idempotent per batch: re-applying the same batch (as happens when the
      * drain is killed before it commits and the spool file is replayed) is a
      * no-op, so pageviews are never counted twice.
+     *
+     * Returns null when the activity belongs to no session and cannot start
+     * one: a batch with no pageview in it - an engagement beacon arriving after
+     * the visit it describes has closed, say - is not a visit. Starting a
+     * session from it put a visitor with zero pages on the Real-time screen
+     * and, half an hour later, a session and a bounce in the rollups. The
+     * dwell time it carries still lands on the page row; it is only the
+     * session that is refused.
      */
-    public function apply(SessionDelta $delta, string $batchId): Session
+    public function apply(SessionDelta $delta, string $batchId): ?Session
     {
         $session = $this->get($delta->siteId, $delta->sessionKey);
 
@@ -61,6 +69,10 @@ class SessionStore extends Component
         }
 
         if ($session === null || $this->hasExpired($session, $delta->firstSeen)) {
+            if ($delta->views === 0) {
+                return null;
+            }
+
             $session = new Session(
                 siteId: $delta->siteId,
                 sessionKey: $delta->sessionKey,

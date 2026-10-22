@@ -3,6 +3,7 @@
 use coyshdigital\craftanalytics\db\SchemaBuilder;
 use coyshdigital\craftanalytics\db\Table;
 use coyshdigital\craftanalytics\enums\DimensionType;
+use coyshdigital\craftanalytics\ingest\CaptureService;
 use coyshdigital\craftanalytics\ingest\Hit;
 use coyshdigital\craftanalytics\migrations\Install;
 use coyshdigital\craftanalytics\models\Settings;
@@ -257,4 +258,34 @@ test('a consented journey is recorded on the single-hit path', function() {
 
     expect($row)->not->toBeFalse()
         ->and($row['visitorId'])->toBe('visitor-abc');
+});
+
+test('a crawler hit on the single-hit path is counted apart and opens no session', function() {
+    $sessions = new SessionStore([
+        'settings' => $this->settings,
+        'cache' => new ArrayCache(),
+        'siteIds' => [1],
+    ]);
+
+    $hit = new Hit(
+        siteId: 1,
+        path: '/pricing',
+        visitorHash: CaptureService::CRAWLER_HASH,
+        sessionKey: CaptureService::CRAWLER_HASH,
+        timestamp: mktime(10, 0, 0, 7, 16, 2026),
+        userAgent: 'Googlebot/2.1',
+        countView: false,
+        kind: Hit::KIND_CRAWLER,
+        eventName: 'Googlebot',
+    );
+
+    makeApplier($this, ['sessions' => $sessions])->apply($hit);
+
+    $db = TestDb::connection();
+
+    // On its own rollup, and nowhere else: no page row, and no session for
+    // the Real-time screen to show as a visitor who never viewed a page.
+    expect((new Query())->from(Table::CRAWLERS_ROLLUP)->count('*', $db))->toEqual(1)
+        ->and((new Query())->from(Table::PAGES_ROLLUP)->count('*', $db))->toEqual(0)
+        ->and($sessions->activeSessions(1, $hit->timestamp))->toBeEmpty();
 });

@@ -676,3 +676,131 @@ test('a second drain running concurrently declines rather than double-counting',
     }
     @rmdir($lockDir);
 });
+
+test('a crawler hit never opens a session', function() {
+    $now = time();
+    makeSpool($this->spoolDir, [makeCrawlerHit('Googlebot'), makeCrawlerHit('Bingbot', '/about')]);
+
+    makeDrainer($this)->run($now);
+
+    $sessions = new SessionStore(['settings' => $this->settings, 'cache' => $this->cache, 'siteIds' => [1]]);
+
+    // Every crawler shares one reserved session key, so one let through here
+    // was a permanent visitor on the Real-time screen with no pageviews.
+    expect($sessions->activeSessions(1, $now))->toBeEmpty();
+
+    // And nothing to close later either: once the crawlers go quiet there is
+    // no idle session to count as a visit, a bounce and a device.
+    $result = makeDrainer($this)->run($now + $this->settings->sessionWindow + 60);
+
+    expect($result->closedSessions)->toBe(0)
+        ->and($this->sink->flushedSessions)->toBe(0);
+});
+
+test('an engagement beacon with no visit to belong to does not start one', function() {
+    $now = time();
+
+    // countView false: the beacon reporting time on page for a view the
+    // server counted earlier - but that visit has already closed and gone.
+    makeSpool($this->spoolDir, [new Hit(
+        siteId: 1,
+        path: '/pricing',
+        visitorHash: 'aaaaaaaaaaaaaaaa',
+        sessionKey: 'session-aaaaaaaaaaaaaaaa',
+        timestamp: $now,
+        dwellMs: 42000,
+        countView: false,
+    )]);
+
+    $result = makeDrainer($this)->run($now);
+    $sessions = new SessionStore(['settings' => $this->settings, 'cache' => $this->cache, 'siteIds' => [1]]);
+
+    // The dwell still reaches the page bucket; only the session is refused,
+    // because a visit with no pageview in it is not a visit.
+    expect($result->hits)->toBe(1)
+        ->and($this->sink->flushedBuckets)->toBe(1)
+        ->and($sessions->activeSessions(1, $now))->toBeEmpty();
+});
+
+test('closeIdle() folds idle sessions in without touching the spool', function() {
+    $now = time();
+    $sessions = new SessionStore(['settings' => $this->settings, 'cache' => $this->cache, 'siteIds' => [1]]);
+
+    // A visit that ended an hour ago, as the direct and queue writers leave
+    // it: applied to the hot layer, waiting for something to notice.
+    $sessions->apply(
+        coyshdigital\craftanalytics\session\SessionDelta::fromHit(makeHit('/pricing', 'aaaaaaaaaaaaaaaa', $now - 7200)),
+        'single-abc',
+    );
+
+    // Something spooled too, which this pass must leave for the drain proper.
+    makeSpool($this->spoolDir, [makeHit('/about', 'bbbbbbbbbbbbbbbb', $now)]);
+
+    $result = makeDrainer($this)->closeIdle($now);
+
+    expect($result->closedSessions)->toBe(1)
+        ->and($result->hits)->toBe(0)
+        ->and($this->sink->flushedSessions)->toBe(1)
+        ->and($this->sink->flushedViews)->toBe(0)
+        ->and($sessions->activeSessions(1, $now))->toBeEmpty()
+        ->and(glob($this->spoolDir . '/*.processing'))->toBeEmpty()
+        ->and(filesize($this->spoolDir . '/spool.ndjson'))->toBeGreaterThan(0);
+});
+
+test('a slice budget leaves the rest of the file claimed for the next pass', function() {
+    $hits = [];
+    for ($i = 0; $i < 250; $i++) {
+        $hits[] = makeHit('/pricing', str_pad((string)$i, 16, '0', STR_PAD_LEFT));
+    }
+    makeSpool($this->spoolDir, $hits);
+
+    // What the automatic drain does inside a web request: one slice, then
+    // hand the worker back. It used to skip a large spool outright, which on
+    // a host with no cron meant nothing was ever drained again.
+    $first = makeDrainer($this);
+    $first->chunkHits = 100;
+    $first->maxChunks = 1;
+    $result = $first->run();
+
+    expect($result->hits)->toBe(100)
+        ->and($result->batches)->toBe(0)
+        ->and($result->deferredBatches)->toBe(1)
+        ->and($result->failedBatches)->toBe(0)
+        ->and($this->sink->flushedViews)->toBe(100)
+        // Still claimed, not quarantined, and nothing counted against it.
+        ->and(glob($this->spoolDir . '/*.processing'))->toHaveCount(1)
+        ->and(glob($this->spoolDir . '/*.failed'))->toBeEmpty()
+        ->and(glob($this->spoolDir . '/*.attempts'))->toBeEmpty();
+
+    // The next pass - cron, say - resumes from the first slice not yet
+    // committed and finishes the file, counting nothing twice.
+    $second = makeDrainer($this);
+    $second->chunkHits = 100;
+    $result = $second->run();
+
+    expect($result->hits)->toBe(150)
+        ->and($result->batches)->toBe(1)
+        ->and($this->sink->flushedViews)->toBe(250)
+        ->and(glob($this->spoolDir . '/*.processing'))->toBeEmpty();
+});
+
+test('a spent budget leaves later files untouched', function() {
+    // Two claimed files waiting, as a backlog leaves them. With a budget of
+    // one slice, the second file must not even be opened - it stays exactly
+    // as it was for the next pass.
+    makeSpool($this->spoolDir, [makeHit('/a')]);
+    rename($this->spoolDir . '/spool.ndjson', $this->spoolDir . '/spool-aaaaaaaaaaaaaaaa.processing');
+    makeSpool($this->spoolDir, [makeHit('/b')]);
+    rename($this->spoolDir . '/spool.ndjson', $this->spoolDir . '/spool-bbbbbbbbbbbbbbbb.processing');
+
+    $drainer = makeDrainer($this);
+    $drainer->maxChunks = 1;
+    $result = $drainer->run();
+
+    expect($result->hits)->toBe(1)
+        ->and($result->batches)->toBe(1)
+        ->and(glob($this->spoolDir . '/*.processing'))->toBe([$this->spoolDir . '/spool-bbbbbbbbbbbbbbbb.processing']);
+
+    expect(makeDrainer($this)->run()->hits)->toBe(1)
+        ->and($this->sink->flushedViews)->toBe(2);
+});

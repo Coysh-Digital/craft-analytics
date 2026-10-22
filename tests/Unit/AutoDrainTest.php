@@ -27,10 +27,18 @@ function spiedDrainer(): Drainer
 {
     return new class() extends Drainer {
         public bool $called = false;
+        public bool $closedIdle = false;
 
         public function run(?int $now = null): DrainResult
         {
             $this->called = true;
+
+            return new DrainResult();
+        }
+
+        public function closeIdle(?int $now = null): DrainResult
+        {
+            $this->closedIdle = true;
 
             return new DrainResult();
         }
@@ -59,13 +67,42 @@ test('does nothing when auto-drain is switched off', function() {
     expect($drainer->called)->toBeFalse();
 });
 
-test('does nothing for a non-spool write driver', function() {
+test('closes idle sessions, but drains no spool, on a non-spool write driver', function() {
     $this->spool->write(new Hit(1, '/x', 'aaaaaaaaaaaaaaaa', 's1', time()));
     $drainer = spiedDrainer();
 
     makeAutoDrain($this->spoolDir, $drainer)->run(new Settings(['writeDriver' => Settings::WRITE_DRIVER_QUEUE]));
 
-    expect($drainer->called)->toBeFalse();
+    // The queue and direct writers have no spool to read, but a visit only
+    // becomes a session once something notices it has gone idle. It used to
+    // return here having done nothing, so a site on either driver with no
+    // drain on cron never wrote a session, a bounce, a source or a device.
+    expect($drainer->called)->toBeFalse()
+        ->and($drainer->closedIdle)->toBeTrue();
+});
+
+test('the switch turns the session-closing pass off too', function() {
+    $drainer = spiedDrainer();
+
+    makeAutoDrain($this->spoolDir, $drainer)->run(new Settings([
+        'autoDrain' => false,
+        'writeDriver' => Settings::WRITE_DRIVER_DIRECT,
+    ]));
+
+    expect($drainer->closedIdle)->toBeFalse();
+});
+
+test('the session-closing pass is throttled like the drain', function() {
+    $cache = new ArrayCache();
+    $first = spiedDrainer();
+    $second = spiedDrainer();
+    $settings = new Settings(['writeDriver' => Settings::WRITE_DRIVER_DIRECT]);
+
+    makeAutoDrain($this->spoolDir, $first, $cache)->run($settings);
+    makeAutoDrain($this->spoolDir, $second, $cache)->run($settings);
+
+    expect($first->closedIdle)->toBeTrue()
+        ->and($second->closedIdle)->toBeFalse();
 });
 
 test('does nothing when the spool is empty', function() {
@@ -98,7 +135,7 @@ test('a second request inside the throttle window is skipped', function() {
         ->and($second->called)->toBeFalse();
 });
 
-test('a backlog over the safety cap is left for cron rather than drained inline', function() {
+test('a large backlog is drained one slice at a time rather than skipped', function() {
     // The content doesn't need to be real hits - AutoDrain only ever looks at
     // the byte count before deciding whether to hand this request the drain.
     file_put_contents($this->spool->spoolPath(), str_repeat('x', 3 * 1024 * 1024));
@@ -106,5 +143,20 @@ test('a backlog over the safety cap is left for cron rather than drained inline'
 
     makeAutoDrain($this->spoolDir, $drainer)->run(new Settings());
 
-    expect($drainer->called)->toBeFalse();
+    // It used to stand aside past 2 MB "for cron" - which on a host with no
+    // cron meant for good. Now it takes one slice and leaves the rest claimed
+    // for the next pass.
+    expect($drainer->called)->toBeTrue()
+        ->and($drainer->maxChunks)->toBe(1);
+});
+
+test('a file left claimed by an earlier pass is enough to run again', function() {
+    // Nothing in the live spool, but a previous pass stopped part-way through
+    // a claimed file. "Spool empty" must not mean "nothing to do".
+    file_put_contents($this->spoolDir . '/spool-deadbeef.processing', "{}\n");
+    $drainer = spiedDrainer();
+
+    makeAutoDrain($this->spoolDir, $drainer)->run(new Settings());
+
+    expect($drainer->called)->toBeTrue();
 });

@@ -1305,13 +1305,19 @@ class StatsService extends Component
      * `hourlyWindowDays` (7 by default), so a heatmap built over 30 or 90 days
      * would read almost entirely zero and look exactly like a broken chart
      * rather than like a retention policy. The caller is told what window it
-     * actually got, via hourlyWindowFrom(), so the screen can say so.
+     * actually got, via heatmapFrom(), so the screen can say so.
+     *
+     * The window is exactly `hourlyWindowDays` long, not the compaction
+     * boundary. That boundary is the oldest date *still* hourly, so counting
+     * from it gave eight dates, and the weekday today shares with the eighth
+     * day back was summed twice - up to double every other row on the default
+     * dashboard. One occurrence of each weekday, or the grid is not a week.
      *
      * @return array<int,array{date: string, hour: int, views: int}>
      */
-    public function hourOfWeek(int $siteId, DateRange $range): array
+    public function hourOfWeek(int $siteId, DateRange $range, ?int $now = null): array
     {
-        $from = max($range->from, $this->hourlyWindowFrom());
+        $from = max($range->from, $this->heatmapFrom($now));
 
         if ($from > $range->to) {
             // The whole selected range is older than the hourly window.
@@ -1344,6 +1350,20 @@ class StatsService extends Component
     public function hourlyWindowFrom(?int $now = null): string
     {
         return (new Compactor(['settings' => $this->settings]))->cutoffDate($now ?? time());
+    }
+
+    /**
+     * The first date the heatmap covers: `hourlyWindowDays` days ending today.
+     *
+     * One day inside hourlyWindowFrom(). That date still has hourly rows and
+     * the trend chart is right to use it; the heatmap is not, because with it
+     * the window held one weekday twice (see hourOfWeek()).
+     */
+    public function heatmapFrom(?int $now = null): string
+    {
+        return (new \DateTimeImmutable($this->hourlyWindowFrom($now)))
+            ->modify('+1 day')
+            ->format('Y-m-d');
     }
 
     private function counter(): UniqueCounterInterface

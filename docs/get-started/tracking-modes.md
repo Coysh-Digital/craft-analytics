@@ -87,9 +87,17 @@ a queue worker that actually runs, rather than Craft's default of running the
 queue on web requests, which would put the work back onto the request you were
 trying to keep fast.
 
+There is no spool to drain, but a visit only becomes a session - a bounce, a
+source, a device, an entrance and an exit - once something notices it has gone
+idle. `craft-analytics/drain/run` on cron does that on every driver, and so
+does the automatic fallback, which is on by default. Leave one of the two in
+place.
+
 ### Direct
 
-Written to the database there and then. No cron needed.
+Written to the database there and then. Nothing to drain, though as with the
+queue driver, sessions are closed by `drain/run` on cron or by the automatic
+fallback.
 
 It is the simplest to set up and the first to fall over: every pageview is a
 database write, and two views in the same instant can race. Fine for a brochure

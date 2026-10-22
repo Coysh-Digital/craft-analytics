@@ -31,9 +31,23 @@ Merging is what makes a date range answerable:
 
 | Driver | Accuracy | Storage | When |
 |---|---|---|---|
-| `redis` | ±0.8% | ~12 KB per counter, in Redis | Default when Redis is configured - native `PFADD`/`PFCOUNT`/`PFMERGE`, effectively free |
+| `redis` | ±0.8% | ~12 KB per counter, in Redis, plus the `hll` sketch on the row as the durable copy | Default when Redis is configured - native `PFADD`/`PFCOUNT`/`PFMERGE`, effectively free |
 | `hll` | ±1.6% (p=12) / ±0.8% (p=14) | Sparse: ~30–400 bytes. Dense: 4 KB (p=12) / 16 KB (p=14) | Default fallback; needs no infrastructure |
 | `exact` | exact (within a day) | One row per (scope, visitor) per day | Small sites that want exact figures |
+
+### Redis and clearing caches
+
+The `redis` driver uses the Redis connection behind Craft's **data cache**, so
+its counters share a database with the cache. `php craft clear-caches/data`
+(and `/all`), the **Clear Caches** utility's *Data caches* option, and a Redis
+`maxmemory-policy` such as `allkeys-lru` all remove them. For that reason the
+driver also merges every write into the same portable sketch the `hll` driver
+stores on the rollup row, and a read whose Redis keys are missing is answered
+from those rows instead - at the `hll` driver's accuracy for that read. Redis
+is the fast path; the database is the record.
+
+Rows written before the row sketch was kept carry none, so for them the Redis key is still
+the only copy. Nothing can be done about a clear that already happened.
 
 The `hll` driver starts every sketch **sparse** (a map of touched registers)
 and promotes to dense only when that stops being smaller. A page with 40
@@ -91,9 +105,13 @@ capped.
   hard cap 26). This covers **every** aggregate table, Lite and Pro alike:
   pages, page sources, sessions, sources, devices, crawlers, campaigns, geo,
   events, scroll, search, outbound, segments, goals and funnel steps.
-- **Unique membership rows** (`exact` driver) are dropped once the salt that
-  produced their hashes is gone - after that they cannot be matched to
-  anything, by us or anyone.
+- **Unique membership rows** (`exact` driver) are kept for the same
+  `rollupRetentionMonths` as the rollups they count for, because on this driver
+  they *are* the unique figure: nothing is stored on the rollup row, so a day
+  can only be read by counting them. Compaction folds a day's hourly rows into
+  one row per visitor and path, so the table is bounded by daily visitors, not
+  by traffic. The hashes are meaningless once the salt that produced them has
+  rotated - they can be counted, never matched to anyone.
 - **Orphaned dimensions** - values no rollup references any more - are pruned.
 
 Schedule it; don't rely on Craft's GC alone:

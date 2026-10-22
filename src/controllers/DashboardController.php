@@ -73,7 +73,7 @@ class DashboardController extends BaseCpController
                 // window it got, so the limit reads as a policy rather than a
                 // chart that mysteriously went blank on "Last 90 days".
                 'heatmap' => Heatmap::grid($stats->hourOfWeek($siteId, $range)),
-                'heatmapFrom' => $stats->hourlyWindowFrom(),
+                'heatmapFrom' => $stats->heatmapFrom(),
                 'hourlyWindowDays' => $plugin->getSettings()->hourlyWindowDays,
                 'topPages' => $topPages,
                 'editUrls' => ElementLinks::editUrls(array_column($topPages, 'elementId')),

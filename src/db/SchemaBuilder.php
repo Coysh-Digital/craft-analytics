@@ -590,9 +590,11 @@ final class SchemaBuilder
     public static function retainedElsewhere(): array
     {
         return [
-            // Pruned two salt rotations back: once the salt that produced these
-            // hashes is destroyed they cannot be matched to anything.
-            Table::UNIQUE_MEMBERS => 'GcService::deleteExpiredUniqueMembers() (salt rotation)',
+            // The exact driver's unique figure is these rows, so they live as
+            // long as the rollups they count for. Pruned on the same cutoff,
+            // in its own method, because the table is keyed by scope rather
+            // than by the rollup columns the generic sweep expects.
+            Table::UNIQUE_MEMBERS => 'GcService::deleteExpiredUniqueMembers() (rollup retention)',
             // First-seen date only; these are deleted when nothing references
             // them, not when they age.
             Table::DIMENSIONS => 'GcService::deleteOrphanedDimensions() (reference counting)',
